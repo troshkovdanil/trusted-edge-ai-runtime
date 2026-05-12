@@ -1,0 +1,12 @@
+#!/bin/sh
+
+mount -t proc none /proc
+mount -t sysfs none /sys
+
+echo "TEAR: qemu-system guest booted"
+
+/bin/tear-hello
+
+echo "TEAR: qemu-system smoke test passed"
+
+poweroff -f

@@ -38,4 +38,17 @@ Run smoke test:
 
 ```bash
 make test
+make initramfs
+file build/initramfs.cpio.gz
 ```
+
+## MVP-1: qemu-system-aarch64
+
+The project now builds a minimal initramfs containing the TEAR smoke-test binary.
+
+Kernel boot support is the next step. The intended target is:
+
+- qemu-system-aarch64
+- virt machine
+- minimal Linux kernel
+- initramfs-based guest smoke test

@@ -1,15 +1,27 @@
-.PHONY: build test clean
-
 CC := aarch64-linux-gnu-gcc
-OUT := build/hello-aarch64
+
+BUILD := build
+HELLO := $(BUILD)/hello-aarch64
+INITRAMFS := $(BUILD)/initramfs.cpio.gz
+
+.PHONY: build test initramfs clean
 
 build:
-	mkdir -p build
+	mkdir -p $(BUILD)
 	$(CC) -static -O2 -Wall -Wextra \
-		-o $(OUT) runtime/hello.c
+		-o $(HELLO) runtime/hello.c
 
 test: build
-	qemu-aarch64 ./$(OUT)
+	qemu-aarch64 ./$(HELLO)
+
+initramfs: build
+	rm -rf $(BUILD)/rootfs
+	mkdir -p $(BUILD)/rootfs/bin
+	cp $(HELLO) $(BUILD)/rootfs/bin/tear-hello
+	cp initramfs/init $(BUILD)/rootfs/init
+	chmod +x $(BUILD)/rootfs/init
+	cd $(BUILD)/rootfs && \
+		find . | cpio -H newc -o | gzip > ../initramfs.cpio.gz
 
 clean:
-	rm -rf build
+	rm -rf $(BUILD)
