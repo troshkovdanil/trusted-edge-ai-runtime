@@ -1,2 +1,41 @@
 # trusted-edge-ai-runtime
+
 Trusted adaptive runtime infrastructure for embedded edge AI systems.
+
+TEAR (Trusted Edge AI Runtime) focuses on:
+
+- embedded runtime infrastructure
+- trusted state handling
+- OTA-aware execution
+- telemetry and observability
+- adaptive runtime optimization
+- constrained edge deployment
+- QEMU-first reproducible development
+
+## Development Approach
+
+TEAR explores modern AI-assisted systems engineering workflows alongside
+traditional embedded and runtime development practices.
+
+The project emphasizes architectural transparency, reproducibility,
+and human-directed infrastructure design.
+
+## Development Setup (Ubuntu 24.04)
+
+Install required build dependencies:
+
+```bash
+./scripts/install-deps-ubuntu.sh
+```
+
+Build:
+
+```bash
+make build
+```
+
+Run smoke test:
+
+```bash
+make test
+```
