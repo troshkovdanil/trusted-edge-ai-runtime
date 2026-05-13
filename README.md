@@ -46,9 +46,13 @@ file build/initramfs.cpio.gz
 
 The project now builds a minimal initramfs containing the TEAR smoke-test binary.
 
-Kernel boot support is the next step. The intended target is:
+The intended target is:
 
 - qemu-system-aarch64
 - virt machine
 - minimal Linux kernel
 - initramfs-based guest smoke test
+
+The qemu-system smoke test currently uses a prebuilt Debian ARM64 installer kernel
+as a temporary boot substrate. The kernel image is downloaded into `build/kernel/Image`
+and is not committed to the repository.
