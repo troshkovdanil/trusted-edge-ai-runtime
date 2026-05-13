@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: Apache-2.0
+
 CC := aarch64-linux-gnu-gcc
 
 BUILD := build

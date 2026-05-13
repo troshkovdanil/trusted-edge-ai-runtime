@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+
+# SPDX-License-Identifier: Apache-2.0
+
 set -euo pipefail
 
 OUT="${1:-build/kernel/Image}"

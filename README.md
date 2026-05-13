@@ -1,5 +1,7 @@
 # trusted-edge-ai-runtime
 
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
+
 Trusted adaptive runtime infrastructure for embedded edge AI systems.
 
 TEAR (Trusted Edge AI Runtime) focuses on:
@@ -37,7 +39,7 @@ make build
 Run smoke test:
 
 ```bash
-make testi
+make test
 make qemu-system
 make verify
 ```
@@ -73,3 +75,10 @@ The qemu-system run captures guest console output into:
 
 ```bash
 build/telemetry.log
+```
+
+## License
+
+Licensed under the Apache License, Version 2.0.
+
+See [LICENSE](LICENSE) for details.
