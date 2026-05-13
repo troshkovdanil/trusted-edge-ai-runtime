@@ -37,9 +37,9 @@ make build
 Run smoke test:
 
 ```bash
-make test
-make initramfs
-file build/initramfs.cpio.gz
+make testi
+make qemu-system
+make verify
 ```
 
 ## MVP-1: qemu-system-aarch64
@@ -56,3 +56,20 @@ The intended target is:
 The qemu-system smoke test currently uses a prebuilt Debian ARM64 installer kernel
 as a temporary boot substrate. The kernel image is downloaded into `build/kernel/Image`
 and is not committed to the repository.
+
+## MVP-2: Runtime supervisor and telemetry validation
+
+TEAR now boots into a minimal init process that starts a runtime supervisor.
+
+The supervisor:
+
+- emits structured `TEAR_EVENT` telemetry
+- launches the workload binary
+- waits for workload completion
+- reports workload exit status
+- powers off the guest cleanly
+
+The qemu-system run captures guest console output into:
+
+```bash
+build/telemetry.log

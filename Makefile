@@ -7,7 +7,7 @@ INIT := $(BUILD)/init-aarch64
 KERNEL := $(BUILD)/kernel/Image
 SUPERVISOR := $(BUILD)/tear-supervisor
 
-.PHONY: build test initramfs qemu-system clean kernel-image
+.PHONY: build test initramfs kernel-image qemu-system verify clean
 
 build:
 	mkdir -p $(BUILD)
@@ -36,6 +36,9 @@ kernel-image:
 
 qemu-system: kernel-image initramfs
 	./scripts/run-qemu-system.sh
+
+verify:
+	./scripts/verify-qemu-run.sh
 
 clean:
 	rm -rf $(BUILD)
