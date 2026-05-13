@@ -10,7 +10,7 @@ KERNEL := $(BUILD)/kernel/Image
 SUPERVISOR := $(BUILD)/tear-supervisor
 DEMO_MODEL := $(BUILD)/demo-model
 
-.PHONY: build test initramfs kernel-image qemu-system verify clean
+.PHONY: build test initramfs kernel-image qemu-system verify clean clean-all
 
 build:
 	mkdir -p $(BUILD)
@@ -35,7 +35,7 @@ initramfs: build
 	cp $(INIT) $(BUILD)/rootfs/init
 	chmod +x $(BUILD)/rootfs/init
 	cd $(BUILD)/rootfs && \
-		find . | cpio -H newc -o | gzip > ../initramfs.cpio.gz
+		find . | cpio --quiet -H newc -o | gzip > ../initramfs.cpio.gz
 
 kernel-image:
 	./scripts/fetch-qemu-kernel.sh $(KERNEL)
@@ -47,4 +47,8 @@ verify:
 	./scripts/verify-qemu-run.sh
 
 clean:
+	rm -rf $(BUILD)/rootfs
+	rm -f $(HELLO) $(INIT) $(SUPERVISOR) $(DEMO_MODEL) $(INITRAMFS) $(BUILD)/telemetry.log
+
+clean-all:
 	rm -rf $(BUILD)

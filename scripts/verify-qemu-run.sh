@@ -19,14 +19,14 @@ check_log_contains() {
 }
 
 echo "TEAR verify: default hello workload"
-QUIET=1 make qemu-system
+QUIET=1 make --silent qemu-system
 
 check_log_contains "TEAR: selected workload: /bin/tear-hello"
 check_log_contains "TEAR: hello from aarch64 qemu"
 check_log_contains "event=workload_exit status=0"
 
 echo "TEAR verify: mock model workload"
-QUIET=1 WORKLOAD=/bin/demo-model make qemu-system
+QUIET=1 WORKLOAD=/bin/demo-model make --silent qemu-system
 
 check_log_contains "TEAR: selected workload: /bin/demo-model"
 check_log_contains "event=model_init"

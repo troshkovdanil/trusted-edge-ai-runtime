@@ -11,7 +11,6 @@ mkdir -p "$(dirname "$OUT")"
 
 if [ -f "$OUT" ]; then
     echo "Kernel already exists: $OUT"
-    file "$OUT"
     exit 0
 fi
 

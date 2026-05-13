@@ -11,10 +11,12 @@ TELEMETRY="${TELEMETRY:-build/telemetry.log}"
 WORKLOAD="${WORKLOAD:-/bin/tear-hello}"
 APPEND="console=ttyAMA0 rdinit=/init panic=-1 tear.workload=$WORKLOAD"
 
-echo "TEAR host: KERNEL=$KERNEL"
-echo "TEAR host: INITRAMFS=$INITRAMFS"
-echo "TEAR host: WORKLOAD=$WORKLOAD"
-echo "TEAR host: APPEND=$APPEND"
+if [ "$QUIET" != "1" ]; then
+    echo "TEAR host: KERNEL=$KERNEL"
+    echo "TEAR host: INITRAMFS=$INITRAMFS"
+    echo "TEAR host: WORKLOAD=$WORKLOAD"
+    echo "TEAR host: APPEND=$APPEND"
+fi
 
 mkdir -p "$(dirname "$TELEMETRY")"
 rm -f "$TELEMETRY"
