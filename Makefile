@@ -5,6 +5,7 @@ HELLO := $(BUILD)/hello-aarch64
 INITRAMFS := $(BUILD)/initramfs.cpio.gz
 INIT := $(BUILD)/init-aarch64
 KERNEL := $(BUILD)/kernel/Image
+SUPERVISOR := $(BUILD)/tear-supervisor
 
 .PHONY: build test initramfs qemu-system clean kernel-image
 
@@ -14,6 +15,9 @@ build:
 		-o $(HELLO) runtime/hello.c
 	$(CC) -static -O2 -Wall -Wextra \
 		-o $(INIT) initramfs/init.c
+	$(CC) -static -O2 -Wall -Wextra \
+		-o $(SUPERVISOR) runtime/supervisor.c runtime/telemetry.c
+
 test: build
 	qemu-aarch64 ./$(HELLO)
 
@@ -21,6 +25,7 @@ initramfs: build
 	rm -rf $(BUILD)/rootfs
 	mkdir -p $(BUILD)/rootfs/bin
 	cp $(HELLO) $(BUILD)/rootfs/bin/tear-hello
+	cp $(SUPERVISOR) $(BUILD)/rootfs/bin/tear-supervisor
 	cp $(INIT) $(BUILD)/rootfs/init
 	chmod +x $(BUILD)/rootfs/init
 	cd $(BUILD)/rootfs && \
