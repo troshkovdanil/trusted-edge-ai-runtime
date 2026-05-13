@@ -8,6 +8,7 @@
 #include <sys/reboot.h>
 #include <sys/wait.h>
 #include <unistd.h>
+#include <string.h>
 
 static void poweroff_guest(void)
 {
@@ -15,9 +16,20 @@ static void poweroff_guest(void)
     reboot(RB_POWER_OFF);
 }
 
-int main(void)
+static const char *parse_workload(int argc, char **argv)
 {
-    const char *workload = "/bin/tear-hello";
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--workload") == 0 && i + 1 < argc) {
+            return argv[i + 1];
+        }
+    }
+
+    return "/bin/tear-hello";
+}
+
+int main(int argc, char **argv)
+{
+    const char *workload = parse_workload(argc, argv);
 
     tear_event("supervisor_start");
     tear_event("workload_start");

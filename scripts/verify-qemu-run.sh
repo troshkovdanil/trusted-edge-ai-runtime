@@ -4,13 +4,35 @@
 
 set -euo pipefail
 
-TELEMETRY="${TELEMETRY:-build/telemetry.log}"
+LOG="${LOG:-build/telemetry.log}"
 
-make qemu-system
+check_log_contains() {
+    local pattern="$1"
 
-grep -q "event=supervisor_start" "$TELEMETRY"
-grep -q "event=workload_start" "$TELEMETRY"
-grep -q "event=workload_exit status=0" "$TELEMETRY"
-grep -q "event=supervisor_shutdown" "$TELEMETRY"
+    if ! grep -q "$pattern" "$LOG"; then
+        echo "error: expected pattern not found: $pattern"
+        echo "---- telemetry log ----"
+        cat "$LOG"
+        echo "-----------------------"
+        exit 1
+    fi
+}
 
-echo "TEAR: qemu-system telemetry validation passed"
+echo "TEAR verify: default hello workload"
+QUIET=1 make qemu-system
+
+check_log_contains "TEAR: selected workload: /bin/tear-hello"
+check_log_contains "TEAR: hello from aarch64 qemu"
+check_log_contains "event=workload_exit status=0"
+
+echo "TEAR verify: mock model workload"
+QUIET=1 WORKLOAD=/bin/demo-model make qemu-system
+
+check_log_contains "TEAR: selected workload: /bin/demo-model"
+check_log_contains "event=model_init"
+check_log_contains "event=inference_start"
+check_log_contains "event=inference_done"
+check_log_contains "TEAR model: result=object:box confidence=0.87"
+check_log_contains "event=workload_exit status=0"
+
+echo "TEAR verify: all checks passed"

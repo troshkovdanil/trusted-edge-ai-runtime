@@ -8,6 +8,13 @@ QUIET="${QUIET:-0}"
 KERNEL="${KERNEL:-build/kernel/Image}"
 INITRAMFS="${INITRAMFS:-build/initramfs.cpio.gz}"
 TELEMETRY="${TELEMETRY:-build/telemetry.log}"
+WORKLOAD="${WORKLOAD:-/bin/tear-hello}"
+APPEND="console=ttyAMA0 rdinit=/init panic=-1 tear.workload=$WORKLOAD"
+
+echo "TEAR host: KERNEL=$KERNEL"
+echo "TEAR host: INITRAMFS=$INITRAMFS"
+echo "TEAR host: WORKLOAD=$WORKLOAD"
+echo "TEAR host: APPEND=$APPEND"
 
 mkdir -p "$(dirname "$TELEMETRY")"
 rm -f "$TELEMETRY"
@@ -26,7 +33,7 @@ if [ "$QUIET" = "1" ]; then
         -no-reboot \
         -kernel "$KERNEL" \
         -initrd "$INITRAMFS" \
-        -append "console=ttyAMA0 rdinit=/init panic=-1" \
+        -append "$APPEND" \
 	>"$TELEMETRY" 2>&1
 else
     qemu-system-aarch64 \
@@ -37,6 +44,6 @@ else
         -no-reboot \
         -kernel "$KERNEL" \
         -initrd "$INITRAMFS" \
-        -append "console=ttyAMA0 rdinit=/init panic=-1" \
+        -append "$APPEND" \
         2>&1 | tee "$TELEMETRY"
 fi
