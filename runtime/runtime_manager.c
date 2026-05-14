@@ -7,7 +7,6 @@
 #include "trust_client.h"
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -25,14 +24,11 @@ static struct runtime_config parse_args(int argc, char **argv)
     };
 
     for (int i = 1; i < argc; i++) {
-
         if (strcmp(argv[i], "--workload") == 0 &&
             i + 1 < argc) {
             cfg.workload = argv[++i];
-        }
-
-        else if (strcmp(argv[i], "--manifest") == 0 &&
-                 i + 1 < argc) {
+        } else if (strcmp(argv[i], "--manifest") == 0 &&
+                   i + 1 < argc) {
             cfg.manifest = argv[++i];
         }
     }
@@ -47,17 +43,11 @@ int tear_runtime_manager_main(int argc, char **argv)
     tear_event("runtime_manager_start");
 
     if (cfg.manifest) {
-
         struct tear_model_manifest manifest;
 
-        if (tear_manifest_load(cfg.manifest,
-                               &manifest) < 0) {
-
-            fprintf(stderr,
-                    "TEAR: failed to load manifest\n");
-
+        if (tear_manifest_load(cfg.manifest, &manifest) < 0) {
+            fprintf(stderr, "TEAR: failed to load manifest\n");
             tear_event("manifest_load_failed");
-
             return 1;
         }
 
@@ -65,21 +55,13 @@ int tear_runtime_manager_main(int argc, char **argv)
 
         tear_manifest_print(&manifest);
 
-        if (tear_trust_enroll(&manifest) < 0) {
-            fprintf(stderr, "TEAR: trust enroll failed\n");
-            tear_event("trust_enroll_failed");
+        if (tear_trust_verify(&manifest) < 0) {
+            fprintf(stderr, "TEAR: manifest verification failed\n");
+            tear_event("manifest_verify_failed");
             return 1;
         }
 
-        tear_event("trust_enroll_done");
-
-        if (tear_trust_report() < 0) {
-            fprintf(stderr, "TEAR: trust report failed\n");
-            tear_event("trust_report_failed");
-            return 1;
-        }
-
-        tear_event("trust_report_done");
+        tear_event("manifest_verified");
     }
 
     pid_t pid = fork();
@@ -91,10 +73,7 @@ int tear_runtime_manager_main(int argc, char **argv)
     }
 
     if (pid == 0) {
-
-        execl(cfg.workload,
-              cfg.workload,
-              NULL);
+        execl(cfg.workload, cfg.workload, NULL);
 
         perror("execl");
         _exit(127);
@@ -109,7 +88,6 @@ int tear_runtime_manager_main(int argc, char **argv)
     }
 
     if (WIFEXITED(status)) {
-
         tear_event_kv("runtime_workload_exit",
                       "status",
                       WEXITSTATUS(status));

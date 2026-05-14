@@ -5,10 +5,10 @@
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/reboot.h>
 #include <sys/wait.h>
 #include <unistd.h>
-#include <string.h>
 
 static void poweroff_guest(void)
 {
@@ -50,6 +50,41 @@ static pid_t start_trustd(void)
     return pid;
 }
 
+static int run_tearictl(const char *command, const char *arg)
+{
+    pid_t pid = fork();
+
+    if (pid < 0) {
+        perror("fork tearictl");
+        return -1;
+    }
+
+    if (pid == 0) {
+        if (arg) {
+            execl("/bin/tearictl",
+                  "/bin/tearictl",
+                  command,
+                  arg,
+                  NULL);
+        } else {
+            execl("/bin/tearictl",
+                  "/bin/tearictl",
+                  command,
+                  NULL);
+        }
+
+        perror("execl tearictl");
+        _exit(127);
+    }
+
+    int status = 0;
+
+    if (waitpid(pid, &status, 0) < 0)
+        return -1;
+
+    return WIFEXITED(status) && WEXITSTATUS(status) == 0 ? 0 : -1;
+}
+
 int main(int argc, char **argv)
 {
     tear_event("supervisor_start");
@@ -61,6 +96,24 @@ int main(int argc, char **argv)
         poweroff_guest();
         return 1;
     }
+
+    tear_event("provisioning_start");
+
+    if (run_tearictl("enroll", "/etc/tear/model-v1.json") < 0) {
+        tear_event("provisioning_failed");
+        poweroff_guest();
+        return 1;
+    }
+
+    tear_event("provisioning_done");
+
+    if (run_tearictl("report", NULL) < 0) {
+        tear_event("provisioning_report_failed");
+        poweroff_guest();
+        return 1;
+    }
+
+    tear_event("provisioning_report_done");
 
     const char *workload = parse_workload(argc, argv);
 
@@ -81,7 +134,7 @@ int main(int argc, char **argv)
               "--workload",
               workload,
               "--manifest",
-              "/examples/model-v1.json",
+              "/etc/tear/model-v1.json",
               NULL);
 
         perror("execl");

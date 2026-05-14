@@ -3,7 +3,6 @@
 #include "trust_client.h"
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -29,12 +28,25 @@ static int connect_socket(void)
     if (connect(fd,
                 (struct sockaddr *)&addr,
                 sizeof(addr)) < 0) {
-
         close(fd);
         return -1;
     }
 
     return fd;
+}
+
+static int expect_ok(int fd)
+{
+    char buf[32];
+
+    ssize_t n = read(fd, buf, sizeof(buf) - 1);
+
+    if (n <= 0)
+        return -1;
+
+    buf[n] = '\0';
+
+    return strncmp(buf, "OK", 2) == 0 ? 0 : -1;
 }
 
 int tear_trust_enroll(
@@ -52,19 +64,33 @@ int tear_trust_enroll(
             manifest->backend,
             manifest->model_hash);
 
-    char buf[32];
-    ssize_t n = read(fd, buf, sizeof(buf) - 1);
-
-    if (n <= 0) {
-        close(fd);
-       return -1;
-    }
-
-    buf[n] = '\0';
+    int ret = expect_ok(fd);
 
     close(fd);
 
-    return strncmp(buf, "OK", 2) == 0 ? 0 : -1;
+    return ret;
+}
+
+int tear_trust_verify(
+    const struct tear_model_manifest *manifest)
+{
+    int fd = connect_socket();
+
+    if (fd < 0)
+        return -1;
+
+    dprintf(fd,
+            "VERIFY %s %d %s %s\n",
+            manifest->model_id,
+            manifest->version,
+            manifest->backend,
+            manifest->model_hash);
+
+    int ret = expect_ok(fd);
+
+    close(fd);
+
+    return ret;
 }
 
 int tear_trust_report(void)
@@ -80,10 +106,13 @@ int tear_trust_report(void)
 
     ssize_t n = read(fd, buf, sizeof(buf) - 1);
 
-    if (n > 0) {
-        buf[n] = '\0';
-        printf("%s", buf);
+    if (n <= 0) {
+        close(fd);
+        return -1;
     }
+
+    buf[n] = '\0';
+    printf("%s", buf);
 
     close(fd);
 

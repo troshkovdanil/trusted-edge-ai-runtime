@@ -8,6 +8,9 @@
 int tear_trust_enroll(
     const struct tear_model_manifest *manifest);
 
+int tear_trust_verify(
+    const struct tear_model_manifest *manifest);
+
 int tear_trust_report(void);
 
 #endif

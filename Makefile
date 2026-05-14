@@ -11,6 +11,7 @@ SUPERVISOR := $(BUILD)/tear-supervisor
 DEMO_MODEL := $(BUILD)/demo-model
 RUNTIME_MANAGER := $(BUILD)/tear-runtime-manager
 TRUSTD := $(BUILD)/tear-trustd
+TEARICTL := $(BUILD)/tearictl
 
 .PHONY: build test initramfs kernel-image qemu-system verify clean clean-all
 
@@ -36,22 +37,30 @@ build:
 		runtime/trustd.c \
 		runtime/trusted_state.c \
 		runtime/telemetry.c
+	$(CC) -static -O2 -Wall -Wextra \
+		-o $(TEARICTL) \
+		runtime/tearictl.c \
+		runtime/model_manifest.c \
+		runtime/trust_client.c \
+		runtime/telemetry.c
 
 test: build
 	qemu-aarch64 ./$(HELLO)
 
 initramfs: build
 	rm -rf $(BUILD)/rootfs
-	mkdir -p $(BUILD)/rootfs/bin $(BUILD)/rootfs/proc $(BUILD)/rootfs/tmp
+	mkdir -p $(BUILD)/rootfs/bin $(BUILD)/rootfs/proc $(BUILD)/rootfs/tmp $(BUILD)/rootfs/etc/tear
 	cp $(HELLO) $(BUILD)/rootfs/bin/tear-hello
 	cp $(SUPERVISOR) $(BUILD)/rootfs/bin/tear-supervisor
 	cp $(DEMO_MODEL) $(BUILD)/rootfs/bin/demo-model
+	cp $(RUNTIME_MANAGER) $(BUILD)/rootfs/bin/tear-runtime-manager
 	cp $(TRUSTD) $(BUILD)/rootfs/bin/tear-trustd
+	cp $(TEARICTL) $(BUILD)/rootfs/bin/tearictl
 	cp $(INIT) $(BUILD)/rootfs/init
 	chmod +x $(BUILD)/rootfs/init
-	cp $(RUNTIME_MANAGER) $(BUILD)/rootfs/bin/tear-runtime-manager
 	mkdir -p $(BUILD)/rootfs/examples
 	cp examples/model-v1.json examples/model-v2.json $(BUILD)/rootfs/examples/
+	cp examples/model-v1.json examples/model-v2.json $(BUILD)/rootfs/etc/tear/
 	cd $(BUILD)/rootfs && \
 		find . | cpio --quiet -H newc -o | gzip > ../initramfs.cpio.gz
 
@@ -66,7 +75,7 @@ verify:
 
 clean:
 	rm -rf $(BUILD)/rootfs
-	rm -f $(HELLO) $(INIT) $(SUPERVISOR) $(DEMO_MODEL) $(RUNTIME_MANAGER) $(TRUSTD) $(INITRAMFS) $(BUILD)/telemetry.log
+	rm -f $(HELLO) $(INIT) $(SUPERVISOR) $(DEMO_MODEL) $(RUNTIME_MANAGER) $(TRUSTD) $(TEARICTL) $(INITRAMFS) $(BUILD)/telemetry.log
 
 clean-all:
 	rm -rf $(BUILD)

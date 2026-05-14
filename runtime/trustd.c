@@ -5,7 +5,6 @@
 #include "trusted_state.h"
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -34,7 +33,6 @@ static int create_socket(void)
     if (bind(fd,
              (struct sockaddr *)&addr,
              sizeof(addr)) < 0) {
-
         close(fd);
         return -1;
     }
@@ -45,6 +43,93 @@ static int create_socket(void)
     }
 
     return fd;
+}
+
+static int same_manifest(
+    const struct tear_model_manifest *a,
+    const struct tear_model_manifest *b)
+{
+    return strcmp(a->model_id, b->model_id) == 0 &&
+           a->version == b->version &&
+           strcmp(a->backend, b->backend) == 0 &&
+           strcmp(a->model_hash, b->model_hash) == 0;
+}
+
+static int parse_manifest_message(
+    const char *buf,
+    const char *command,
+    struct tear_model_manifest *m)
+{
+    char fmt[64];
+
+    snprintf(fmt, sizeof(fmt),
+             "%s %%63s %%d %%31s %%127s",
+             command);
+
+    memset(m, 0, sizeof(*m));
+
+    return sscanf(buf,
+                  fmt,
+                  m->model_id,
+                  &m->version,
+                  m->backend,
+                  m->model_hash) == 4 ? 0 : -1;
+}
+
+static void handle_enroll(int client, const char *buf)
+{
+    struct tear_model_manifest m;
+
+    if (parse_manifest_message(buf, "ENROLL", &m) < 0) {
+        tear_event("model_enroll_failed");
+        dprintf(client, "ERR\n");
+        return;
+    }
+
+    if (tear_trusted_state_store(TEAR_TRUSTED_STATE, &m) == 0) {
+        tear_event("model_enroll");
+        dprintf(client, "OK\n");
+    } else {
+        tear_event("model_enroll_failed");
+        dprintf(client, "ERR\n");
+    }
+}
+
+static void handle_verify(int client, const char *buf)
+{
+    struct tear_model_manifest incoming;
+    struct tear_model_manifest trusted;
+
+    if (parse_manifest_message(buf, "VERIFY", &incoming) < 0) {
+        tear_event("model_verify_failed");
+        dprintf(client, "ERR\n");
+        return;
+    }
+
+    if (tear_trusted_state_load(TEAR_TRUSTED_STATE, &trusted) == 0 &&
+        same_manifest(&incoming, &trusted)) {
+        tear_event("model_verify_ok");
+        dprintf(client, "OK\n");
+    } else {
+        tear_event("model_verify_failed");
+        dprintf(client, "ERR\n");
+    }
+}
+
+static void handle_report(int client)
+{
+    struct tear_model_manifest m;
+
+    if (tear_trusted_state_load(TEAR_TRUSTED_STATE, &m) == 0) {
+        dprintf(client,
+                "STATE %s %d %s %s\n",
+                m.model_id,
+                m.version,
+                m.backend,
+                m.model_hash);
+    } else {
+        dprintf(client, "ERR\n");
+    }
 }
 
 int main(void)
@@ -59,7 +144,6 @@ int main(void)
     tear_event("trustd_start");
 
     while (1) {
-
         int client = accept(server, NULL, NULL);
 
         if (client < 0)
@@ -67,9 +151,7 @@ int main(void)
 
         char buf[512];
 
-        ssize_t n = read(client,
-                         buf,
-                         sizeof(buf) - 1);
+        ssize_t n = read(client, buf, sizeof(buf) - 1);
 
         if (n <= 0) {
             close(client);
@@ -79,46 +161,13 @@ int main(void)
         buf[n] = '\0';
 
         if (strncmp(buf, "ENROLL", 6) == 0) {
-
-            struct tear_model_manifest m;
-
-            memset(&m, 0, sizeof(m));
-
-            sscanf(buf,
-                   "ENROLL %63s %d %31s %127s",
-                   m.model_id,
-                   &m.version,
-                   m.backend,
-                   m.model_hash);
-
-            if (tear_trusted_state_store(TEAR_TRUSTED_STATE, &m) == 0) {
-                tear_event("model_enroll");
-                dprintf(client, "OK\n");
-            } else {
-                tear_event("model_enroll_failed");
-                dprintf(client, "ERR\n");
-            }
-
-            tear_trusted_state_store(
-                TEAR_TRUSTED_STATE,
-                &m);
-        }
-
-        else if (strncmp(buf, "REPORT", 6) == 0) {
-
-            struct tear_model_manifest m;
-
-            if (tear_trusted_state_load(
-                    TEAR_TRUSTED_STATE,
-                    &m) == 0) {
-
-                dprintf(client,
-                        "STATE %s %d %s %s\n",
-                        m.model_id,
-                        m.version,
-                        m.backend,
-                        m.model_hash);
-            }
+            handle_enroll(client, buf);
+        } else if (strncmp(buf, "VERIFY", 6) == 0) {
+            handle_verify(client, buf);
+        } else if (strncmp(buf, "REPORT", 6) == 0) {
+            handle_report(client);
+        } else {
+            dprintf(client, "ERR\n");
         }
 
         close(client);
