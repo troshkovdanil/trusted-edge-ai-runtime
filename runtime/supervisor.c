@@ -44,7 +44,14 @@ int main(int argc, char **argv)
     }
 
     if (pid == 0) {
-        execl(workload, workload, NULL);
+        execl("/bin/tear-runtime-manager",
+              "/bin/tear-runtime-manager",
+              "--workload",
+              workload,
+              "--manifest",
+              "/examples/model-v1.json",
+              NULL);
+
         perror("execl");
         _exit(127);
     }

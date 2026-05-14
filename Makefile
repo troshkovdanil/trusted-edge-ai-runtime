@@ -9,6 +9,7 @@ INIT := $(BUILD)/init-aarch64
 KERNEL := $(BUILD)/kernel/Image
 SUPERVISOR := $(BUILD)/tear-supervisor
 DEMO_MODEL := $(BUILD)/demo-model
+RUNTIME_MANAGER := $(BUILD)/tear-runtime-manager
 
 .PHONY: build test initramfs kernel-image qemu-system verify clean clean-all
 
@@ -22,6 +23,12 @@ build:
 		-o $(SUPERVISOR) runtime/supervisor.c runtime/telemetry.c
 	$(CC) -static -O2 -Wall -Wextra \
 		-o $(DEMO_MODEL) runtime/demo_model.c runtime/telemetry.c
+	$(CC) -static -O2 -Wall -Wextra \
+		-o $(RUNTIME_MANAGER) \
+		runtime/runtime_manager_main.c \
+		runtime/runtime_manager.c \
+		runtime/model_manifest.c \
+		runtime/telemetry.c
 
 test: build
 	qemu-aarch64 ./$(HELLO)
@@ -34,6 +41,9 @@ initramfs: build
 	cp $(DEMO_MODEL) $(BUILD)/rootfs/bin/demo-model
 	cp $(INIT) $(BUILD)/rootfs/init
 	chmod +x $(BUILD)/rootfs/init
+	cp $(RUNTIME_MANAGER) $(BUILD)/rootfs/bin/tear-runtime-manager
+	mkdir -p $(BUILD)/rootfs/examples
+	cp examples/model-v1.json examples/model-v2.json $(BUILD)/rootfs/examples/
 	cd $(BUILD)/rootfs && \
 		find . | cpio --quiet -H newc -o | gzip > ../initramfs.cpio.gz
 
@@ -48,7 +58,7 @@ verify:
 
 clean:
 	rm -rf $(BUILD)/rootfs
-	rm -f $(HELLO) $(INIT) $(SUPERVISOR) $(DEMO_MODEL) $(INITRAMFS) $(BUILD)/telemetry.log
+	rm -f $(HELLO) $(INIT) $(SUPERVISOR) $(DEMO_MODEL) $(RUNTIME_MANAGER) $(INITRAMFS) $(BUILD)/telemetry.log
 
 clean-all:
 	rm -rf $(BUILD)
