@@ -1,0 +1,16 @@
+// SPDX-License-Identifier: Apache-2.0
+
+#ifndef TEAR_TRUSTED_STATE_H
+#define TEAR_TRUSTED_STATE_H
+
+#include "model_manifest.h"
+
+int tear_trusted_state_store(
+    const char *path,
+    const struct tear_model_manifest *manifest);
+
+int tear_trusted_state_load(
+    const char *path,
+    struct tear_model_manifest *manifest);
+
+#endif

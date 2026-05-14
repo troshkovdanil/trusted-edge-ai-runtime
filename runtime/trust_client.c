@@ -1,0 +1,91 @@
+// SPDX-License-Identifier: Apache-2.0
+
+#include "trust_client.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <unistd.h>
+
+#define TEAR_TRUSTD_SOCKET "/tmp/tear-trustd.sock"
+
+static int connect_socket(void)
+{
+    int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+
+    if (fd < 0)
+        return -1;
+
+    struct sockaddr_un addr = {
+        .sun_family = AF_UNIX,
+    };
+
+    strncpy(addr.sun_path,
+            TEAR_TRUSTD_SOCKET,
+            sizeof(addr.sun_path) - 1);
+
+    if (connect(fd,
+                (struct sockaddr *)&addr,
+                sizeof(addr)) < 0) {
+
+        close(fd);
+        return -1;
+    }
+
+    return fd;
+}
+
+int tear_trust_enroll(
+    const struct tear_model_manifest *manifest)
+{
+    int fd = connect_socket();
+
+    if (fd < 0)
+        return -1;
+
+    dprintf(fd,
+            "ENROLL %s %d %s %s\n",
+            manifest->model_id,
+            manifest->version,
+            manifest->backend,
+            manifest->model_hash);
+
+    char buf[32];
+    ssize_t n = read(fd, buf, sizeof(buf) - 1);
+
+    if (n <= 0) {
+        close(fd);
+       return -1;
+    }
+
+    buf[n] = '\0';
+
+    close(fd);
+
+    return strncmp(buf, "OK", 2) == 0 ? 0 : -1;
+}
+
+int tear_trust_report(void)
+{
+    int fd = connect_socket();
+
+    if (fd < 0)
+        return -1;
+
+    dprintf(fd, "REPORT\n");
+
+    char buf[256];
+
+    ssize_t n = read(fd, buf, sizeof(buf) - 1);
+
+    if (n > 0) {
+        buf[n] = '\0';
+        printf("%s", buf);
+    }
+
+    close(fd);
+
+    return 0;
+}

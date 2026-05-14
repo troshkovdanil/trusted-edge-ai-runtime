@@ -4,6 +4,7 @@
 
 #include "model_manifest.h"
 #include "telemetry.h"
+#include "trust_client.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -63,6 +64,22 @@ int tear_runtime_manager_main(int argc, char **argv)
         tear_event("manifest_loaded");
 
         tear_manifest_print(&manifest);
+
+        if (tear_trust_enroll(&manifest) < 0) {
+            fprintf(stderr, "TEAR: trust enroll failed\n");
+            tear_event("trust_enroll_failed");
+            return 1;
+        }
+
+        tear_event("trust_enroll_done");
+
+        if (tear_trust_report() < 0) {
+            fprintf(stderr, "TEAR: trust report failed\n");
+            tear_event("trust_report_failed");
+            return 1;
+        }
+
+        tear_event("trust_report_done");
     }
 
     pid_t pid = fork();

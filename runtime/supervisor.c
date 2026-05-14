@@ -27,11 +27,43 @@ static const char *parse_workload(int argc, char **argv)
     return "/bin/tear-hello";
 }
 
+static pid_t start_trustd(void)
+{
+    pid_t pid = fork();
+
+    if (pid < 0) {
+        perror("fork trustd");
+        return -1;
+    }
+
+    if (pid == 0) {
+        execl("/bin/tear-trustd",
+              "/bin/tear-trustd",
+              NULL);
+
+        perror("execl trustd");
+        _exit(127);
+    }
+
+    sleep(1);
+
+    return pid;
+}
+
 int main(int argc, char **argv)
 {
+    tear_event("supervisor_start");
+
+    pid_t trustd_pid = start_trustd();
+
+    if (trustd_pid < 0) {
+        tear_event("trustd_start_failed");
+        poweroff_guest();
+        return 1;
+    }
+
     const char *workload = parse_workload(argc, argv);
 
-    tear_event("supervisor_start");
     tear_event("workload_start");
 
     pid_t pid = fork();

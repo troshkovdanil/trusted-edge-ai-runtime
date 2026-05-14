@@ -10,6 +10,7 @@ KERNEL := $(BUILD)/kernel/Image
 SUPERVISOR := $(BUILD)/tear-supervisor
 DEMO_MODEL := $(BUILD)/demo-model
 RUNTIME_MANAGER := $(BUILD)/tear-runtime-manager
+TRUSTD := $(BUILD)/tear-trustd
 
 .PHONY: build test initramfs kernel-image qemu-system verify clean clean-all
 
@@ -28,6 +29,12 @@ build:
 		runtime/runtime_manager_main.c \
 		runtime/runtime_manager.c \
 		runtime/model_manifest.c \
+		runtime/trust_client.c \
+		runtime/telemetry.c
+	$(CC) -static -O2 -Wall -Wextra \
+		-o $(TRUSTD) \
+		runtime/trustd.c \
+		runtime/trusted_state.c \
 		runtime/telemetry.c
 
 test: build
@@ -35,10 +42,11 @@ test: build
 
 initramfs: build
 	rm -rf $(BUILD)/rootfs
-	mkdir -p $(BUILD)/rootfs/bin $(BUILD)/rootfs/proc
+	mkdir -p $(BUILD)/rootfs/bin $(BUILD)/rootfs/proc $(BUILD)/rootfs/tmp
 	cp $(HELLO) $(BUILD)/rootfs/bin/tear-hello
 	cp $(SUPERVISOR) $(BUILD)/rootfs/bin/tear-supervisor
 	cp $(DEMO_MODEL) $(BUILD)/rootfs/bin/demo-model
+	cp $(TRUSTD) $(BUILD)/rootfs/bin/tear-trustd
 	cp $(INIT) $(BUILD)/rootfs/init
 	chmod +x $(BUILD)/rootfs/init
 	cp $(RUNTIME_MANAGER) $(BUILD)/rootfs/bin/tear-runtime-manager
@@ -58,7 +66,7 @@ verify:
 
 clean:
 	rm -rf $(BUILD)/rootfs
-	rm -f $(HELLO) $(INIT) $(SUPERVISOR) $(DEMO_MODEL) $(RUNTIME_MANAGER) $(INITRAMFS) $(BUILD)/telemetry.log
+	rm -f $(HELLO) $(INIT) $(SUPERVISOR) $(DEMO_MODEL) $(RUNTIME_MANAGER) $(TRUSTD) $(INITRAMFS) $(BUILD)/telemetry.log
 
 clean-all:
 	rm -rf $(BUILD)
