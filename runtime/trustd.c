@@ -95,6 +95,51 @@ static void handle_enroll(int client, const char *buf)
     }
 }
 
+static int model_update_allowed(const struct tear_model_manifest *old,
+                                const struct tear_model_manifest *new)
+{
+        if (strcmp(old->model_id, new->model_id) != 0)
+                return 0;
+
+        if (strcmp(old->backend, new->backend) != 0)
+                return 0;
+
+        return new->version > old->version;
+}
+
+static void handle_update(int client, const char *buf)
+{
+        struct tear_model_manifest incoming;
+        struct tear_model_manifest trusted;
+
+        if (parse_manifest_message(buf, "UPDATE", &incoming) < 0) {
+                tear_event("model_update_failed");
+                dprintf(client, "ERR\n");
+                return;
+        }
+
+        if (tear_trusted_state_load(TEAR_TRUSTED_STATE, &trusted) < 0) {
+                tear_event("model_update_no_trusted_state");
+                dprintf(client, "ERR\n");
+                return;
+        }
+
+        if (!model_update_allowed(&trusted, &incoming)) {
+                tear_event("model_rollback_rejected");
+                dprintf(client, "ERR\n");
+                return;
+        }
+
+        if (tear_trusted_state_store(TEAR_TRUSTED_STATE, &incoming) < 0) {
+                tear_event("model_update_failed");
+                dprintf(client, "ERR\n");
+                return;
+        }
+
+        tear_event("model_update_ok");
+        dprintf(client, "OK\n");
+}
+
 static void handle_verify(int client, const char *buf)
 {
     struct tear_model_manifest incoming;
@@ -166,6 +211,8 @@ int main(void)
             handle_verify(client, buf);
         } else if (strncmp(buf, "REPORT", 6) == 0) {
             handle_report(client);
+        } else if (strncmp(buf, "UPDATE", 6) == 0) {
+            handle_update(client, buf);
         } else {
             dprintf(client, "ERR\n");
         }

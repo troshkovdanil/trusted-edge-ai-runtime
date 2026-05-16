@@ -115,6 +115,22 @@ int main(int argc, char **argv)
 
     tear_event("provisioning_report_done");
 
+    tear_event("model_update_start");
+    if (run_tearictl("update-model", "/etc/tear/model-v2.json") < 0) {
+        tear_event("model_update_failed");
+        poweroff_guest();
+        return 1;
+    }
+    tear_event("model_update_done");
+
+    tear_event("rollback_validation_start");
+    if (run_tearictl("update-model", "/etc/tear/model-v1.json") == 0) {
+        tear_event("rollback_validation_failed");
+        poweroff_guest();
+        return 1;
+    }
+    tear_event("rollback_validation_done");
+
     const char *workload = parse_workload(argc, argv);
 
     tear_event("workload_start");
@@ -134,7 +150,7 @@ int main(int argc, char **argv)
               "--workload",
               workload,
               "--manifest",
-              "/etc/tear/model-v1.json",
+              "/etc/tear/model-v2.json",
               NULL);
 
         perror("execl");

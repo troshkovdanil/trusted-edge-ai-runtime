@@ -71,6 +71,23 @@ int tear_trust_enroll(
     return ret;
 }
 
+int tear_trust_update_model(const struct tear_model_manifest *manifest)
+{
+        int fd = connect_socket();
+        if (fd < 0)
+                return -1;
+
+        dprintf(fd, "UPDATE %s %d %s %s\n",
+                manifest->model_id,
+                manifest->version,
+                manifest->backend,
+                manifest->model_hash);
+
+        int ret = expect_ok(fd);
+        close(fd);
+        return ret;
+}
+
 int tear_trust_verify(
     const struct tear_model_manifest *manifest)
 {

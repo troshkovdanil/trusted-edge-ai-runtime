@@ -11,6 +11,8 @@ int tear_trust_enroll(
 int tear_trust_verify(
     const struct tear_model_manifest *manifest);
 
+int tear_trust_update_model(const struct tear_model_manifest *manifest);
+
 int tear_trust_report(void);
 
 #endif

@@ -14,6 +14,77 @@ TEAR (Trusted Edge AI Runtime) focuses on:
 - constrained edge deployment
 - QEMU-first reproducible development
 
+TEAR enables trusted adaptive edge AI systems:
+
+- verified deployment
+- runtime observability
+- rollback protection
+- telemetry-driven optimization
+- policy-bounded AI-assisted runtime adaptation
+
+Possible use cases:
+
+- thermal throttling
+- latency spikes
+- NPU unavailable
+- battery/power mode
+- camera FPS drop
+- model rollback attempt
+- OTA model update
+- backend/runtime mismatch
+- fleet anomaly detection
+
+TEAR enables adaptive AI runtime optimization without giving optimizers unrestricted control over trusted deployment state.
+
+The key safety idea:
+
+- optimizer/agent suggests
+- TEAR policy/trust layer enforces
+
+Example adaptive control decisions inside TEAR:
+
+```text
+optimization request
+  -> trusted policy validation
+  -> runtime action
+```
+
+e.g.:
+
+```text
+switch inference backend CPU -> NPU
+  -> backend allowed?
+  -> apply backend switch
+
+reduce camera input resolution
+  -> policy allows quality reduction?
+  -> apply lower resolution
+
+lower inference frequency
+  -> latency/FPS constraints satisfied?
+  -> reduce inference rate
+
+switch model fp32 -> int8
+  -> target model trusted?
+  -> activate int8 model
+
+enter thermal-safe mode
+  -> thermal threshold exceeded?
+  -> enable safe execution profile
+
+disable non-critical analytics
+  -> workload priority policy allows?
+  -> suspend auxiliary pipeline
+
+apply OTA model update
+  -> rollback-safe and signed?
+  -> activate new model version
+
+fallback NPU -> CPU
+  -> accelerator unavailable?
+  -> switch to CPU execution
+```
+
 ## Development Approach
 
 TEAR explores modern AI-assisted systems engineering workflows alongside
@@ -55,24 +126,6 @@ WORKLOAD=/bin/demo-model make qemu-system
 The project builds a minimal ARM64 initramfs containing TEAR runtime
 components and boots it under `qemu-system-aarch64`.
 
-Current target environment:
-
-- qemu-system-aarch64
-- virt machine
-- minimal Linux kernel
-- initramfs-based guest runtime
-
-The qemu-system smoke test currently uses a prebuilt Debian ARM64 installer
-kernel as a temporary boot substrate.
-
-The kernel image is downloaded into:
-
-```text
-build/kernel/Image
-```
-
-and is not committed to the repository.
-
 ## MVP-2: Runtime supervisor and telemetry
 
 TEAR boots into a minimal init process that starts a runtime supervisor.
@@ -85,51 +138,10 @@ The supervisor:
 - reports workload exit status
 - powers off the guest cleanly
 
-Guest console output is captured into:
-
-```text
-build/telemetry.log
-```
-
-Example telemetry:
-
-```text
-TEAR_EVENT ts_ms=1486 event=supervisor_start
-TEAR_EVENT ts_ms=1490 event=workload_start
-TEAR_EVENT ts_ms=4538 event=workload_exit status=0
-TEAR_EVENT ts_ms=4539 event=supervisor_shutdown
-```
-
 ## MVP-3: Workload abstraction
 
 TEAR now supports runtime-selectable workloads through the Linux kernel
 command line.
-
-The init process reads:
-
-```text
-tear.workload=<path>
-```
-
-from `/proc/cmdline` and forwards the selected workload to the TEAR
-supervisor.
-
-Current example workloads:
-
-- `/bin/tear-hello`
-- `/bin/demo-model`
-
-Default workload:
-
-```bash
-make qemu-system
-```
-
-Mock model workload:
-
-```bash
-WORKLOAD=/bin/demo-model make qemu-system
-```
 
 The mock model demonstrates:
 
@@ -138,43 +150,34 @@ The mock model demonstrates:
 - workload-specific execution flow
 - runtime parameter propagation through QEMU kernel cmdline
 
-Example model workload output:
+## MVP-4: Trusted model state and rollback rejection
+
+TEAR now has a thin end-to-end trusted model flow:
 
 ```text
-TEAR_EVENT ts_ms=1514 event=model_init
-TEAR model: loading model metadata
-TEAR model: backend=mock
-TEAR_EVENT ts_ms=2521 event=inference_start
-TEAR model: input=synthetic-frame
-TEAR model: running inference
-TEAR_EVENT ts_ms=4525 event=inference_done
-TEAR model: result=object:box confidence=0.87
+manifest v1
+  -> tearictl enroll
+  -> trustd trusted state
+  -> tearictl update-model v2
+  -> rollback attempt to v1 rejected
+  -> runtime manager verifies and runs v2
 ```
 
-The validation flow now verifies both workloads automatically:
+This simulates the trusted deployment control path that future adaptive runtime decisions will rely on.
 
-```bash
-make verify
-```
+## Next
 
-## Repository Structure
+The long-term goal is trusted optimization control for constrained edge AI:
+runtime adaptation driven by telemetry, deployment integrity, and trusted state.
+
+Next vertical slice:
 
 ```text
-runtime/
-  hello.c
-  demo_model.c
-  supervisor.c
-  telemetry.c
-  telemetry.h
-
-initramfs/
-  init.c
-
-scripts/
-  install-deps-ubuntu.sh
-  fetch-qemu-kernel.sh
-  run-qemu-system.sh
-  verify-qemu-run.sh
+native x86 build
+  -> real MNIST workload
+  -> runtime metrics
+  -> adaptive rules
+  -> trusted optimization decisions
 ```
 
 ## License
