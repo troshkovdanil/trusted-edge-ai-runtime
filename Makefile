@@ -13,7 +13,7 @@ RUNTIME_MANAGER := $(BUILD)/tear-runtime-manager
 TRUSTD := $(BUILD)/tear-trustd
 TEARICTL := $(BUILD)/tearictl
 
-.PHONY: build test initramfs kernel-image qemu-system verify clean clean-all
+.PHONY: build test initramfs kernel-image qemu-system verify clean clean-all validate-agent
 
 build:
 	mkdir -p $(BUILD)
@@ -79,3 +79,5 @@ clean:
 
 clean-all:
 	rm -rf $(BUILD)
+
+validate-agent: build test qemu-system verify
