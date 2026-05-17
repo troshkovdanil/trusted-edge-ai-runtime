@@ -1,2 +1,5 @@
 auto-commits: true
 model: ollama/qwen2.5-coder:14b
+attribute-author: false
+attribute-committer: true
+attribute-co-authored-by: true
