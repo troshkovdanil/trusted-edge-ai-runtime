@@ -1,2 +1,4 @@
 build/
+
 .aider*
+!.aider.conf.yml
