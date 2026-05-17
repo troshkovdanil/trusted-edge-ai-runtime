@@ -1,2 +1,2 @@
-auto-commits: false
+auto-commits: true
 model: ollama/qwen2.5-coder:14b
