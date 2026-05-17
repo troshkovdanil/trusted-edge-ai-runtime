@@ -2,8 +2,14 @@
 
 #include <stdio.h>
 
+#ifdef HOST_BUILD
+#define GREETING "TEAR: hello from native host"
+#else
+#define GREETING "TEAR: hello from aarch64 qemu"
+#endif
+
 int main(void)
 {
-    puts("TEAR: hello from aarch64 qemu");
+    puts(GREETING);
     return 0;
 }
