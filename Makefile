@@ -21,7 +21,7 @@ HOST_RUNTIME_MANAGER := $(HOST_BUILD)/tear-runtime-manager-host
 HOST_TRUSTD := $(HOST_BUILD)/tear-trustd-host
 HOST_TEARICTL := $(HOST_BUILD)/tearictl-host
 
-.PHONY: build test initramfs kernel-image qemu-system verify clean clean-all validate-agent host-build
+.PHONY: build test initramfs kernel-image qemu-system verify clean clean-all validate-agent host-build host-test
 
 build:
 	mkdir -p $(BUILD)
@@ -116,3 +116,6 @@ clean-all:
 	rm -rf $(BUILD)
 
 validate-agent: build test qemu-system verify
+
+host-test: host-build
+	./$(HOST_HELLO)
