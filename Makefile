@@ -3,6 +3,7 @@
 CC := aarch64-linux-gnu-gcc
 
 BUILD := build
+HOST_BUILD := $(BUILD)/host
 HELLO := $(BUILD)/hello-aarch64
 INITRAMFS := $(BUILD)/initramfs.cpio.gz
 INIT := $(BUILD)/init-aarch64
@@ -13,7 +14,14 @@ RUNTIME_MANAGER := $(BUILD)/tear-runtime-manager
 TRUSTD := $(BUILD)/tear-trustd
 TEARICTL := $(BUILD)/tearictl
 
-.PHONY: build test initramfs kernel-image qemu-system verify clean clean-all validate-agent
+HOST_HELLO := $(HOST_BUILD)/hello-host
+HOST_SUPERVISOR := $(HOST_BUILD)/tear-supervisor-host
+HOST_DEMO_MODEL := $(HOST_BUILD)/demo-model-host
+HOST_RUNTIME_MANAGER := $(HOST_BUILD)/tear-runtime-manager-host
+HOST_TRUSTD := $(HOST_BUILD)/tear-trustd-host
+HOST_TEARICTL := $(HOST_BUILD)/tearictl-host
+
+.PHONY: build test initramfs kernel-image qemu-system verify clean clean-all validate-agent host-build
 
 build:
 	mkdir -p $(BUILD)
@@ -39,6 +47,33 @@ build:
 		runtime/telemetry.c
 	$(CC) -static -O2 -Wall -Wextra \
 		-o $(TEARICTL) \
+		runtime/tearictl.c \
+		runtime/model_manifest.c \
+		runtime/trust_client.c \
+		runtime/telemetry.c
+
+host-build:
+	mkdir -p $(HOST_BUILD)
+	gcc -static -O2 -Wall -Wextra \
+		-o $(HOST_HELLO) runtime/hello.c
+	gcc -static -O2 -Wall -Wextra \
+		-o $(HOST_SUPERVISOR) runtime/supervisor.c runtime/telemetry.c
+	gcc -static -O2 -Wall -Wextra \
+		-o $(HOST_DEMO_MODEL) runtime/demo_model.c runtime/telemetry.c
+	gcc -static -O2 -Wall -Wextra \
+		-o $(HOST_RUNTIME_MANAGER) \
+		runtime/runtime_manager_main.c \
+		runtime/runtime_manager.c \
+		runtime/model_manifest.c \
+		runtime/trust_client.c \
+		runtime/telemetry.c
+	gcc -static -O2 -Wall -Wextra \
+		-o $(HOST_TRUSTD) \
+		runtime/trustd.c \
+		runtime/trusted_state.c \
+		runtime/telemetry.c
+	gcc -static -O2 -Wall -Wextra \
+		-o $(HOST_TEARICTL) \
 		runtime/tearictl.c \
 		runtime/model_manifest.c \
 		runtime/trust_client.c \
