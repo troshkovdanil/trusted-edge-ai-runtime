@@ -191,6 +191,3 @@ int main(int argc, char **argv)
 
     return 0;
 }
-```
-
-These changes ensure that the `host-supervisor-test` can execute host binaries correctly while preserving the QEMU/ARM64 behavior for normal builds.
