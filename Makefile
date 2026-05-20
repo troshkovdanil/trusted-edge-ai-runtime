@@ -21,7 +21,7 @@ HOST_RUNTIME_MANAGER := $(HOST_BUILD)/tear-runtime-manager-host
 HOST_TRUSTD := $(HOST_BUILD)/tear-trustd-host
 HOST_TEARICTL := $(HOST_BUILD)/tearictl-host
 
-.PHONY: build test initramfs kernel-image qemu-system verify clean clean-all validate-agent host-build host-test
+.PHONY: build test initramfs kernel-image qemu-system verify clean clean-all validate-agent host-build host-test host-supervisor-test
 
 build:
 	mkdir -p $(BUILD)
@@ -119,3 +119,17 @@ validate-agent: build test qemu-system verify
 
 host-test: host-build
 	./$(HOST_HELLO)
+
+host-supervisor-test: host-build
+	mkdir -p $(HOST_BUILD)
+	ln -sf tear-trustd-host $(HOST_BUILD)/tear-trustd
+	ln -sf tearictl-host $(HOST_BUILD)/tearictl
+	ln -sf tear-runtime-manager-host $(HOST_BUILD)/tear-runtime-manager
+	ln -sf demo-model-host $(HOST_BUILD)/demo-model
+	PATH="$(abspath $(HOST_BUILD)):$$PATH" \
+	WORKLOAD="$(abspath $(HOST_DEMO_MODEL))" \
+	./$(HOST_SUPERVISOR) > $(HOST_BUILD)/supervisor.log 2>&1
+	grep -q "event=supervisor_start" $(HOST_BUILD)/supervisor.log
+	grep -q "event=workload_start" $(HOST_BUILD)/supervisor.log
+	grep -q "event=inference_done" $(HOST_BUILD)/supervisor.log
+	grep -q "event=workload_exit" $(HOST_BUILD)/supervisor.log
