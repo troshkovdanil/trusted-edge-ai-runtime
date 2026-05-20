@@ -15,11 +15,15 @@
 #define TEARICTL_PATH "build/host/tearictl-host"
 #define RUNTIME_MANAGER_PATH "build/host/tear-runtime-manager-host"
 #define DEMO_MODEL_PATH "build/host/demo-model-host"
+#define MODEL_V1_PATH "examples/model-v1.json"
+#define MODEL_V2_PATH "examples/model-v2.json"
 #else
 #define TRUSTD_PATH "/bin/tear-trustd"
 #define TEARICTL_PATH "/bin/tearictl"
 #define RUNTIME_MANAGER_PATH "/bin/tear-runtime-manager"
 #define DEMO_MODEL_PATH "/bin/demo-model"
+#define MODEL_V1_PATH "/etc/tear/model-v1.json"
+#define MODEL_V2_PATH "/etc/tear/model-v2.json"
 #endif
 
 static void poweroff_guest(void)
@@ -111,7 +115,7 @@ int main(int argc, char **argv)
 
     tear_event("provisioning_start");
 
-    if (run_tearictl("enroll", "/etc/tear/model-v1.json") < 0) {
+    if (run_tearictl("enroll", MODEL_V1_PATH) < 0) {
         tear_event("provisioning_failed");
         poweroff_guest();
         return 1;
@@ -128,7 +132,7 @@ int main(int argc, char **argv)
     tear_event("provisioning_report_done");
 
     tear_event("model_update_start");
-    if (run_tearictl("update-model", "/etc/tear/model-v2.json") < 0) {
+    if (run_tearictl("update-model", MODEL_V2_PATH) < 0) {
         tear_event("model_update_failed");
         poweroff_guest();
         return 1;
@@ -136,7 +140,7 @@ int main(int argc, char **argv)
     tear_event("model_update_done");
 
     tear_event("rollback_validation_start");
-    if (run_tearictl("update-model", "/etc/tear/model-v1.json") == 0) {
+    if (run_tearictl("update-model", MODEL_V1_PATH) == 0) {
         tear_event("rollback_validation_failed");
         poweroff_guest();
         return 1;
@@ -162,7 +166,7 @@ int main(int argc, char **argv)
               "--workload",
               workload,
               "--manifest",
-              "/etc/tear/model-v2.json",
+              MODEL_V2_PATH,
               NULL);
 
         perror("execl");
