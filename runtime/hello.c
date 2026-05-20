@@ -2,7 +2,7 @@
 
 #include <stdio.h>
 
-#ifdef HOST_BUILD
+#ifdef TEAR_HOST_BUILD
 #define GREETING "TEAR: hello from native host"
 #else
 #define GREETING "TEAR: hello from aarch64 qemu"
