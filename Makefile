@@ -54,25 +54,25 @@ build:
 
 host-build:
 	mkdir -p $(HOST_BUILD)
-	gcc -static -O2 -Wall -Wextra -DHOST_BUILD \
+	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
 		-o $(HOST_HELLO) runtime/hello.c
-	gcc -static -O2 -Wall -Wextra -DHOST_BUILD \
+	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
 		-o $(HOST_SUPERVISOR) runtime/supervisor.c runtime/telemetry.c
-	gcc -static -O2 -Wall -Wextra -DHOST_BUILD \
+	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
 		-o $(HOST_DEMO_MODEL) runtime/demo_model.c runtime/telemetry.c
-	gcc -static -O2 -Wall -Wextra -DHOST_BUILD \
+	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
 		-o $(HOST_RUNTIME_MANAGER) \
 		runtime/runtime_manager_main.c \
 		runtime/runtime_manager.c \
 		runtime/model_manifest.c \
 		runtime/trust_client.c \
 		runtime/telemetry.c
-	gcc -static -O2 -Wall -Wextra -DHOST_BUILD \
+	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
 		-o $(HOST_TRUSTD) \
 		runtime/trustd.c \
 		runtime/trusted_state.c \
 		runtime/telemetry.c
-	gcc -static -O2 -Wall -Wextra -DHOST_BUILD \
+	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
 		-o $(HOST_TEARICTL) \
 		runtime/tearictl.c \
 		runtime/model_manifest.c \

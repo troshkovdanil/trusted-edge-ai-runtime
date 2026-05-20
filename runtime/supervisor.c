@@ -10,6 +10,18 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#ifdef TEAR_HOST_BUILD
+#define TRUSTD_PATH "build/host/tear-trustd-host"
+#define TEARICTL_PATH "build/host/tearictl-host"
+#define RUNTIME_MANAGER_PATH "build/host/tear-runtime-manager-host"
+#define DEMO_MODEL_PATH "build/host/demo-model-host"
+#else
+#define TRUSTD_PATH "/bin/tear-trustd"
+#define TEARICTL_PATH "/bin/tearictl"
+#define RUNTIME_MANAGER_PATH "/bin/tear-runtime-manager"
+#define DEMO_MODEL_PATH "/bin/demo-model"
+#endif
+
 static void poweroff_guest(void)
 {
     sync();
@@ -37,8 +49,8 @@ static pid_t start_trustd(void)
     }
 
     if (pid == 0) {
-        execl("/bin/tear-trustd",
-              "/bin/tear-trustd",
+        execl(TRUSTD_PATH,
+              TRUSTD_PATH,
               NULL);
 
         perror("execl trustd");
@@ -61,14 +73,14 @@ static int run_tearictl(const char *command, const char *arg)
 
     if (pid == 0) {
         if (arg) {
-            execl("/bin/tearictl",
-                  "/bin/tearictl",
+            execl(TEARICTL_PATH,
+                  TEARICTL_PATH,
                   command,
                   arg,
                   NULL);
         } else {
-            execl("/bin/tearictl",
-                  "/bin/tearictl",
+            execl(TEARICTL_PATH,
+                  TEARICTL_PATH,
                   command,
                   NULL);
         }
@@ -145,8 +157,8 @@ int main(int argc, char **argv)
     }
 
     if (pid == 0) {
-        execl("/bin/tear-runtime-manager",
-              "/bin/tear-runtime-manager",
+        execl(RUNTIME_MANAGER_PATH,
+              RUNTIME_MANAGER_PATH,
               "--workload",
               workload,
               "--manifest",
@@ -179,3 +191,6 @@ int main(int argc, char **argv)
 
     return 0;
 }
+```
+
+These changes ensure that the `host-supervisor-test` can execute host binaries correctly while preserving the QEMU/ARM64 behavior for normal builds.
