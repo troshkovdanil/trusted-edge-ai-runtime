@@ -206,3 +206,15 @@ release decisions
 merge decisions
 
 AI agents provide implementation acceleration only.
+
+## AI-assisted commits
+
+TEAR intentionally preserves transparent AI-assisted development history.
+
+AI-generated patches may be committed with explicit co-authorship metadata.
+
+All AI-generated changes remain subject to:
+- human architectural review
+- executable validation
+- subsystem boundary checks
+- invariant preservation

@@ -5,11 +5,10 @@
 #include "model_manifest.h"
 #include "telemetry.h"
 #include "trust_client.h"
-
-#include <stdio.h>
-#include <string.h>
-#include <sys/wait.h>
-#include <unistd.h>
+#include <stdio.h> // Include for printf, fprintf, perror, stderr
+#include <string.h> // Include for strcmp
+#include <sys/wait.h> // Include for waitpid, WIFEXITED, WEXITSTATUS
+#include <unistd.h> // Include for access function
 
 struct runtime_config {
     const char *workload;
