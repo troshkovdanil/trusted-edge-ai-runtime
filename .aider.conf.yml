@@ -1,5 +1,5 @@
 auto-commits: true
-model: ollama/qwen2.5-coder:7b
+model: gemini/gemini-2.5-flash
 attribute-author: false
 attribute-committer: true
 attribute-co-authored-by: true
