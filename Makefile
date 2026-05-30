@@ -127,8 +127,7 @@ host-supervisor-test: host-build
 	ln -sf tear-runtime-manager-host $(HOST_BUILD)/tear-runtime-manager
 	ln -sf demo-model-host $(HOST_BUILD)/demo-model
 	PATH="$(abspath $(HOST_BUILD)):$$PATH" \
-	WORKLOAD="$(abspath $(HOST_DEMO_MODEL))" \
-	./$(HOST_SUPERVISOR) > $(HOST_BUILD)/supervisor.log 2>&1
+	./$(HOST_SUPERVISOR) --workload "$(abspath $(HOST_DEMO_MODEL))" > $(HOST_BUILD)/supervisor.log 2>&1
 	grep -q "event=supervisor_start" $(HOST_BUILD)/supervisor.log
 	grep -q "event=workload_start" $(HOST_BUILD)/supervisor.log
 	grep -q "event=inference_done" $(HOST_BUILD)/supervisor.log
