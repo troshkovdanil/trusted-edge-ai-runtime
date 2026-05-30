@@ -17,6 +17,7 @@ TEARICTL := $(BUILD)/tearictl
 HOST_HELLO := $(HOST_BUILD)/hello-host
 HOST_SUPERVISOR := $(HOST_BUILD)/tear-supervisor-host
 HOST_DEMO_MODEL := $(HOST_BUILD)/demo-model-host
+HOST_MNIST_MODEL := $(HOST_BUILD)/mnist-model-host
 HOST_RUNTIME_MANAGER := $(HOST_BUILD)/tear-runtime-manager-host
 HOST_TRUSTD := $(HOST_BUILD)/tear-trustd-host
 HOST_TEARICTL := $(HOST_BUILD)/tearictl-host
@@ -60,6 +61,8 @@ host-build:
 		-o $(HOST_SUPERVISOR) runtime/supervisor.c runtime/telemetry.c
 	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
 		-o $(HOST_DEMO_MODEL) runtime/demo_model.c runtime/telemetry.c
+	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
+		-o $(HOST_MNIST_MODEL) runtime/mnist_model.c runtime/telemetry.c
 	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
 		-o $(HOST_RUNTIME_MANAGER) \
 		runtime/runtime_manager_main.c \
