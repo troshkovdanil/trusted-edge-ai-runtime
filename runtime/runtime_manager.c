@@ -72,14 +72,6 @@ int tear_runtime_manager_main(int argc, char **argv)
     }
 
     if (pid == 0) {
-        // Debug prints before execl
-        printf("TEAR: Executing workload: %s\n", cfg.workload);
-        if (access(cfg.workload, X_OK) == 0) {
-            printf("TEAR: Workload is executable.\n");
-        } else {
-            perror("access workload");
-        }
-
         execl(cfg.workload, cfg.workload, NULL);
 
         perror("execl");
