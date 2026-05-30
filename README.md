@@ -121,6 +121,16 @@ Run the mock model workload:
 WORKLOAD=/bin/demo-model make qemu-system
 ```
 
+### Host-Native Development
+
+For faster iteration on workloads and runtime components, TEAR provides a host-native x86 build target. This allows quick development cycles, while QEMU ARM64 remains the canonical embedded validation path.
+
+```bash
+make host-build
+make host-test
+make host-supervisor-test
+```
+
 ## MVP-1: qemu-system-aarch64
 
 The project builds a minimal ARM64 initramfs containing TEAR runtime
