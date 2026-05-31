@@ -135,3 +135,29 @@ int tear_trust_report(void)
 
     return 0;
 }
+
+int tear_trust_record_decision(const char *model_id,
+                               const char *proposal,
+                               const char *decision,
+                               const char *reason,
+                               long value)
+{
+    int fd = connect_socket();
+
+    if (fd < 0)
+        return -1;
+
+    dprintf(fd,
+            "RECORD_DECISION %s %s %s %s %ld\n",
+            model_id,
+            proposal,
+            decision,
+            reason,
+            value);
+
+    int ret = expect_ok(fd);
+
+    close(fd);
+
+    return ret;
+}

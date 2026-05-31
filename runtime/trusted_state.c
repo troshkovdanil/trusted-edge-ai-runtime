@@ -5,6 +5,26 @@
 #include <stdio.h>
 #include <string.h>
 
+int tear_trusted_state_append_decision(const char *path,
+                                       const char *model_id,
+                                       const char *proposal,
+                                       const char *decision,
+                                       const char *reason,
+                                       long value)
+{
+    FILE *f = fopen(path, "a");
+
+    if (!f)
+        return -1;
+
+    fprintf(f,
+            "model_id=%s proposal=%s decision=%s reason=%s value=%ld\n",
+            model_id, proposal, decision, reason, value);
+
+    fclose(f);
+    return 0;
+}
+
 int tear_trusted_state_store(
     const char *path,
     const struct tear_model_manifest *manifest)

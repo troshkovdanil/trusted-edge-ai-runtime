@@ -92,6 +92,16 @@ int tear_runtime_manager_main(int argc, char **argv)
                       WEXITSTATUS(status));
     }
 
+    if (tear_trust_record_decision("mnist-onnx-v1",
+                                   "request_high_accuracy_profile",
+                                   "rejected",
+                                   "profile_unavailable",
+                                   300) < 0) {
+        tear_event("optimization_decision_record_failed");
+    } else {
+        tear_event("optimization_decision_recorded_by_runtime_manager");
+    }
+
     tear_event("runtime_manager_shutdown");
 
     return 0;
