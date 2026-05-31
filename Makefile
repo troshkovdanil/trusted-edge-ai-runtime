@@ -61,8 +61,11 @@ host-build:
 		-o $(HOST_SUPERVISOR) runtime/supervisor.c runtime/telemetry.c
 	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
 		-o $(HOST_DEMO_MODEL) runtime/demo_model.c runtime/telemetry.c
-	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
-		-o $(HOST_MNIST_MODEL) runtime/mnist_model.c runtime/telemetry.c
+	gcc -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
+		-Iexternal/onnxruntime/include \
+		-o $(HOST_MNIST_MODEL) runtime/mnist_model.c runtime/telemetry.c \
+		-Lexternal/onnxruntime/lib -lonnxruntime \
+		-Wl,-rpath,'$$ORIGIN/../../external/onnxruntime/lib'
 	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
 		-o $(HOST_RUNTIME_MANAGER) \
 		runtime/runtime_manager_main.c \
