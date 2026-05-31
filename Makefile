@@ -95,11 +95,24 @@ test: build
 	qemu-aarch64 ./$(HELLO)
 
 host-mnist-test: host-build
-	./$(HOST_MNIST_MODEL) > $(HOST_BUILD)/mnist.log 2>&1
-	grep -q "TEAR: MNIST workload start" $(HOST_BUILD)/mnist.log
-	grep -q "TEAR: model_id=mnist-onnx-v1 backend=onnxruntime-cpu" $(HOST_BUILD)/mnist.log
-	grep -q "TEAR: predicted_digit=" $(HOST_BUILD)/mnist.log
-	grep -q "TEAR: MNIST workload finished" $(HOST_BUILD)/mnist.log
+	./$(HOST_MNIST_MODEL) --sample clean7 > $(HOST_BUILD)/mnist-clean7.log 2>&1
+	grep -q "TEAR: MNIST workload start" $(HOST_BUILD)/mnist-clean7.log
+	grep -q "TEAR: model_id=mnist-onnx-v1 backend=onnxruntime-cpu sample=clean7" $(HOST_BUILD)/mnist-clean7.log
+	grep -q "TEAR: metric predicted_digit=" $(HOST_BUILD)/mnist-clean7.log
+	grep -q "TEAR_EVENT .*event=mnist confidence_margin_x1000=" $(HOST_BUILD)/mnist-clean7.log
+	grep -q "TEAR: MNIST workload finished" $(HOST_BUILD)/mnist-clean7.log
+	./$(HOST_MNIST_MODEL) --sample weak7 > $(HOST_BUILD)/mnist-weak7.log 2>&1
+	grep -q "TEAR: MNIST workload start" $(HOST_BUILD)/mnist-weak7.log
+	grep -q "TEAR: model_id=mnist-onnx-v1 backend=onnxruntime-cpu sample=weak7" $(HOST_BUILD)/mnist-weak7.log
+	grep -q "TEAR: metric predicted_digit=" $(HOST_BUILD)/mnist-weak7.log
+	grep -q "TEAR_EVENT .*event=mnist confidence_margin_x1000=" $(HOST_BUILD)/mnist-weak7.log
+	grep -q "TEAR: MNIST workload finished" $(HOST_BUILD)/mnist-weak7.log
+	./$(HOST_MNIST_MODEL) --sample noise > $(HOST_BUILD)/mnist-noise.log 2>&1
+	grep -q "TEAR: MNIST workload start" $(HOST_BUILD)/mnist-noise.log
+	grep -q "TEAR: model_id=mnist-onnx-v1 backend=onnxruntime-cpu sample=noise" $(HOST_BUILD)/mnist-noise.log
+	grep -q "TEAR: metric predicted_digit=" $(HOST_BUILD)/mnist-noise.log
+	grep -q "TEAR_EVENT .*event=mnist confidence_margin_x1000=" $(HOST_BUILD)/mnist-noise.log
+	grep -q "TEAR: MNIST workload finished" $(HOST_BUILD)/mnist-noise.log
 
 full-verify: validate-agent host-test host-supervisor-test host-mnist-test
 
