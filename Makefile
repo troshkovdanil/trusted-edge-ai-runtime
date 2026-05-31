@@ -25,7 +25,7 @@ HOST_TEARICTL := $(HOST_BUILD)/tearictl-host
 MNIST_MODEL_FILE := models/mnist/mnist.onnx
 ORT_INCLUDE := external/onnxruntime/include/onnxruntime_c_api.h
 
-.PHONY: build test initramfs kernel-image qemu-system verify clean clean-all validate-agent host-build host-test host-supervisor-test mnist-assets
+.PHONY: build test initramfs kernel-image qemu-system verify clean clean-all validate-agent host-build host-test host-supervisor-test mnist-assets host-mnist-test full-verify
 
 mnist-assets:
 	./scripts/fetch-mnist-onnx.sh
@@ -93,6 +93,15 @@ host-build: mnist-assets
 
 test: build
 	qemu-aarch64 ./$(HELLO)
+
+host-mnist-test: host-build
+	./$(HOST_MNIST_MODEL) > $(HOST_BUILD)/mnist.log 2>&1
+	grep -q "TEAR: MNIST workload start" $(HOST_BUILD)/mnist.log
+	grep -q "TEAR: model_id=mnist-onnx-v1 backend=onnxruntime-cpu" $(HOST_BUILD)/mnist.log
+	grep -q "TEAR: predicted_digit=" $(HOST_BUILD)/mnist.log
+	grep -q "TEAR: MNIST workload finished" $(HOST_BUILD)/mnist.log
+
+full-verify: validate-agent host-test host-supervisor-test host-mnist-test
 
 initramfs: build
 	rm -rf $(BUILD)/rootfs
