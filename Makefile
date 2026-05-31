@@ -22,7 +22,13 @@ HOST_RUNTIME_MANAGER := $(HOST_BUILD)/tear-runtime-manager-host
 HOST_TRUSTD := $(HOST_BUILD)/tear-trustd-host
 HOST_TEARICTL := $(HOST_BUILD)/tearictl-host
 
-.PHONY: build test initramfs kernel-image qemu-system verify clean clean-all validate-agent host-build host-test host-supervisor-test
+MNIST_MODEL_FILE := models/mnist/mnist.onnx
+ORT_INCLUDE := external/onnxruntime/include/onnxruntime_c_api.h
+
+.PHONY: build test initramfs kernel-image qemu-system verify clean clean-all validate-agent host-build host-test host-supervisor-test mnist-assets
+
+mnist-assets:
+	./scripts/fetch-mnist-onnx.sh
 
 build:
 	mkdir -p $(BUILD)
@@ -53,7 +59,7 @@ build:
 		runtime/trust_client.c \
 		runtime/telemetry.c
 
-host-build:
+host-build: mnist-assets
 	mkdir -p $(HOST_BUILD)
 	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
 		-o $(HOST_HELLO) runtime/hello.c
