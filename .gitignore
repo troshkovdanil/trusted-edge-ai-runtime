@@ -2,3 +2,6 @@ build/
 
 .aider*
 !.aider.conf.yml
+
+external/
+models/mnist/mnist.onnx

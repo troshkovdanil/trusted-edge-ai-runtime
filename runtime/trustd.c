@@ -12,6 +12,7 @@
 
 #define TEAR_TRUSTD_SOCKET "/tmp/tear-trustd.sock"
 #define TEAR_TRUSTED_STATE "/tmp/tear-trusted-state"
+#define TEAR_TRUSTED_DECISIONS "/tmp/tear-trusted-decisions"
 
 static int create_socket(void)
 {
@@ -177,6 +178,41 @@ static void handle_report(int client)
     }
 }
 
+static void handle_record_decision(int client, const char *buf)
+{
+    char model_id[64];
+    char proposal[128];
+    char decision[64];
+    char reason[128];
+    long value;
+
+    if (sscanf(buf,
+               "RECORD_DECISION %63s %127s %63s %127s %ld",
+               model_id,
+               proposal,
+               decision,
+               reason,
+               &value) != 5) {
+        tear_event("optimization_decision_record_failed");
+        dprintf(client, "ERR\n");
+        return;
+    }
+
+    if (tear_trusted_state_append_decision(TEAR_TRUSTED_DECISIONS,
+                                           model_id,
+                                           proposal,
+                                           decision,
+                                           reason,
+                                           value) < 0) {
+        tear_event("optimization_decision_record_failed");
+        dprintf(client, "ERR\n");
+        return;
+    }
+
+    tear_event("optimization_decision_recorded");
+    dprintf(client, "OK\n");
+}
+
 int main(void)
 {
     int server = create_socket();
@@ -213,6 +249,8 @@ int main(void)
             handle_report(client);
         } else if (strncmp(buf, "UPDATE", 6) == 0) {
             handle_update(client, buf);
+        } else if (strncmp(buf, "RECORD_DECISION", 15) == 0) {
+            handle_record_decision(client, buf);
         } else {
             dprintf(client, "ERR\n");
         }

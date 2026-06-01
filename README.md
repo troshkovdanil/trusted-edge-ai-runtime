@@ -1,10 +1,10 @@
-# trusted-edge-ai-runtime
+# TEAR — Trusted Edge AI Runtime
 
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-Trusted adaptive runtime infrastructure for embedded edge AI systems.
+Trusted runtime infrastructure for adaptive edge AI systems.
 
-TEAR (Trusted Edge AI Runtime) focuses on:
+TEAR focuses on:
 
 - embedded runtime infrastructure
 - trusted state handling
@@ -101,13 +101,14 @@ Install required build dependencies:
 ./scripts/install-deps-ubuntu.sh
 ```
 
-Build:
+Build ARM64 and host-native components:
 
 ```bash
 make build
+make host-build
 ```
 
-Run validation:
+Run ARM64 validation:
 
 ```bash
 make test
@@ -115,7 +116,13 @@ make qemu-system
 make verify
 ```
 
-Run the mock model workload:
+Run all validation suites:
+
+```bash
+make full-verify
+```
+
+Run the mock model workload in QEMU:
 
 ```bash
 WORKLOAD=/bin/demo-model make qemu-system
@@ -123,12 +130,71 @@ WORKLOAD=/bin/demo-model make qemu-system
 
 ### Host-Native Development
 
-For faster iteration on workloads and runtime components, TEAR provides a host-native x86 build target. This allows quick development cycles, while QEMU ARM64 remains the canonical embedded validation path.
+For faster iteration on workloads and runtime components, TEAR provides a host-native x86 execution path.
+
+This enables rapid development of:
+
+- runtime infrastructure
+- trusted state handling
+- adaptive optimization logic
+- workload integration
+
+while QEMU ARM64 remains the canonical embedded validation target.
+
+Build host-native binaries:
 
 ```bash
 make host-build
+```
+
+Run basic host validation:
+
+```bash
 make host-test
 make host-supervisor-test
+```
+
+Run ONNX Runtime MNIST workload validation:
+
+```bash
+make host-mnist-test
+```
+
+Run adaptive optimization integration tests:
+
+```bash
+make host-adaptive-supervisor-test
+```
+
+Run the complete validation suite:
+
+```bash
+make full-verify
+```
+
+### Adaptive Optimization Demonstration
+
+The host-native adaptive validation exercises the full optimization control loop:
+
+```text
+MNIST workload
+  -> runtime metrics
+  -> optimizer proposal
+  -> policy validation
+  -> trusted decision recording
+```
+
+Test scenarios currently include:
+
+```text
+clean7
+  -> keep_current_profile
+
+weak7
+  -> request_high_accuracy_profile
+
+noise
+  -> reject_input
 ```
 
 ## MVP-1: qemu-system-aarch64
@@ -175,20 +241,80 @@ manifest v1
 
 This simulates the trusted deployment control path that future adaptive runtime decisions will rely on.
 
-## Next
+## MVP-5: Adaptive optimization control loop
 
-The long-term goal is trusted optimization control for constrained edge AI:
-runtime adaptation driven by telemetry, deployment integrity, and trusted state.
+TEAR now includes a host-native adaptive optimization demonstration.
 
-Next vertical slice:
+The adaptive flow is:
 
 ```text
-native x86 build
-  -> real MNIST workload
+MNIST workload
   -> runtime metrics
-  -> adaptive rules
-  -> trusted optimization decisions
+  -> optimizer proposal
+  -> policy validation
+  -> trusted decision recording
 ```
+
+Current optimization scenarios:
+
+```text
+clean7
+  -> keep_current_profile
+  -> approved
+
+weak7
+  -> request_high_accuracy_profile
+  -> rejected (profile unavailable)
+
+noise
+  -> reject_input
+  -> approved
+```
+
+The optimization engine does not directly modify runtime state.
+
+Instead:
+
+```text
+optimizer proposal
+  -> policy validation
+  -> trusted decision log
+```
+
+This demonstrates the core TEAR architecture:
+
+```text
+workload
+  -> telemetry
+  -> optimizer
+  -> trusted policy
+  -> recorded decision
+```
+
+The implementation currently runs in host-native mode using ONNX Runtime and a small MNIST workload while preserving the same trusted-control architecture intended for future embedded deployments.
+
+## Next
+
+The next major milestone is moving the adaptive control architecture toward realistic embedded deployment.
+
+Planned vertical slice:
+
+```text
+QEMU ARM64
+  -> OP-TEE integration
+  -> trusted decision persistence
+  -> OTA-aware optimization state
+  -> policy-controlled runtime adaptation
+```
+
+Longer term goals include:
+
+- trusted optimization agents
+- backend selection (CPU/NPU/GPU)
+- thermal-aware adaptation
+- power-aware adaptation
+- fleet observability
+- attestation-aware optimization
 
 ## License
 
