@@ -21,6 +21,7 @@ HOST_MNIST_MODEL := $(HOST_BUILD)/mnist-model-host
 HOST_RUNTIME_MANAGER := $(HOST_BUILD)/tear-runtime-manager-host
 HOST_TRUSTD := $(HOST_BUILD)/tear-trustd-host
 HOST_TEARICTL := $(HOST_BUILD)/tearictl-host
+HOST_OPTD := $(HOST_BUILD)/tear-optd-host
 
 MNIST_MODEL_FILE := models/mnist/mnist.onnx
 ORT_INCLUDE := external/onnxruntime/include/onnxruntime_c_api.h
@@ -89,6 +90,11 @@ host-build: mnist-assets
 		runtime/tearictl.c \
 		runtime/model_manifest.c \
 		runtime/trust_client.c \
+		runtime/telemetry.c
+	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
+		-o $(HOST_OPTD) \
+		runtime/optd.c \
+		runtime/optimizer_policy.c \
 		runtime/telemetry.c
 
 test: build
