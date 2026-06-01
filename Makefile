@@ -26,7 +26,7 @@ HOST_OPTD := $(HOST_BUILD)/tear-optd-host
 MNIST_MODEL_FILE := models/mnist/mnist.onnx
 ORT_INCLUDE := external/onnxruntime/include/onnxruntime_c_api.h
 
-.PHONY: build test initramfs kernel-image qemu-system verify clean clean-all validate-agent host-build host-test host-supervisor-test mnist-assets host-mnist-test full-verify
+.PHONY: build test initramfs kernel-image qemu-system verify clean clean-all validate-agent host-build host-test host-supervisor-test mnist-assets host-mnist-test host-adaptive-supervisor-test full-verify
 
 mnist-assets:
 	./scripts/fetch-mnist-onnx.sh
@@ -120,8 +120,6 @@ host-mnist-test: host-build
 	grep -q "TEAR_EVENT .*event=mnist confidence_margin_x1000=" $(HOST_BUILD)/mnist-noise.log
 	grep -q "TEAR: MNIST workload finished" $(HOST_BUILD)/mnist-noise.log
 
-full-verify: validate-agent host-test host-supervisor-test host-mnist-test
-
 initramfs: build
 	rm -rf $(BUILD)/rootfs
 	mkdir -p $(BUILD)/rootfs/bin $(BUILD)/rootfs/proc $(BUILD)/rootfs/tmp $(BUILD)/rootfs/etc/tear
@@ -172,3 +170,25 @@ host-supervisor-test: host-build
 	grep -q "event=workload_start" $(HOST_BUILD)/supervisor.log
 	grep -q "event=inference_done" $(HOST_BUILD)/supervisor.log
 	grep -q "event=workload_exit" $(HOST_BUILD)/supervisor.log
+
+host-adaptive-supervisor-test: host-build
+	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-trusted-decisions /tmp/tear-mnist-metrics
+	TEAR_MNIST_SAMPLE=clean7 \
+	./$(HOST_SUPERVISOR) --workload "$(abspath $(HOST_MNIST_MODEL))" --manifest examples/mnist-model.json --enable-optimizer > $(HOST_BUILD)/adaptive-clean7.log 2>&1
+	grep -q "event=mnist_inference_metrics" /tmp/tear-mnist-metrics
+	grep -q "event=optimizer_proposal_received" $(HOST_BUILD)/adaptive-clean7.log
+	grep -q "proposal=keep_current_profile decision=approved reason=policy_allows" /tmp/tear-trusted-decisions
+	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-trusted-decisions /tmp/tear-mnist-metrics
+	TEAR_MNIST_SAMPLE=weak7 \
+	./$(HOST_SUPERVISOR) --workload "$(abspath $(HOST_MNIST_MODEL))" --manifest examples/mnist-model.json --enable-optimizer > $(HOST_BUILD)/adaptive-weak7.log 2>&1
+	grep -q "event=mnist_inference_metrics" /tmp/tear-mnist-metrics
+	grep -q "event=optimizer_proposal_received" $(HOST_BUILD)/adaptive-weak7.log
+	grep -q "proposal=request_high_accuracy_profile decision=rejected reason=profile_unavailable" /tmp/tear-trusted-decisions
+	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-trusted-decisions /tmp/tear-mnist-metrics
+	TEAR_MNIST_SAMPLE=noise \
+	./$(HOST_SUPERVISOR) --workload "$(abspath $(HOST_MNIST_MODEL))" --manifest examples/mnist-model.json --enable-optimizer > $(HOST_BUILD)/adaptive-noise.log 2>&1
+	grep -q "event=mnist_inference_metrics" /tmp/tear-mnist-metrics
+	grep -q "event=optimizer_proposal_received" $(HOST_BUILD)/adaptive-noise.log
+	grep -q "proposal=reject_input decision=approved reason=input_rejected" /tmp/tear-trusted-decisions
+
+full-verify: validate-agent host-test host-supervisor-test host-mnist-test host-adaptive-supervisor-test

@@ -178,6 +178,7 @@ static void record_optimizer_decision(void)
 int tear_runtime_manager_main(int argc, char **argv)
 {
     struct runtime_config cfg = parse_args(argc, argv);
+    int manifest_optimization_capable = 0;
 
     tear_event("runtime_manager_start");
 
@@ -201,6 +202,7 @@ int tear_runtime_manager_main(int argc, char **argv)
         }
 
         tear_event("manifest_verified");
+	manifest_optimization_capable = manifest.optimization_capable;
     }
 
     pid_t pid = fork();
@@ -212,7 +214,7 @@ int tear_runtime_manager_main(int argc, char **argv)
     }
 
     if (pid == 0) {
-        if (cfg.enable_optimizer)
+        if (cfg.enable_optimizer && manifest_optimization_capable)
             setenv("TEAR_TELEMETRY_FILE", TEAR_MNIST_METRICS, 1);
 
         execl(cfg.workload, cfg.workload, NULL);
@@ -235,7 +237,7 @@ int tear_runtime_manager_main(int argc, char **argv)
                       WEXITSTATUS(status));
     }
 
-    if (cfg.enable_optimizer)
+    if (cfg.enable_optimizer && manifest_optimization_capable)
         record_optimizer_decision();
 
     tear_event("runtime_manager_shutdown");

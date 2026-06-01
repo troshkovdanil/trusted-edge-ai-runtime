@@ -69,6 +69,42 @@ static int extract_int(
     return 0;
 }
 
+static int extract_bool_optional(const char *buf,
+                                 const char *key,
+                                 int *value)
+{
+    char pattern[64];
+
+    *value = 0;
+
+    snprintf(pattern, sizeof(pattern), "\"%s\"", key);
+
+    const char *p = strstr(buf, pattern);
+    if (!p)
+        return 0;
+
+    p = strchr(p, ':');
+    if (!p)
+        return -1;
+
+    p++;
+
+    while (*p == ' ' || *p == '\t' || *p == '\n')
+        p++;
+
+    if (strncmp(p, "true", 4) == 0) {
+        *value = 1;
+        return 0;
+    }
+
+    if (strncmp(p, "false", 5) == 0) {
+        *value = 0;
+        return 0;
+    }
+
+    return -1;
+}
+
 int tear_manifest_load(
     const char *path,
     struct tear_model_manifest *manifest)
@@ -126,6 +162,10 @@ int tear_manifest_load(
                        sizeof(manifest->model_hash)) < 0)
         goto fail;
 
+    if (extract_bool_optional(buf, "optimization_capable",
+                              &manifest->optimization_capable) < 0)
+        goto fail;
+
     free(buf);
 
     return 0;
@@ -143,4 +183,6 @@ void tear_manifest_print(
     printf("  version=%d\n", manifest->version);
     printf("  backend=%s\n", manifest->backend);
     printf("  model_hash=%s\n", manifest->model_hash);
+    printf("  optimization_capable=%s\n",
+           manifest->optimization_capable ? "true" : "false");
 }

@@ -8,6 +8,7 @@ struct tear_model_manifest {
     int version;
     char backend[32];
     char model_hash[128];
+    int optimization_capable;
 };
 
 int tear_manifest_load(

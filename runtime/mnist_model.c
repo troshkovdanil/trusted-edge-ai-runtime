@@ -58,6 +58,19 @@ static enum mnist_sample_kind parse_sample_kind(int argc, char **argv)
             return SAMPLE_NOISE;
     }
 
+    const char *env_sample = getenv("TEAR_MNIST_SAMPLE");
+
+    if (env_sample) {
+        if (strcmp(env_sample, "clean7") == 0)
+            return SAMPLE_CLEAN7;
+
+        if (strcmp(env_sample, "weak7") == 0)
+            return SAMPLE_WEAK7;
+
+        if (strcmp(env_sample, "noise") == 0)
+            return SAMPLE_NOISE;
+    }
+
     return SAMPLE_CLEAN7;
 }
 
