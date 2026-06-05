@@ -51,9 +51,15 @@ reset_order_check() {
     LAST_LINE=0
 }
 
-echo "TEAR verify: mock model workload"
+echo "TEAR verify: OP-TEE CA ping"
 
 reset_order_check
+check_log_ordered "TEAR_OPTEE_CA_TEST start"
+check_log_ordered "TEAR_OPTEE_CA_PING_OK"
+check_log_ordered "TEAR_OPTEE_CA_TEST done"
+
+echo "TEAR verify: mock model workload"
+
 check_log_ordered "TEAR_OPTEE_QEMU_TEST start"
 check_log_ordered "event=supervisor_start"
 check_log_ordered "event=trustd_start"
