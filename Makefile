@@ -229,8 +229,10 @@ optee-ca:
 	$(CC) -O2 -Wall -Wextra \
 		-I$(OPTEE_CLIENT_INCLUDE) \
 		-Ioptee/ta/tear_ta/include \
+		-Ioptee/ca \
 		-o $(TEAR_CA) \
 		optee/ca/tear_ca.c \
+		optee/ca/tear_optee_client.c \
 		-L$(OPTEE_CLIENT_LIB) \
 		-Wl,-rpath-link,$(OPTEE_CLIENT_LIB) \
 		-lteec
