@@ -1,0 +1,16 @@
+/* SPDX-License-Identifier: Apache-2.0 */
+
+#ifndef USER_TA_HEADER_DEFINES_H
+#define USER_TA_HEADER_DEFINES_H
+
+#include "tear_ta.h"
+
+#define TA_UUID TEAR_TA_UUID
+
+#define TA_FLAGS TA_FLAG_EXEC_DDR
+#define TA_STACK_SIZE (2 * 1024)
+#define TA_DATA_SIZE (8 * 1024)
+
+#define TA_DESCRIPTION "TEAR trusted-state TA"
+
+#endif

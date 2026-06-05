@@ -27,8 +27,12 @@ MNIST_MODEL_FILE := models/mnist/mnist.onnx
 ORT_INCLUDE := external/onnxruntime/include/onnxruntime_c_api.h
 
 OPTEE_QEMU_DIR := external/optee-qemu-v8
+OPTEE_TA_DEV_KIT := $(abspath $(OPTEE_QEMU_DIR)/optee_os/out/arm/export-ta_arm64)
+OPTEE_CROSS_COMPILE := $(abspath $(OPTEE_QEMU_DIR)/toolchains/aarch64/bin/aarch64-linux-gnu-)
+TEAR_TA_BUILD := $(BUILD)/optee/tear_ta
+TEAR_TA := $(TEAR_TA_BUILD)/7c9d7b3a-2f4e-4c8f-9a11-6b4454454152.ta
 
-.PHONY: build test initramfs kernel-image qemu-system verify clean clean-all validate-agent host-build host-test host-supervisor-test mnist-assets host-mnist-test host-adaptive-supervisor-test full-verify optee-qemu-install optee-qemu-build optee-qemu-run optee-qemu-test
+.PHONY: build test initramfs kernel-image qemu-system verify clean clean-all validate-agent host-build host-test host-supervisor-test mnist-assets host-mnist-test host-adaptive-supervisor-test full-verify optee-qemu-install optee-qemu-build optee-qemu-run optee-qemu-test optee-ta
 
 mnist-assets:
 	./scripts/fetch-mnist-onnx.sh
@@ -152,6 +156,7 @@ clean:
 	rm -rf $(BUILD)/rootfs
 	rm -f $(HELLO) $(INIT) $(SUPERVISOR) $(DEMO_MODEL) $(RUNTIME_MANAGER) $(TRUSTD) $(TEARICTL) $(INITRAMFS) $(BUILD)/telemetry.log
 	rm -f $(BUILD)/optee-normal-world.log $(BUILD)/optee-secure-world.log
+	rm -rf $(BUILD)/optee
 
 clean-all:
 	rm -rf $(BUILD)
@@ -208,3 +213,10 @@ optee-qemu-run:
 
 optee-qemu-test: optee-qemu-build
 	./scripts/run-optee-qemu-headless.sh
+
+optee-ta:
+	mkdir -p $(TEAR_TA_BUILD)
+	$(MAKE) -C optee/ta/tear_ta \
+		O=$(abspath $(TEAR_TA_BUILD)) \
+		TA_DEV_KIT_DIR=$(OPTEE_TA_DEV_KIT) \
+		CROSS_COMPILE=$(OPTEE_CROSS_COMPILE)
