@@ -31,8 +31,11 @@ OPTEE_TA_DEV_KIT := $(abspath $(OPTEE_QEMU_DIR)/optee_os/out/arm/export-ta_arm64
 OPTEE_CROSS_COMPILE := $(abspath $(OPTEE_QEMU_DIR)/toolchains/aarch64/bin/aarch64-linux-gnu-)
 TEAR_TA_BUILD := $(BUILD)/optee/tear_ta
 TEAR_TA := $(TEAR_TA_BUILD)/7c9d7b3a-2f4e-4c8f-9a11-6b4454454152.ta
+TEAR_CA := $(BUILD)/optee/tear-optee-ca
+OPTEE_CLIENT_INCLUDE := $(abspath $(OPTEE_QEMU_DIR)/optee_client/libteec/include)
+OPTEE_CLIENT_LIB := $(abspath $(OPTEE_QEMU_DIR)/out-br/target/usr/lib)
 
-.PHONY: build test initramfs kernel-image qemu-system verify clean clean-all validate-agent host-build host-test host-supervisor-test mnist-assets host-mnist-test host-adaptive-supervisor-test full-verify optee-qemu-install optee-qemu-build optee-qemu-run optee-qemu-test optee-ta
+.PHONY: build test initramfs kernel-image qemu-system verify clean clean-all validate-agent host-build host-test host-supervisor-test mnist-assets host-mnist-test host-adaptive-supervisor-test full-verify optee-qemu-install optee-qemu-build optee-qemu-run optee-qemu-test optee-ta optee-ca
 
 mnist-assets:
 	./scripts/fetch-mnist-onnx.sh
@@ -220,3 +223,14 @@ optee-ta:
 		O=$(abspath $(TEAR_TA_BUILD)) \
 		TA_DEV_KIT_DIR=$(OPTEE_TA_DEV_KIT) \
 		CROSS_COMPILE=$(OPTEE_CROSS_COMPILE)
+
+optee-ca:
+	mkdir -p $(BUILD)/optee
+	$(CC) -O2 -Wall -Wextra \
+		-I$(OPTEE_CLIENT_INCLUDE) \
+		-Ioptee/ta/tear_ta/include \
+		-o $(TEAR_CA) \
+		optee/ca/tear_ca.c \
+		-L$(OPTEE_CLIENT_LIB) \
+		-Wl,-rpath-link,$(OPTEE_CLIENT_LIB) \
+		-lteec
