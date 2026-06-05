@@ -26,7 +26,9 @@ HOST_OPTD := $(HOST_BUILD)/tear-optd-host
 MNIST_MODEL_FILE := models/mnist/mnist.onnx
 ORT_INCLUDE := external/onnxruntime/include/onnxruntime_c_api.h
 
-.PHONY: build test initramfs kernel-image qemu-system verify clean clean-all validate-agent host-build host-test host-supervisor-test mnist-assets host-mnist-test host-adaptive-supervisor-test full-verify
+OPTEE_QEMU_DIR := external/optee-qemu-v8
+
+.PHONY: build test initramfs kernel-image qemu-system verify clean clean-all validate-agent host-build host-test host-supervisor-test mnist-assets host-mnist-test host-adaptive-supervisor-test full-verify optee-qemu-install optee-qemu-build optee-qemu-run optee-qemu-test
 
 mnist-assets:
 	./scripts/fetch-mnist-onnx.sh
@@ -149,9 +151,11 @@ verify:
 clean:
 	rm -rf $(BUILD)/rootfs
 	rm -f $(HELLO) $(INIT) $(SUPERVISOR) $(DEMO_MODEL) $(RUNTIME_MANAGER) $(TRUSTD) $(TEARICTL) $(INITRAMFS) $(BUILD)/telemetry.log
+	rm -f $(BUILD)/optee-normal-world.log $(BUILD)/optee-secure-world.log
 
 clean-all:
 	rm -rf $(BUILD)
+	rm -rf $(OPTEE_QEMU_DIR)
 
 validate-agent: build test qemu-system verify
 
@@ -192,3 +196,15 @@ host-adaptive-supervisor-test: host-build
 	grep -q "proposal=reject_input decision=approved reason=input_rejected" /tmp/tear-trusted-decisions
 
 full-verify: validate-agent host-test host-supervisor-test host-mnist-test host-adaptive-supervisor-test
+
+optee-qemu-install: build
+	./scripts/install-optee-qemu-files.sh $(OPTEE_QEMU_DIR)
+
+optee-qemu-build: optee-qemu-install
+	./scripts/optee-qemu.sh
+
+optee-qemu-run:
+	$(MAKE) -C $(OPTEE_QEMU_DIR)/build run-only
+
+optee-qemu-test: optee-qemu-build
+	./scripts/run-optee-qemu-headless.sh

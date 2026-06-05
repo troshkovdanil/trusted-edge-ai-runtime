@@ -26,7 +26,6 @@ Possible use cases:
 
 - thermal throttling
 - latency spikes
-- NPU unavailable
 - battery/power mode
 - camera FPS drop
 - model rollback attempt
