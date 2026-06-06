@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
 #include <stdio.h>
+#include <string.h>
 
 #include <tee_client_api.h>
 
@@ -45,4 +46,40 @@ int tear_optee_ping(void)
 	TEEC_FinalizeContext(&ctx);
 
 	return 0;
+}
+
+int tear_optee_enroll(const char *state)
+{
+	TEEC_Context ctx;
+	TEEC_Session sess;
+	TEEC_Operation op;
+	TEEC_Result res;
+	TEEC_UUID uuid = TEAR_TA_UUID;
+	uint32_t err_origin = 0;
+
+	res = TEEC_InitializeContext(NULL, &ctx);
+	if (res != TEEC_SUCCESS)
+		return -1;
+
+	res = TEEC_OpenSession(&ctx, &sess, &uuid,
+			       TEEC_LOGIN_PUBLIC, NULL, NULL, &err_origin);
+	if (res != TEEC_SUCCESS) {
+		TEEC_FinalizeContext(&ctx);
+		return -1;
+	}
+
+	memset(&op, 0, sizeof(op));
+	op.paramTypes = TEEC_PARAM_TYPES(TEEC_MEMREF_TEMP_INPUT,
+					 TEEC_NONE,
+					 TEEC_NONE,
+					 TEEC_NONE);
+	op.params[0].tmpref.buffer = (void *)state;
+	op.params[0].tmpref.size = strlen(state);
+
+	res = TEEC_InvokeCommand(&sess, TEAR_TA_CMD_ENROLL, &op, &err_origin);
+
+	TEEC_CloseSession(&sess);
+	TEEC_FinalizeContext(&ctx);
+
+	return res == TEEC_SUCCESS ? 0 : -1;
 }

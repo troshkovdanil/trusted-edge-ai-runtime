@@ -223,10 +223,12 @@ enum tear_trust_backend {
 
 static int parse_backend(int argc, char **argv,
                          enum tear_trust_backend *backend,
-                         int *self_test)
+                         int *self_test,
+                         int *self_test_enroll)
 {
     *backend = TEAR_TRUST_BACKEND_FILE;
     *self_test = 0;
+    *self_test_enroll = 0;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--backend") == 0 && i + 1 < argc) {
@@ -247,8 +249,10 @@ static int parse_backend(int argc, char **argv,
             }
         } else if (strcmp(argv[i], "--self-test") == 0) {
             *self_test = 1;
+        } else if (strcmp(argv[i], "--self-test-enroll") == 0) {
+            *self_test_enroll = 1;
         } else {
-            fprintf(stderr, "usage: tear-trustd [--backend file|optee] [--self-test]\n");
+            fprintf(stderr, "usage: tear-trustd [--backend file|optee] [--self-test] [--self-test-enroll]\n");
             return -1;
         }
     }
@@ -278,16 +282,36 @@ static int run_self_test(enum tear_trust_backend backend)
     return 1;
 }
 
+static int run_enroll_self_test(enum tear_trust_backend backend)
+{
+	if (backend != TEAR_TRUST_BACKEND_OPTEE)
+		return 1;
+
+#ifdef TEAR_ENABLE_OPTEE
+	if (tear_optee_enroll("demo-model 1 mock sha256-demo-model-v1") == 0) {
+		tear_event("trustd_optee_backend_enroll_ok");
+		return 0;
+	}
+
+	tear_event("trustd_optee_backend_enroll_failed");
+#endif
+	return 1;
+}
+
 int main(int argc, char **argv)
 {
     enum tear_trust_backend backend;
     int self_test;
+    int self_test_enroll;
 
-    if (parse_backend(argc, argv, &backend, &self_test) < 0)
+    if (parse_backend(argc, argv, &backend, &self_test, &self_test_enroll) < 0)
         return 1;
 
     if (self_test)
         return run_self_test(backend);
+
+    if (self_test_enroll)
+        return run_enroll_self_test(backend);
 
     int server = create_socket();
 

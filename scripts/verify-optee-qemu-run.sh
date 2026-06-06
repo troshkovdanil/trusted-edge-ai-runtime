@@ -64,6 +64,12 @@ check_log_ordered "TEAR_OPTEE_TRUSTD_SELF_TEST start"
 check_log_ordered "event=trustd_optee_backend_ping_ok"
 check_log_ordered "TEAR_OPTEE_TRUSTD_SELF_TEST done"
 
+echo "TEAR verify: OP-TEE TRUSTD_ENROLL_SELF_TEST"
+
+check_log_ordered "TEAR_OPTEE_TRUSTD_ENROLL_SELF_TEST start"
+check_log_ordered "event=trustd_optee_backend_enroll_ok"
+check_log_ordered "TEAR_OPTEE_TRUSTD_ENROLL_SELF_TEST done"
+
 echo "TEAR verify: mock model workload"
 
 check_log_ordered "TEAR_OPTEE_QEMU_TEST start"
