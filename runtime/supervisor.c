@@ -61,7 +61,12 @@ static struct supervisor_config parse_args(int argc, char **argv)
 
 static pid_t start_trustd(void)
 {
+    const char *trustd_path = getenv("TEAR_TRUSTD_PATH");
+    const char *trustd_backend = getenv("TEAR_TRUSTD_BACKEND");
     pid_t pid = fork();
+
+    if (!trustd_path)
+        trustd_path = TRUSTD_PATH;
 
     if (pid < 0) {
         perror("fork trustd");
@@ -69,7 +74,15 @@ static pid_t start_trustd(void)
     }
 
     if (pid == 0) {
-        execl(TRUSTD_PATH, TRUSTD_PATH, NULL);
+        if (trustd_backend) {
+            execl(trustd_path,
+                  trustd_path,
+                  "--backend",
+                  trustd_backend,
+                  NULL);
+        } else {
+            execl(trustd_path, trustd_path, NULL);
+        }
 
         perror("execl trustd");
         _exit(127);
