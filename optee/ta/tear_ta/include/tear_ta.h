@@ -11,5 +11,6 @@
 #define TEAR_TA_CMD_ENROLL 1
 #define TEAR_TA_CMD_VERIFY 2
 #define TEAR_TA_CMD_UPDATE 3
+#define TEAR_TA_CMD_REPORT 4
 
 #endif

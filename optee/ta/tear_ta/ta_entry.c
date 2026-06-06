@@ -308,6 +308,40 @@ TEE_Result TA_InvokeCommandEntryPoint(void *sess_ctx,
 		return TEE_SUCCESS;
 	}
 
+	case TEAR_TA_CMD_REPORT: {
+		char trusted_state[TEAR_STATE_MAX];
+		size_t trusted_state_len = 0;
+		TEE_Result res;
+
+		DMSG("TEAR TA report");
+
+		if (param_types != TEE_PARAM_TYPES(TEE_PARAM_TYPE_MEMREF_OUTPUT,
+						   TEE_PARAM_TYPE_NONE,
+						   TEE_PARAM_TYPE_NONE,
+						   TEE_PARAM_TYPE_NONE))
+			return TEE_ERROR_BAD_PARAMETERS;
+
+		res = read_trusted_state(trusted_state,
+					 sizeof(trusted_state),
+					 &trusted_state_len);
+		if (res != TEE_SUCCESS)
+			return res;
+
+		if (params[0].memref.size < trusted_state_len + 1) {
+			params[0].memref.size = trusted_state_len + 1;
+			return TEE_ERROR_SHORT_BUFFER;
+		}
+
+		TEE_MemMove(params[0].memref.buffer,
+			    trusted_state,
+			    trusted_state_len);
+		((char *)params[0].memref.buffer)[trusted_state_len] = '\0';
+		params[0].memref.size = trusted_state_len + 1;
+
+		DMSG("TEAR TA report - TEE_SUCCESS");
+		return TEE_SUCCESS;
+	}
+
 	default:
 		return TEE_ERROR_NOT_SUPPORTED;
 	}

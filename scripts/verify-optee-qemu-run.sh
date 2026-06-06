@@ -118,8 +118,7 @@ check_log_ordered "event=optee_model_enroll"
 check_log_ordered "event=tearictl_enroll_done"
 check_log_ordered "event=provisioning_done"
 
-#check_log_ordered "STATE demo-model 1 mock sha256-demo-model-v1"
-
+check_log_ordered "STATE demo-model 1 mock sha256-demo-model-v1"
 check_log_ordered "event=tearictl_report_done"
 check_log_ordered "event=provisioning_report_done"
 

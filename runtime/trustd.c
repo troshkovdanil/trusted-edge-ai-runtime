@@ -242,9 +242,24 @@ static void handle_verify(int client, const char *buf,
     }
 }
 
-static void handle_report(int client)
+static void handle_report(int client, enum tear_trust_backend backend)
 {
     struct tear_model_manifest m;
+
+	if (backend == TEAR_TRUST_BACKEND_OPTEE) {
+#ifdef TEAR_ENABLE_OPTEE
+		char state[256];
+
+		if (tear_optee_report(state, sizeof(state)) == 0) {
+			dprintf(client, "STATE %s\n", state);
+		} else {
+			dprintf(client, "ERR\n");
+		}
+#else
+		dprintf(client, "ERR\n");
+#endif
+		return;
+	}
 
     if (tear_trusted_state_load(TEAR_TRUSTED_STATE, &m) == 0) {
         dprintf(client,
@@ -452,7 +467,7 @@ int main(int argc, char **argv)
         } else if (strncmp(buf, "VERIFY", 6) == 0) {
             handle_verify(client, buf, backend);
         } else if (strncmp(buf, "REPORT", 6) == 0) {
-            handle_report(client);
+            handle_report(client, backend);
         } else if (strncmp(buf, "UPDATE", 6) == 0) {
             handle_update(client, buf, backend);
         } else if (strncmp(buf, "RECORD_DECISION", 15) == 0) {

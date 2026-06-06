@@ -155,3 +155,46 @@ int tear_optee_update(const char *state)
 
 	return res == TEEC_SUCCESS ? 0 : -1;
 }
+
+int tear_optee_report(char *state, size_t state_size)
+{
+	TEEC_Context ctx;
+	TEEC_Session sess;
+	TEEC_Operation op;
+	TEEC_Result res;
+	TEEC_UUID uuid = TEAR_TA_UUID;
+	uint32_t err_origin = 0;
+
+	if (!state || state_size == 0)
+		return -1;
+
+	res = TEEC_InitializeContext(NULL, &ctx);
+	if (res != TEEC_SUCCESS)
+		return -1;
+
+	res = TEEC_OpenSession(&ctx, &sess, &uuid,
+			       TEEC_LOGIN_PUBLIC, NULL, NULL, &err_origin);
+	if (res != TEEC_SUCCESS) {
+		TEEC_FinalizeContext(&ctx);
+		return -1;
+	}
+
+	memset(&op, 0, sizeof(op));
+	op.paramTypes = TEEC_PARAM_TYPES(TEEC_MEMREF_TEMP_OUTPUT,
+					 TEEC_NONE,
+					 TEEC_NONE,
+					 TEEC_NONE);
+	op.params[0].tmpref.buffer = state;
+	op.params[0].tmpref.size = state_size;
+
+	res = TEEC_InvokeCommand(&sess, TEAR_TA_CMD_REPORT, &op, &err_origin);
+
+	TEEC_CloseSession(&sess);
+	TEEC_FinalizeContext(&ctx);
+
+	if (res != TEEC_SUCCESS)
+		return -1;
+
+	state[state_size - 1] = '\0';
+	return 0;
+}
