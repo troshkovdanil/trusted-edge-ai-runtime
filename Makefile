@@ -34,8 +34,9 @@ TEAR_TA := $(TEAR_TA_BUILD)/7c9d7b3a-2f4e-4c8f-9a11-6b4454454152.ta
 TEAR_CA := $(BUILD)/optee/tear-optee-ca
 OPTEE_CLIENT_INCLUDE := $(abspath $(OPTEE_QEMU_DIR)/optee_client/libteec/include)
 OPTEE_CLIENT_LIB := $(abspath $(OPTEE_QEMU_DIR)/out-br/target/usr/lib)
+OPTEE_TRUSTD := $(BUILD)/optee/tear-trustd-optee
 
-.PHONY: build test initramfs kernel-image qemu-system verify clean clean-all validate-agent host-build host-test host-supervisor-test mnist-assets host-mnist-test host-adaptive-supervisor-test full-verify optee-qemu-install optee-qemu-build optee-qemu-run optee-qemu-test optee-ta optee-ca
+.PHONY: build test initramfs kernel-image qemu-system verify clean clean-all validate-agent host-build host-test host-supervisor-test mnist-assets host-mnist-test host-adaptive-supervisor-test full-verify optee-qemu-install optee-qemu-build optee-qemu-run optee-qemu-test optee-ta optee-ca optee-trustd
 
 mnist-assets:
 	./scripts/fetch-mnist-onnx.sh
@@ -232,6 +233,23 @@ optee-ca:
 		-Ioptee/ca \
 		-o $(TEAR_CA) \
 		optee/ca/tear_ca.c \
+		optee/ca/tear_optee_client.c \
+		-L$(OPTEE_CLIENT_LIB) \
+		-Wl,-rpath-link,$(OPTEE_CLIENT_LIB) \
+		-lteec
+
+optee-trustd: optee-ca
+	mkdir -p $(BUILD)/optee
+	$(CC) -O2 -Wall -Wextra \
+		-DTEAR_ENABLE_OPTEE \
+		-Iruntime \
+		-Ioptee/ca \
+		-Ioptee/ta/tear_ta/include \
+		-I$(OPTEE_CLIENT_INCLUDE) \
+		-o $(OPTEE_TRUSTD) \
+		runtime/trustd.c \
+		runtime/trusted_state.c \
+		runtime/telemetry.c \
 		optee/ca/tear_optee_client.c \
 		-L$(OPTEE_CLIENT_LIB) \
 		-Wl,-rpath-link,$(OPTEE_CLIENT_LIB) \

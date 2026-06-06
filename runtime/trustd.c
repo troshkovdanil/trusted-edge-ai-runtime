@@ -3,6 +3,9 @@
 #include "model_manifest.h"
 #include "telemetry.h"
 #include "trusted_state.h"
+#ifdef TEAR_ENABLE_OPTEE
+#include "tear_optee_client.h"
+#endif
 
 #include <stdio.h>
 #include <string.h>
@@ -213,8 +216,79 @@ static void handle_record_decision(int client, const char *buf)
     dprintf(client, "OK\n");
 }
 
-int main(void)
+enum tear_trust_backend {
+    TEAR_TRUST_BACKEND_FILE,
+    TEAR_TRUST_BACKEND_OPTEE,
+};
+
+static int parse_backend(int argc, char **argv,
+                         enum tear_trust_backend *backend,
+                         int *self_test)
 {
+    *backend = TEAR_TRUST_BACKEND_FILE;
+    *self_test = 0;
+
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--backend") == 0 && i + 1 < argc) {
+            i++;
+
+            if (strcmp(argv[i], "file") == 0) {
+                *backend = TEAR_TRUST_BACKEND_FILE;
+            } else if (strcmp(argv[i], "optee") == 0) {
+#ifdef TEAR_ENABLE_OPTEE
+                *backend = TEAR_TRUST_BACKEND_OPTEE;
+#else
+                fprintf(stderr, "TEAR trustd: OP-TEE backend not built\n");
+                return -1;
+#endif
+            } else {
+                fprintf(stderr, "TEAR trustd: unknown backend: %s\n", argv[i]);
+                return -1;
+            }
+        } else if (strcmp(argv[i], "--self-test") == 0) {
+            *self_test = 1;
+        } else {
+            fprintf(stderr, "usage: tear-trustd [--backend file|optee] [--self-test]\n");
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+static int run_self_test(enum tear_trust_backend backend)
+{
+    if (backend == TEAR_TRUST_BACKEND_FILE) {
+        tear_event("trustd_file_backend_self_test_ok");
+        return 0;
+    }
+
+#ifdef TEAR_ENABLE_OPTEE
+    if (backend == TEAR_TRUST_BACKEND_OPTEE) {
+        if (tear_optee_ping() == 0) {
+            tear_event("trustd_optee_backend_ping_ok");
+            return 0;
+        }
+
+        tear_event("trustd_optee_backend_ping_failed");
+        return 1;
+    }
+#endif
+
+    return 1;
+}
+
+int main(int argc, char **argv)
+{
+    enum tear_trust_backend backend;
+    int self_test;
+
+    if (parse_backend(argc, argv, &backend, &self_test) < 0)
+        return 1;
+
+    if (self_test)
+        return run_self_test(backend);
+
     int server = create_socket();
 
     if (server < 0) {

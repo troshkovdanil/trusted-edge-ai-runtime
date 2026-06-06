@@ -12,6 +12,7 @@ mkdir -p "$TARGET/bin" "$TARGET/etc/tear" "$TARGET/lib/optee_armtz"
 
 make optee-ta
 make optee-ca
+make optee-trustd
 
 cp -v "$TEAR_TA" "$TARGET/lib/optee_armtz/"
 cp -v "$TEAR_CA" "$TARGET/bin/tear-optee-ca"
@@ -21,6 +22,7 @@ cp -v build/tear-trustd "$TARGET/bin/"
 cp -v build/tearictl "$TARGET/bin/"
 cp -v build/demo-model "$TARGET/bin/"
 cp -v build/tear-runtime-manager "$TARGET/bin/"
+cp -v build/optee/tear-trustd-optee "$TARGET/bin/"
 
 cp -v examples/model-v1.json "$TARGET/etc/tear/"
 cp -v examples/model-v2.json "$TARGET/etc/tear/"
@@ -31,6 +33,10 @@ cat > "$TARGET/etc/init.d/S99tear-test" <<'EOS'
 echo "TEAR_OPTEE_CA_TEST start"
 /bin/tear-optee-ca || exit 1
 echo "TEAR_OPTEE_CA_TEST done"
+
+echo "TEAR_OPTEE_TRUSTD_SELF_TEST start"
+/bin/tear-trustd-optee --backend optee --self-test || exit 1
+echo "TEAR_OPTEE_TRUSTD_SELF_TEST done"
 
 echo "TEAR_OPTEE_QEMU_TEST start"
 
