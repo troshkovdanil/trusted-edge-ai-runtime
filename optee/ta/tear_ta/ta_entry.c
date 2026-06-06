@@ -1,5 +1,7 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
+#include <string.h>
+
 #include <tee_internal_api.h>
 #include <tee_internal_api_extensions.h>
 
@@ -73,6 +75,96 @@ static TEE_Result read_trusted_state(void *buf, size_t buf_len, size_t *out_len)
 
 	*out_len = read_len;
 	return TEE_SUCCESS;
+}
+
+struct tear_ta_state {
+	char model_id[64];
+	int version;
+	char backend[32];
+	char model_hash[128];
+};
+
+static int copy_token(char *dst, size_t dst_size,
+		      const char **cursor)
+{
+	const char *start;
+	size_t len;
+
+	while (**cursor == ' ')
+		(*cursor)++;
+
+	start = *cursor;
+
+	while (**cursor != '\0' && **cursor != ' ')
+		(*cursor)++;
+
+	len = (size_t)(*cursor - start);
+	if (len == 0 || len >= dst_size)
+		return -1;
+
+	TEE_MemMove(dst, start, len);
+	dst[len] = '\0';
+
+	return 0;
+}
+
+static int parse_positive_int(const char *s, int *out)
+{
+	int value = 0;
+
+	if (*s == '\0')
+		return -1;
+
+	while (*s != '\0') {
+		if (*s < '0' || *s > '9')
+			return -1;
+
+		value = value * 10 + (*s - '0');
+		s++;
+	}
+
+	*out = value;
+	return 0;
+}
+
+static int parse_state(const char *buf, struct tear_ta_state *state)
+{
+	const char *cursor = buf;
+	char version_buf[16];
+
+	TEE_MemFill(state, 0, sizeof(*state));
+
+	if (copy_token(state->model_id, sizeof(state->model_id), &cursor) < 0)
+		return -1;
+
+	if (copy_token(version_buf, sizeof(version_buf), &cursor) < 0)
+		return -1;
+
+	if (parse_positive_int(version_buf, &state->version) < 0)
+		return -1;
+
+	if (copy_token(state->backend, sizeof(state->backend), &cursor) < 0)
+		return -1;
+
+	if (copy_token(state->model_hash, sizeof(state->model_hash), &cursor) < 0)
+		return -1;
+
+	while (*cursor == ' ')
+		cursor++;
+
+	return *cursor == '\0' ? 0 : -1;
+}
+
+static bool update_allowed(const struct tear_ta_state *old,
+			   const struct tear_ta_state *new)
+{
+	if (strcmp(old->model_id, new->model_id) != 0)
+		return false;
+
+	if (strcmp(old->backend, new->backend) != 0)
+		return false;
+
+	return new->version > old->version;
 }
 
 TEE_Result TA_CreateEntryPoint(void)
@@ -169,6 +261,50 @@ TEE_Result TA_InvokeCommandEntryPoint(void *sess_ctx,
 			return TEE_ERROR_SECURITY;
 
 		DMSG("TEAR TA verify - TEE_SUCCESS");
+		return TEE_SUCCESS;
+	}
+
+	case TEAR_TA_CMD_UPDATE: {
+		char old_buf[TEAR_STATE_MAX];
+		char new_buf[TEAR_STATE_MAX];
+		size_t old_len = 0;
+		struct tear_ta_state old_state;
+		struct tear_ta_state new_state;
+		TEE_Result res;
+
+		DMSG("TEAR TA update");
+
+		if (param_types != TEE_PARAM_TYPES(TEE_PARAM_TYPE_MEMREF_INPUT,
+						   TEE_PARAM_TYPE_NONE,
+						   TEE_PARAM_TYPE_NONE,
+						   TEE_PARAM_TYPE_NONE))
+			return TEE_ERROR_BAD_PARAMETERS;
+
+		if (params[0].memref.size == 0 ||
+		    params[0].memref.size >= sizeof(new_buf))
+			return TEE_ERROR_BAD_PARAMETERS;
+
+		TEE_MemMove(new_buf, params[0].memref.buffer, params[0].memref.size);
+		new_buf[params[0].memref.size] = '\0';
+
+		res = read_trusted_state(old_buf, sizeof(old_buf), &old_len);
+		if (res != TEE_SUCCESS)
+			return res;
+
+		old_buf[old_len] = '\0';
+
+		if (parse_state(old_buf, &old_state) < 0 ||
+		    parse_state(new_buf, &new_state) < 0)
+			return TEE_ERROR_BAD_FORMAT;
+
+		if (!update_allowed(&old_state, &new_state))
+			return TEE_ERROR_SECURITY;
+
+		res = write_trusted_state(new_buf, params[0].memref.size);
+		if (res != TEE_SUCCESS)
+			return res;
+
+		DMSG("TEAR TA update - TEE_SUCCESS");
 		return TEE_SUCCESS;
 	}
 

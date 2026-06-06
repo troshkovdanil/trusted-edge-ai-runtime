@@ -138,7 +138,8 @@ static int model_update_allowed(const struct tear_model_manifest *old,
         return new->version > old->version;
 }
 
-static void handle_update(int client, const char *buf)
+static void handle_update(int client, const char *buf,
+		enum tear_trust_backend backend)
 {
         struct tear_model_manifest incoming;
         struct tear_model_manifest trusted;
@@ -148,6 +149,30 @@ static void handle_update(int client, const char *buf)
                 dprintf(client, "ERR\n");
                 return;
         }
+
+	if (backend == TEAR_TRUST_BACKEND_OPTEE) {
+#ifdef TEAR_ENABLE_OPTEE
+		char state[256];
+
+		snprintf(state, sizeof(state), "%s %d %s %s",
+			 incoming.model_id,
+			 incoming.version,
+			 incoming.backend,
+			 incoming.model_hash);
+
+		if (tear_optee_update(state) == 0) {
+			tear_event("optee_model_update_ok");
+			dprintf(client, "OK\n");
+		} else {
+			tear_event("optee_model_update_rejected");
+			dprintf(client, "ERR\n");
+		}
+#else
+		tear_event("optee_model_update_rejected");
+		dprintf(client, "ERR\n");
+#endif
+		return;
+	}
 
         if (tear_trusted_state_load(TEAR_TRUSTED_STATE, &trusted) < 0) {
                 tear_event("model_update_no_trusted_state");
@@ -429,7 +454,7 @@ int main(int argc, char **argv)
         } else if (strncmp(buf, "REPORT", 6) == 0) {
             handle_report(client);
         } else if (strncmp(buf, "UPDATE", 6) == 0) {
-            handle_update(client, buf);
+            handle_update(client, buf, backend);
         } else if (strncmp(buf, "RECORD_DECISION", 15) == 0) {
             handle_record_decision(client, buf);
         } else {

@@ -34,17 +34,21 @@ echo "TEAR_OPTEE_CA_TEST start"
 /bin/tear-optee-ca || exit 1
 echo "TEAR_OPTEE_CA_TEST done"
 
+
 echo "TEAR_OPTEE_TRUSTD_SELF_TEST start"
 /bin/tear-trustd-optee --backend optee --self-test || exit 1
 echo "TEAR_OPTEE_TRUSTD_SELF_TEST done"
+
 
 echo "TEAR_OPTEE_TRUSTD_ENROLL_SELF_TEST start"
 /bin/tear-trustd-optee --backend optee --self-test-enroll || exit 1
 echo "TEAR_OPTEE_TRUSTD_ENROLL_SELF_TEST done"
 
+
 echo "TEAR_OPTEE_TRUSTD_VERIFY_SELF_TEST start"
 /bin/tear-trustd-optee --backend optee --self-test-verify || exit 1
 echo "TEAR_OPTEE_TRUSTD_VERIFY_SELF_TEST done"
+
 
 echo "TEAR_OPTEE_TRUSTD_ENROLL_SOCKET_TEST start"
 /bin/tear-trustd-optee --backend optee &
@@ -56,6 +60,7 @@ sleep 1
 }
 kill "$trustd_pid"
 echo "TEAR_OPTEE_TRUSTD_ENROLL_SOCKET_TEST done"
+
 
 echo "TEAR_OPTEE_TRUSTD_VERIFY_SOCKET_TEST start"
 /bin/tear-trustd-optee --backend optee &
@@ -71,6 +76,27 @@ sleep 1
 }
 kill "$trustd_pid"
 echo "TEAR_OPTEE_TRUSTD_VERIFY_SOCKET_TEST done"
+
+
+echo "TEAR_OPTEE_TRUSTD_UPDATE_SOCKET_TEST start"
+/bin/tear-trustd-optee --backend optee &
+trustd_pid=$!
+sleep 1
+/bin/tearictl enroll /etc/tear/model-v1.json || {
+    kill "$trustd_pid"
+    exit 1
+}
+/bin/tearictl update-model /etc/tear/model-v2.json || {
+    kill "$trustd_pid"
+    exit 1
+}
+/bin/tearictl update-model /etc/tear/model-v1.json && {
+    kill "$trustd_pid"
+    exit 1
+}
+kill "$trustd_pid"
+echo "TEAR_OPTEE_TRUSTD_UPDATE_SOCKET_TEST done"
+
 
 echo "TEAR_OPTEE_QEMU_TEST start"
 /bin/tear-supervisor --workload /bin/demo-model
