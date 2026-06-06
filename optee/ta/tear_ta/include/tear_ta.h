@@ -12,5 +12,6 @@
 #define TEAR_TA_CMD_VERIFY 2
 #define TEAR_TA_CMD_UPDATE 3
 #define TEAR_TA_CMD_REPORT 4
+#define TEAR_TA_CMD_RECORD_DECISION 5
 
 #endif
