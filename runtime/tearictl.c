@@ -12,8 +12,10 @@ static void usage(const char *prog)
     fprintf(stderr,
             "usage:\n"
             "  %s enroll <manifest>\n"
+            "  %s verify <manifest>\n"
 	    "  %s update-model <manifest>\n"
             "  %s report\n",
+            prog,
             prog,
             prog,
             prog);
@@ -37,6 +39,25 @@ static int cmd_enroll(const char *path)
     tear_event("tearictl_enroll_done");
 
     return 0;
+}
+
+static int cmd_verify(const char *path)
+{
+	struct tear_model_manifest manifest;
+
+	if (tear_manifest_load(path, &manifest) < 0) {
+		fprintf(stderr, "TEAR: failed to load manifest: %s\n", path);
+		return 1;
+	}
+
+	if (tear_trust_verify(&manifest) < 0) {
+		fprintf(stderr, "TEAR: verify failed\n");
+		tear_event("tearictl_verify_failed");
+		return 1;
+	}
+
+	tear_event("tearictl_verify_done");
+	return 0;
 }
 
 static int cmd_report(void)
@@ -86,6 +107,15 @@ int main(int argc, char **argv)
 
         return cmd_enroll(argv[2]);
     }
+
+	if (strcmp(argv[1], "verify") == 0) {
+		if (argc != 3) {
+			usage(argv[0]);
+			return 1;
+		}
+
+		return cmd_verify(argv[2]);
+	}
 
     if (strcmp(argv[1], "report") == 0) {
         if (argc != 2) {

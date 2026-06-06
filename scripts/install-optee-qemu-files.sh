@@ -57,6 +57,21 @@ sleep 1
 kill "$trustd_pid"
 echo "TEAR_OPTEE_TRUSTD_ENROLL_SOCKET_TEST done"
 
+echo "TEAR_OPTEE_TRUSTD_VERIFY_SOCKET_TEST start"
+/bin/tear-trustd-optee --backend optee &
+trustd_pid=$!
+sleep 1
+/bin/tearictl enroll /etc/tear/model-v1.json || {
+    kill "$trustd_pid"
+    exit 1
+}
+/bin/tearictl verify /etc/tear/model-v1.json || {
+    kill "$trustd_pid"
+    exit 1
+}
+kill "$trustd_pid"
+echo "TEAR_OPTEE_TRUSTD_VERIFY_SOCKET_TEST done"
+
 echo "TEAR_OPTEE_QEMU_TEST start"
 /bin/tear-supervisor --workload /bin/demo-model
 rc=$?
