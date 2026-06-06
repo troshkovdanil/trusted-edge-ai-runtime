@@ -13,6 +13,7 @@ DEMO_MODEL := $(BUILD)/demo-model
 RUNTIME_MANAGER := $(BUILD)/tear-runtime-manager
 TRUSTD := $(BUILD)/tear-trustd
 TEARICTL := $(BUILD)/tearictl
+OPTD := $(BUILD)/tear-optd
 
 HOST_HELLO := $(HOST_BUILD)/hello-host
 HOST_SUPERVISOR := $(HOST_BUILD)/tear-supervisor-host
@@ -35,6 +36,11 @@ TEAR_CA := $(BUILD)/optee/tear-optee-ca
 OPTEE_CLIENT_INCLUDE := $(abspath $(OPTEE_QEMU_DIR)/optee_client/libteec/include)
 OPTEE_CLIENT_LIB := $(abspath $(OPTEE_QEMU_DIR)/out-br/target/usr/lib)
 OPTEE_TRUSTD := $(BUILD)/optee/tear-trustd-optee
+
+MNIST_MODEL := $(BUILD)/mnist-model
+ORT_AARCH64_DIR := external/onnxruntime-aarch64
+ORT_AARCH64_INCLUDE := $(ORT_AARCH64_DIR)/include
+ORT_AARCH64_LIB := $(ORT_AARCH64_DIR)/lib
 
 .PHONY: build test initramfs kernel-image qemu-system verify clean clean-all validate-agent host-build host-test host-supervisor-test mnist-assets host-mnist-test host-adaptive-supervisor-test full-verify optee-qemu-install optee-qemu-build optee-qemu-run optee-qemu-test optee-ta optee-ca optee-trustd
 
@@ -69,6 +75,17 @@ build:
 		runtime/model_manifest.c \
 		runtime/trust_client.c \
 		runtime/telemetry.c
+	$(CC) -static -O2 -Wall -Wextra \
+		-o $(OPTD) \
+		runtime/optd.c \
+		runtime/optimizer_policy.c \
+		runtime/telemetry.c
+	$(CC) -O2 -Wall -Wextra \
+		-I$(ORT_AARCH64_INCLUDE) \
+		-o $(MNIST_MODEL) runtime/mnist_model.c runtime/telemetry.c \
+		-L$(ORT_AARCH64_LIB) \
+		-lonnxruntime \
+		-Wl,-rpath,/usr/lib
 
 host-build: mnist-assets
 	mkdir -p $(HOST_BUILD)
@@ -158,13 +175,16 @@ verify:
 
 clean:
 	rm -rf $(BUILD)/rootfs
-	rm -f $(HELLO) $(INIT) $(SUPERVISOR) $(DEMO_MODEL) $(RUNTIME_MANAGER) $(TRUSTD) $(TEARICTL) $(INITRAMFS) $(BUILD)/telemetry.log
+	rm -f $(HELLO) $(INIT) $(SUPERVISOR) $(DEMO_MODEL) $(RUNTIME_MANAGER) $(TRUSTD) $(TEARICTL) $(OPTD) $(MNIST_MODEL) $(INITRAMFS) $(BUILD)/telemetry.log
 	rm -f $(BUILD)/optee-normal-world.log $(BUILD)/optee-secure-world.log
 	rm -rf $(BUILD)/optee
+	rm -rf $(BUILD)/host
 
 clean-all:
 	rm -rf $(BUILD)
 	rm -rf $(OPTEE_QEMU_DIR)
+	rm -rf external/onnxruntime
+	rm -rf external/onnxruntime-aarch64
 
 validate-agent: build test qemu-system verify
 
@@ -209,13 +229,26 @@ full-verify: validate-agent host-test host-supervisor-test host-mnist-test host-
 optee-qemu-install: build optee-ta optee-ca optee-trustd
 	./scripts/install-optee-qemu-files.sh $(OPTEE_QEMU_DIR)
 
+optee-qemu-mnist-adaptive-install: build optee-ta optee-ca optee-trustd
+	./scripts/install-optee-qemu-files.sh $(OPTEE_QEMU_DIR) mnist-adaptive
+
 optee-qemu-build: optee-qemu-install
+	./scripts/optee-qemu.sh
+
+optee-qemu-mnist-adaptive-build: optee-qemu-mnist-adaptive-install
 	./scripts/optee-qemu.sh
 
 optee-qemu-run:
 	$(MAKE) -C $(OPTEE_QEMU_DIR)/build run-only
 
+optee-qemu-mnist-adaptive-run:
+	$(MAKE) -C $(OPTEE_QEMU_DIR)/build run-only
+
 optee-qemu-test: optee-qemu-build
+	./scripts/run-optee-qemu-headless.sh
+
+optee-qemu-mnist-adaptive-test: optee-qemu-mnist-adaptive-build
+	VERIFY_SCRIPT="$(abspath scripts/verify-optee-qemu-mnist-adaptive-run.sh)" \
 	./scripts/run-optee-qemu-headless.sh
 
 optee-ta:

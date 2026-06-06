@@ -164,6 +164,10 @@ static void record_optimizer_decision(void)
 
     approve_or_reject_proposal(&proposal, &decision, &decision_reason);
 
+    tear_event(proposal.action);
+    tear_event(decision);
+    tear_event(decision_reason);
+
     if (tear_trust_record_decision("mnist-onnx-v1",
                                    proposal.action,
                                    decision,

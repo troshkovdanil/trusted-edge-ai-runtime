@@ -30,6 +30,8 @@ cd "$ROOT_DIR/$OPTEE_QEMU_DIR/out/bin"
   -serial file:"$ROOT_DIR/build/optee-normal-world.log" \
   -serial file:"$ROOT_DIR/build/optee-secure-world.log"
 
-"$ROOT_DIR/scripts/verify-optee-qemu-run.sh"
+VERIFY_SCRIPT="${VERIFY_SCRIPT:-$ROOT_DIR/scripts/verify-optee-qemu-run.sh}"
+
+"$VERIFY_SCRIPT"
 
 echo "TEAR: OP-TEE QEMU headless test passed"

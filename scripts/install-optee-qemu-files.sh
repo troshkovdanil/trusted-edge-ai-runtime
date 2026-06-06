@@ -8,6 +8,8 @@ TEAR_TA_UUID="7c9d7b3a-2f4e-4c8f-9a11-6b4454454152"
 TEAR_TA="build/optee/tear_ta/${TEAR_TA_UUID}.ta"
 TEAR_CA="build/optee/tear-optee-ca"
 
+TEST_MODE="${2:-default}"
+
 mkdir -p "$TARGET/bin" "$TARGET/etc/tear" "$TARGET/lib/optee_armtz"
 
 make optee-ta
@@ -20,14 +22,43 @@ cp -v "$TEAR_CA" "$TARGET/bin/tear-optee-ca"
 cp -v build/tear-supervisor "$TARGET/bin/"
 cp -v build/tear-trustd "$TARGET/bin/"
 cp -v build/tearictl "$TARGET/bin/"
+cp -v build/tear-optd "$TARGET/bin/"
 cp -v build/demo-model "$TARGET/bin/"
 cp -v build/tear-runtime-manager "$TARGET/bin/"
 cp -v build/optee/tear-trustd-optee "$TARGET/bin/"
 
+cp -v build/mnist-model "$TARGET/bin/"
+cp -v examples/mnist-model.json "$TARGET/etc/tear/"
+mkdir -p "$TARGET/models/mnist"
+cp -v models/mnist/mnist.onnx "$TARGET/models/mnist/"
+cp -v external/onnxruntime-aarch64/lib/libonnxruntime.so* "$TARGET/usr/lib/"
+
 cp -v examples/model-v1.json "$TARGET/etc/tear/"
 cp -v examples/model-v2.json "$TARGET/etc/tear/"
 
-cat > "$TARGET/etc/init.d/S99tear-test" <<'EOS'
+
+if [ "$TEST_MODE" = "mnist-adaptive" ]; then
+    cat > "$TARGET/etc/init.d/S99tear-test" <<'EOS'
+#!/bin/sh
+
+echo "TEAR_OPTEE_MNIST_ADAPTIVE_TEST start"
+rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-trusted-decisions /tmp/tear-mnist-metrics
+
+TEAR_MNIST_SAMPLE=weak7 \
+TEAR_TRUSTD_PATH=/bin/tear-trustd-optee \
+TEAR_TRUSTD_BACKEND=optee \
+/bin/tear-supervisor \
+  --workload /bin/mnist-model \
+  --manifest /etc/tear/mnist-model.json \
+  --enable-optimizer || exit 1
+
+grep -q "event=mnist_inference_metrics" /tmp/tear-mnist-metrics || exit 1
+echo "TEAR_OPTEE_MNIST_ADAPTIVE_TEST done"
+
+poweroff -f
+EOS
+else
+    cat > "$TARGET/etc/init.d/S99tear-test" <<'EOS'
 #!/bin/sh
 
 echo "TEAR_OPTEE_CA_TEST start"
@@ -107,5 +138,6 @@ echo "TEAR_OPTEE_QEMU_TEST exit=$rc"
 
 poweroff -f
 EOS
+fi
 
 chmod +x "$TARGET/etc/init.d/S99tear-test"
