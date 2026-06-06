@@ -20,6 +20,7 @@
 #define MODEL_V2_PATH "examples/model-v2.json"
 #else
 #define TRUSTD_PATH "/bin/tear-trustd"
+#define OPTD_PATH "/bin/tear-optd"
 #define TEARICTL_PATH "/bin/tearictl"
 #define RUNTIME_MANAGER_PATH "/bin/tear-runtime-manager"
 #define MODEL_V1_PATH "/etc/tear/model-v1.json"
@@ -93,7 +94,6 @@ static pid_t start_trustd(void)
     return pid;
 }
 
-#ifdef TEAR_HOST_BUILD
 static pid_t start_optd(void)
 {
     pid_t pid = fork();
@@ -114,7 +114,6 @@ static pid_t start_optd(void)
 
     return pid;
 }
-#endif
 
 static int run_tearictl(const char *command, const char *arg)
 {
@@ -206,7 +205,6 @@ static int provision_selected_manifest(const char *manifest)
 
 static void run_runtime_manager(const struct supervisor_config *cfg)
 {
-#ifdef TEAR_HOST_BUILD
     if (cfg->enable_optimizer) {
         execl(RUNTIME_MANAGER_PATH,
               RUNTIME_MANAGER_PATH,
@@ -225,15 +223,6 @@ static void run_runtime_manager(const struct supervisor_config *cfg)
               cfg->manifest,
               NULL);
     }
-#else
-    execl(RUNTIME_MANAGER_PATH,
-          RUNTIME_MANAGER_PATH,
-          "--workload",
-          cfg->workload,
-          "--manifest",
-          cfg->manifest,
-          NULL);
-#endif
 }
 
 int main(int argc, char **argv)
@@ -250,7 +239,6 @@ int main(int argc, char **argv)
         return 1;
     }
 
-#ifdef TEAR_HOST_BUILD
     pid_t optd_pid = -1;
 
     if (cfg.enable_optimizer) {
@@ -262,7 +250,6 @@ int main(int argc, char **argv)
             return 1;
         }
     }
-#endif
 
     if (cfg.enable_optimizer) {
         if (provision_selected_manifest(cfg.manifest) < 0) {
@@ -311,10 +298,8 @@ int main(int argc, char **argv)
         tear_event("workload_unknown_exit");
     }
 
-#ifdef TEAR_HOST_BUILD
     if (optd_pid > 0)
         kill(optd_pid, SIGTERM);
-#endif
 
     tear_event("supervisor_shutdown");
     poweroff_guest();
