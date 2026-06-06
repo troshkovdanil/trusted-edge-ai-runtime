@@ -206,7 +206,7 @@ host-adaptive-supervisor-test: host-build
 
 full-verify: validate-agent host-test host-supervisor-test host-mnist-test host-adaptive-supervisor-test
 
-optee-qemu-install: build
+optee-qemu-install: build optee-ta optee-ca optee-trustd
 	./scripts/install-optee-qemu-files.sh $(OPTEE_QEMU_DIR)
 
 optee-qemu-build: optee-qemu-install

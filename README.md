@@ -121,11 +121,14 @@ Run all validation suites:
 make full-verify
 ```
 
-Run the mock model workload in QEMU:
+Run OP-TEE validation:
 
 ```bash
-WORKLOAD=/bin/demo-model make qemu-system
+make optee-qemu-test
 ```
+
+This boots an OP-TEE-enabled ARM64 QEMU environment and validates trusted
+state operations through the TEAR Trusted Application.
 
 ### Host-Native Development
 
@@ -292,23 +295,55 @@ workload
 
 The implementation currently runs in host-native mode using ONNX Runtime and a small MNIST workload while preserving the same trusted-control architecture intended for future embedded deployments.
 
+## MVP-6: OP-TEE trusted state backend
+
+TEAR now supports a trusted-state backend implemented using OP-TEE.
+
+The trusted flow is:
+
+```text
+tearictl
+  -> trustd
+  -> OP-TEE CA
+  -> TEAR TA
+  -> secure persistent storage
+```
+
+Trusted operations currently include:
+
+- model enrollment
+- model verification
+- model reporting
+- model updates
+- rollback rejection
+
+The rollback policy is enforced inside the Trusted Application rather than
+in normal-world runtime components.
+
+TEAR validation now includes an end-to-end OP-TEE QEMU environment exercising
+trusted model lifecycle operations through the secure world.
+
 ## Next
 
-The next major milestone is moving the adaptive control architecture toward realistic embedded deployment.
+The next major milestone is extending TEAR's adaptive control path into the
+OP-TEE-backed environment.
 
 Planned vertical slice:
 
 ```text
-QEMU ARM64
-  -> OP-TEE integration
-  -> trusted decision persistence
-  -> OTA-aware optimization state
-  -> policy-controlled runtime adaptation
+MNIST workload
+  -> runtime metrics
+  -> optimizer proposal
+  -> trusted decision recording
+  -> OP-TEE persistence
 ```
 
-Longer term goals include:
+Future work:
 
-- trusted optimization agents
+- trusted optimization decision storage
+- adaptive workload execution on ARM64 QEMU
+- OTA-aware optimization state
+- policy-controlled runtime adaptation
 - backend selection (CPU/NPU/GPU)
 - thermal-aware adaptation
 - power-aware adaptation
