@@ -5,5 +5,6 @@
 
 int tear_optee_ping(void);
 int tear_optee_enroll(const char *state);
+int tear_optee_verify(const char *state);
 
 #endif

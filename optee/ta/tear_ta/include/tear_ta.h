@@ -9,5 +9,6 @@
 
 #define TEAR_TA_CMD_PING 0
 #define TEAR_TA_CMD_ENROLL 1
+#define TEAR_TA_CMD_VERIFY 2
 
 #endif

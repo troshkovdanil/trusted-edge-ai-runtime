@@ -224,11 +224,13 @@ enum tear_trust_backend {
 static int parse_backend(int argc, char **argv,
                          enum tear_trust_backend *backend,
                          int *self_test,
-                         int *self_test_enroll)
+                         int *self_test_enroll,
+                         int *self_test_verify)
 {
     *backend = TEAR_TRUST_BACKEND_FILE;
     *self_test = 0;
     *self_test_enroll = 0;
+    *self_test_verify = 0;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--backend") == 0 && i + 1 < argc) {
@@ -251,8 +253,14 @@ static int parse_backend(int argc, char **argv,
             *self_test = 1;
         } else if (strcmp(argv[i], "--self-test-enroll") == 0) {
             *self_test_enroll = 1;
+        } else if (strcmp(argv[i], "--self-test-verify") == 0) {
+            *self_test_verify = 1;
         } else {
-            fprintf(stderr, "usage: tear-trustd [--backend file|optee] [--self-test] [--self-test-enroll]\n");
+            fprintf(stderr, "usage: tear-trustd [--backend file|optee]"
+			"[--self-test] "
+			"[--self-test-enroll] "
+			"[--self-test-verify] "
+			"\n");
             return -1;
         }
     }
@@ -298,13 +306,38 @@ static int run_enroll_self_test(enum tear_trust_backend backend)
 	return 1;
 }
 
+static int run_verify_self_test(enum tear_trust_backend backend)
+{
+	if (backend != TEAR_TRUST_BACKEND_OPTEE)
+		return 1;
+
+#ifdef TEAR_ENABLE_OPTEE
+	if (tear_optee_enroll("demo-model 1 mock sha256-demo-model-v1")) {
+		tear_event("trustd_optee_backend_verify_failed");
+		return 1;
+	}
+	tear_event("trustd_optee_backend_enroll_before_verify_ok");
+
+	if (tear_optee_verify("demo-model 1 mock sha256-demo-model-v1")) {
+		tear_event("trustd_optee_backend_verify_failed");
+		return 1;
+	}
+	tear_event("trustd_optee_backend_verify_ok");
+#endif
+	return 0;
+}
+
 int main(int argc, char **argv)
 {
     enum tear_trust_backend backend;
     int self_test;
     int self_test_enroll;
+    int self_test_verify;
 
-    if (parse_backend(argc, argv, &backend, &self_test, &self_test_enroll) < 0)
+    if (parse_backend(argc, argv, &backend,
+			&self_test,
+			&self_test_enroll,
+			&self_test_verify) < 0)
         return 1;
 
     if (self_test)
@@ -312,6 +345,9 @@ int main(int argc, char **argv)
 
     if (self_test_enroll)
         return run_enroll_self_test(backend);
+
+    if (self_test_verify)
+        return run_verify_self_test(backend);
 
     int server = create_socket();
 

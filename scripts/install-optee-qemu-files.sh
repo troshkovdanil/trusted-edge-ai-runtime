@@ -42,6 +42,10 @@ echo "TEAR_OPTEE_TRUSTD_ENROLL_SELF_TEST start"
 /bin/tear-trustd-optee --backend optee --self-test-enroll || exit 1
 echo "TEAR_OPTEE_TRUSTD_ENROLL_SELF_TEST done"
 
+echo "TEAR_OPTEE_TRUSTD_VERIFY_SELF_TEST start"
+/bin/tear-trustd-optee --backend optee --self-test-verify || exit 1
+echo "TEAR_OPTEE_TRUSTD_VERIFY_SELF_TEST done"
+
 echo "TEAR_OPTEE_QEMU_TEST start"
 
 /bin/tear-supervisor --workload /bin/demo-model
