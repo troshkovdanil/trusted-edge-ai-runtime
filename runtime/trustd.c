@@ -273,39 +273,63 @@ static void handle_report(int client, enum tear_trust_backend backend)
     }
 }
 
-static void handle_record_decision(int client, const char *buf)
+static void handle_record_decision(int client,
+				   const char *buf,
+				   enum tear_trust_backend backend)
 {
-    char model_id[64];
-    char proposal[128];
-    char decision[64];
-    char reason[128];
-    long value;
+	char model_id[64];
+	char proposal[128];
+	char decision[64];
+	char reason[128];
+	long value;
 
-    if (sscanf(buf,
-               "RECORD_DECISION %63s %127s %63s %127s %ld",
-               model_id,
-               proposal,
-               decision,
-               reason,
-               &value) != 5) {
-        tear_event("optimization_decision_record_failed");
-        dprintf(client, "ERR\n");
-        return;
-    }
+	if (sscanf(buf,
+		   "RECORD_DECISION %63s %127s %63s %127s %ld",
+		   model_id,
+		   proposal,
+		   decision,
+		   reason,
+		   &value) != 5) {
+		tear_event("optimization_decision_record_failed");
+		dprintf(client, "ERR\n");
+		return;
+	}
 
-    if (tear_trusted_state_append_decision(TEAR_TRUSTED_DECISIONS,
-                                           model_id,
-                                           proposal,
-                                           decision,
-                                           reason,
-                                           value) < 0) {
-        tear_event("optimization_decision_record_failed");
-        dprintf(client, "ERR\n");
-        return;
-    }
+	if (backend == TEAR_TRUST_BACKEND_OPTEE) {
+#ifdef TEAR_ENABLE_OPTEE
+		if (tear_optee_record_decision(model_id,
+					       proposal,
+					       decision,
+					       reason,
+					       value) < 0) {
+			tear_event("optimization_decision_record_failed");
+			dprintf(client, "ERR\n");
+			return;
+		}
 
-    tear_event("optimization_decision_recorded");
-    dprintf(client, "OK\n");
+		tear_event("optee_record_decision_ok");
+		tear_event("optimization_decision_recorded");
+		dprintf(client, "OK\n");
+#else
+		tear_event("optimization_decision_record_failed");
+		dprintf(client, "ERR\n");
+#endif
+		return;
+	}
+
+	if (tear_trusted_state_append_decision(TEAR_TRUSTED_DECISIONS,
+					       model_id,
+					       proposal,
+					       decision,
+					       reason,
+					       value) < 0) {
+		tear_event("optimization_decision_record_failed");
+		dprintf(client, "ERR\n");
+		return;
+	}
+
+	tear_event("optimization_decision_recorded");
+	dprintf(client, "OK\n");
 }
 
 static int parse_backend(int argc, char **argv,
@@ -471,7 +495,7 @@ int main(int argc, char **argv)
         } else if (strncmp(buf, "UPDATE", 6) == 0) {
             handle_update(client, buf, backend);
         } else if (strncmp(buf, "RECORD_DECISION", 15) == 0) {
-            handle_record_decision(client, buf);
+            handle_record_decision(client, buf, backend);
         } else {
             dprintf(client, "ERR\n");
         }

@@ -141,3 +141,28 @@ int tear_optee_report(char *state, size_t state_size)
 	state[state_size - 1] = '\0';
 	return 0;
 }
+
+int tear_optee_record_decision(const char *model_id,
+			       const char *proposal,
+			       const char *decision,
+			       const char *reason,
+			       long value)
+{
+	char record[512];
+	int n;
+
+	if (!model_id || !proposal || !decision || !reason)
+		return -1;
+
+	n = snprintf(record, sizeof(record),
+		     "model_id=%s proposal=%s decision=%s reason=%s value=%ld",
+		     model_id,
+		     proposal,
+		     decision,
+		     reason,
+		     value);
+	if (n < 0 || (size_t)n >= sizeof(record))
+		return -1;
+
+	return tear_optee_invoke_state_cmd(TEAR_TA_CMD_RECORD_DECISION, record);
+}

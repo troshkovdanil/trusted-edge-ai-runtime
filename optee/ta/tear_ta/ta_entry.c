@@ -12,6 +12,11 @@
 #define TEAR_STATE_OBJECT_ID "tear.trusted_state.v1"
 #define TEAR_STATE_OBJECT_ID_LEN (sizeof(TEAR_STATE_OBJECT_ID) - 1)
 
+#define TEAR_DECISION_MAX 512
+
+#define TEAR_DECISION_OBJECT_ID "tear.last_decision.v1"
+#define TEAR_DECISION_OBJECT_ID_LEN (sizeof(TEAR_DECISION_OBJECT_ID) - 1)
+
 static TEE_Result write_trusted_state(const void *buf, size_t len)
 {
 	TEE_ObjectHandle obj;
@@ -74,6 +79,32 @@ static TEE_Result read_trusted_state(void *buf, size_t buf_len, size_t *out_len)
 		return TEE_ERROR_CORRUPT_OBJECT;
 
 	*out_len = read_len;
+	return TEE_SUCCESS;
+}
+
+static TEE_Result write_trusted_decision(const void *buf, size_t len)
+{
+	TEE_ObjectHandle obj;
+	TEE_Result res;
+
+	if (len == 0 || len >= TEAR_DECISION_MAX)
+		return TEE_ERROR_BAD_PARAMETERS;
+
+	res = TEE_CreatePersistentObject(TEE_STORAGE_PRIVATE,
+					 TEAR_DECISION_OBJECT_ID,
+					 TEAR_DECISION_OBJECT_ID_LEN,
+					 TEE_DATA_FLAG_ACCESS_READ |
+					 TEE_DATA_FLAG_ACCESS_WRITE |
+					 TEE_DATA_FLAG_ACCESS_WRITE_META |
+					 TEE_DATA_FLAG_OVERWRITE,
+					 TEE_HANDLE_NULL,
+					 buf,
+					 len,
+					 &obj);
+	if (res != TEE_SUCCESS)
+		return res;
+
+	TEE_CloseObject(obj);
 	return TEE_SUCCESS;
 }
 
@@ -339,6 +370,30 @@ TEE_Result TA_InvokeCommandEntryPoint(void *sess_ctx,
 		params[0].memref.size = trusted_state_len + 1;
 
 		DMSG("TEAR TA report - TEE_SUCCESS");
+		return TEE_SUCCESS;
+	}
+
+	case TEAR_TA_CMD_RECORD_DECISION: {
+		TEE_Result res;
+
+		DMSG("TEAR TA record decision");
+
+		if (param_types != TEE_PARAM_TYPES(TEE_PARAM_TYPE_MEMREF_INPUT,
+						   TEE_PARAM_TYPE_NONE,
+						   TEE_PARAM_TYPE_NONE,
+						   TEE_PARAM_TYPE_NONE))
+			return TEE_ERROR_BAD_PARAMETERS;
+
+		if (params[0].memref.size == 0 ||
+		    params[0].memref.size >= TEAR_DECISION_MAX)
+			return TEE_ERROR_BAD_PARAMETERS;
+
+		res = write_trusted_decision(params[0].memref.buffer,
+					     params[0].memref.size);
+		if (res != TEE_SUCCESS)
+			return res;
+
+		DMSG("TEAR TA record decision - TEE_SUCCESS");
 		return TEE_SUCCESS;
 	}
 
