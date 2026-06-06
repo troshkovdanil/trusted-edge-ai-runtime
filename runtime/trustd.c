@@ -17,6 +17,11 @@
 #define TEAR_TRUSTED_STATE "/tmp/tear-trusted-state"
 #define TEAR_TRUSTED_DECISIONS "/tmp/tear-trusted-decisions"
 
+enum tear_trust_backend {
+    TEAR_TRUST_BACKEND_FILE,
+    TEAR_TRUST_BACKEND_OPTEE,
+};
+
 static int create_socket(void)
 {
     int fd = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -80,7 +85,8 @@ static int parse_manifest_message(
                   m->model_hash) == 4 ? 0 : -1;
 }
 
-static void handle_enroll(int client, const char *buf)
+static void handle_enroll(int client, const char *buf,
+		enum tear_trust_backend backend)
 {
     struct tear_model_manifest m;
 
@@ -89,6 +95,27 @@ static void handle_enroll(int client, const char *buf)
         dprintf(client, "ERR\n");
         return;
     }
+
+	if (backend == TEAR_TRUST_BACKEND_OPTEE) {
+#ifdef TEAR_ENABLE_OPTEE
+		char state[256];
+
+		snprintf(state, sizeof(state), "%s %d %s %s",
+			 m.model_id, m.version, m.backend, m.model_hash);
+
+		if (tear_optee_enroll(state) == 0) {
+			tear_event("optee_model_enroll");
+			dprintf(client, "OK\n");
+		} else {
+			tear_event("optee_model_enroll_failed");
+			dprintf(client, "ERR\n");
+		}
+#else
+		tear_event("optee_model_enroll_failed");
+		dprintf(client, "ERR\n");
+#endif
+		return;
+	}
 
     if (tear_trusted_state_store(TEAR_TRUSTED_STATE, &m) == 0) {
         tear_event("model_enroll");
@@ -215,11 +242,6 @@ static void handle_record_decision(int client, const char *buf)
     tear_event("optimization_decision_recorded");
     dprintf(client, "OK\n");
 }
-
-enum tear_trust_backend {
-    TEAR_TRUST_BACKEND_FILE,
-    TEAR_TRUST_BACKEND_OPTEE,
-};
 
 static int parse_backend(int argc, char **argv,
                          enum tear_trust_backend *backend,
@@ -376,7 +398,7 @@ int main(int argc, char **argv)
         buf[n] = '\0';
 
         if (strncmp(buf, "ENROLL", 6) == 0) {
-            handle_enroll(client, buf);
+            handle_enroll(client, buf, backend);
         } else if (strncmp(buf, "VERIFY", 6) == 0) {
             handle_verify(client, buf);
         } else if (strncmp(buf, "REPORT", 6) == 0) {

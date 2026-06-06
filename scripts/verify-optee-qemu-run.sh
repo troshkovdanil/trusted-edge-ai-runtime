@@ -24,7 +24,11 @@ check_log_ordered() {
     local pattern="$1"
     local line
 
-    line="$(grep -n "$pattern" "$LOG" | head -n1 | cut -d: -f1 || true)"
+    line="$(
+    awk -v pat="$pattern" -v last="$LAST_LINE" '
+        NR > last && $0 ~ pat { print NR; exit }
+    ' "$LOG"
+    )"
 
     if [[ -z "$line" ]]; then
         echo "error: expected pattern not found: $pattern"
@@ -75,6 +79,13 @@ check_log_ordered "TEAR_OPTEE_TRUSTD_VERIFY_SELF_TEST start"
 check_log_ordered "event=trustd_optee_backend_enroll_before_verify_ok"
 check_log_ordered "event=trustd_optee_backend_verify_ok"
 check_log_ordered "TEAR_OPTEE_TRUSTD_VERIFY_SELF_TEST done"
+
+echo "TEAR verify: OP-TEE TRUSTD_ENROLL_SOCKET_TEST"
+check_log_ordered "TEAR_OPTEE_TRUSTD_ENROLL_SOCKET_TEST start"
+check_log_ordered "event=trustd_start"
+check_log_ordered "event=optee_model_enroll"
+check_log_ordered "event=tearictl_enroll_done"
+check_log_ordered "TEAR_OPTEE_TRUSTD_ENROLL_SOCKET_TEST done"
 
 echo "TEAR verify: mock model workload"
 check_log_ordered "TEAR_OPTEE_QEMU_TEST start"
