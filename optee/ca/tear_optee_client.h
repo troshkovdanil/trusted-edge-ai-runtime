@@ -15,5 +15,6 @@ int tear_optee_record_decision(const char *model_id,
                                const char *decision,
                                const char *reason,
                                long value);
+int tear_optee_report_decision(char *decision, size_t decision_size);
 
 #endif

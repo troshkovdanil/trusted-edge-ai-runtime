@@ -332,6 +332,25 @@ static void handle_record_decision(int client,
 	dprintf(client, "OK\n");
 }
 
+static void handle_report_decision(int client, enum tear_trust_backend backend)
+{
+	if (backend == TEAR_TRUST_BACKEND_OPTEE) {
+#ifdef TEAR_ENABLE_OPTEE
+		char decision[512];
+
+		if (tear_optee_report_decision(decision, sizeof(decision)) == 0)
+			dprintf(client, "DECISION %s\n", decision);
+		else
+			dprintf(client, "ERR\n");
+#else
+		dprintf(client, "ERR\n");
+#endif
+		return;
+	}
+
+	dprintf(client, "ERR\n");
+}
+
 static int parse_backend(int argc, char **argv,
                          enum tear_trust_backend *backend,
                          int *self_test,
@@ -488,14 +507,24 @@ int main(int argc, char **argv)
 
         if (strncmp(buf, "ENROLL", 6) == 0) {
             handle_enroll(client, buf, backend);
+
         } else if (strncmp(buf, "VERIFY", 6) == 0) {
             handle_verify(client, buf, backend);
+
+        /*
+         * Keep longer protocol commands before shorter prefixes.
+         */
+        } else if (strncmp(buf, "REPORT_DECISION", 15) == 0) {
+            handle_report_decision(client, backend);
         } else if (strncmp(buf, "REPORT", 6) == 0) {
             handle_report(client, backend);
+
         } else if (strncmp(buf, "UPDATE", 6) == 0) {
             handle_update(client, buf, backend);
+
         } else if (strncmp(buf, "RECORD_DECISION", 15) == 0) {
             handle_record_decision(client, buf, backend);
+
         } else {
             dprintf(client, "ERR\n");
         }

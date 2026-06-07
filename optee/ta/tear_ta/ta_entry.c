@@ -108,6 +108,46 @@ static TEE_Result write_trusted_decision(const void *buf, size_t len)
 	return TEE_SUCCESS;
 }
 
+static TEE_Result read_trusted_decision(void *buf, size_t buf_len,
+					size_t *out_len)
+{
+	TEE_ObjectHandle obj;
+	TEE_ObjectInfo info;
+	TEE_Result res;
+	size_t read_len = 0;
+
+	res = TEE_OpenPersistentObject(TEE_STORAGE_PRIVATE,
+				       TEAR_DECISION_OBJECT_ID,
+				       TEAR_DECISION_OBJECT_ID_LEN,
+				       TEE_DATA_FLAG_ACCESS_READ,
+				       &obj);
+	if (res != TEE_SUCCESS)
+		return res;
+
+	res = TEE_GetObjectInfo1(obj, &info);
+	if (res != TEE_SUCCESS) {
+		TEE_CloseObject(obj);
+		return res;
+	}
+
+	if (info.dataSize == 0 || info.dataSize >= buf_len) {
+		TEE_CloseObject(obj);
+		return TEE_ERROR_SHORT_BUFFER;
+	}
+
+	res = TEE_ReadObjectData(obj, buf, info.dataSize, &read_len);
+	TEE_CloseObject(obj);
+
+	if (res != TEE_SUCCESS)
+		return res;
+
+	if (read_len != info.dataSize)
+		return TEE_ERROR_CORRUPT_OBJECT;
+
+	*out_len = read_len;
+	return TEE_SUCCESS;
+}
+
 struct tear_ta_state {
 	char model_id[64];
 	int version;
@@ -394,6 +434,38 @@ TEE_Result TA_InvokeCommandEntryPoint(void *sess_ctx,
 			return res;
 
 		DMSG("TEAR TA record decision - TEE_SUCCESS");
+		return TEE_SUCCESS;
+	}
+
+	case TEAR_TA_CMD_REPORT_DECISION: {
+		char decision[TEAR_DECISION_MAX];
+		size_t decision_len = 0;
+		TEE_Result res;
+
+		DMSG("TEAR TA report decision");
+
+		if (param_types != TEE_PARAM_TYPES(TEE_PARAM_TYPE_MEMREF_OUTPUT,
+						   TEE_PARAM_TYPE_NONE,
+						   TEE_PARAM_TYPE_NONE,
+						   TEE_PARAM_TYPE_NONE))
+			return TEE_ERROR_BAD_PARAMETERS;
+
+		res = read_trusted_decision(decision,
+					    sizeof(decision),
+					    &decision_len);
+		if (res != TEE_SUCCESS)
+			return res;
+
+		if (params[0].memref.size < decision_len + 1) {
+			params[0].memref.size = decision_len + 1;
+			return TEE_ERROR_SHORT_BUFFER;
+		}
+
+		TEE_MemMove(params[0].memref.buffer, decision, decision_len);
+		((char *)params[0].memref.buffer)[decision_len] = '\0';
+		params[0].memref.size = decision_len + 1;
+
+		DMSG("TEAR TA report decision - TEE_SUCCESS");
 		return TEE_SUCCESS;
 	}
 

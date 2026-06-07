@@ -161,3 +161,33 @@ int tear_trust_record_decision(const char *model_id,
 
     return ret;
 }
+
+int tear_trust_report_decision(char *decision, size_t decision_size)
+{
+    int fd = connect_socket();
+    char buf[512];
+    char reported[512];
+    ssize_t n;
+
+    if (!decision || decision_size == 0)
+        return -1;
+
+    if (fd < 0)
+        return -1;
+
+    dprintf(fd, "REPORT_DECISION\n");
+
+    n = read(fd, buf, sizeof(buf) - 1);
+    close(fd);
+
+    if (n <= 0)
+        return -1;
+
+    buf[n] = '\0';
+
+    if (sscanf(buf, "DECISION %511[^\n]", reported) != 1)
+        return -1;
+
+    snprintf(decision, decision_size, "%s", reported);
+    return 0;
+}

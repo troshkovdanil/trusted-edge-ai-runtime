@@ -3,6 +3,7 @@
 #ifndef TEAR_TRUST_CLIENT_H
 #define TEAR_TRUST_CLIENT_H
 
+#include <stddef.h>
 #include "model_manifest.h"
 
 int tear_trust_enroll(
@@ -20,4 +21,6 @@ int tear_trust_record_decision(const char *model_id,
                                const char *decision,
                                const char *reason,
                                long value);
+
+int tear_trust_report_decision(char *decision, size_t decision_size);
 #endif
