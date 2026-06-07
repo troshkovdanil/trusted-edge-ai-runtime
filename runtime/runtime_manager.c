@@ -135,6 +135,33 @@ static void approve_or_reject_proposal(const struct opt_proposal *proposal,
     *reason = "unknown_proposal";
 }
 
+static void record_and_report_optimizer_decision(const char *proposal,
+                                                 const char *decision,
+                                                 const char *reason)
+{
+    char reported_decision[512];
+
+    if (tear_trust_record_decision("mnist-onnx-v1",
+                                   proposal,
+                                   decision,
+                                   reason,
+                                   0) < 0) {
+        tear_event("optimization_decision_record_failed");
+        return;
+    }
+
+    tear_event("optimization_decision_recorded_by_runtime_manager");
+
+    if (tear_trust_report_decision(reported_decision,
+                                   sizeof(reported_decision)) < 0) {
+        tear_event("optimization_decision_report_failed");
+        return;
+    }
+
+    printf("TEAR: reported_decision %s\n", reported_decision);
+    tear_event("optimization_decision_reported_by_runtime_manager");
+}
+
 static void record_optimizer_decision(void)
 {
     struct opt_proposal proposal;
@@ -144,16 +171,9 @@ static void record_optimizer_decision(void)
     if (ask_optd(&proposal) < 0) {
         tear_event("optimizer_proposal_failed");
 
-        if (tear_trust_record_decision("mnist-onnx-v1",
-                                       "none",
-                                       "rejected",
-                                       "optimizer_unavailable",
-                                       0) < 0) {
-            tear_event("optimization_decision_record_failed");
-        } else {
-            tear_event("optimization_decision_recorded_by_runtime_manager");
-        }
-
+        record_and_report_optimizer_decision("none",
+                                             "rejected",
+                                             "optimizer_unavailable");
         return;
     }
 
@@ -168,15 +188,9 @@ static void record_optimizer_decision(void)
     tear_event(decision);
     tear_event(decision_reason);
 
-    if (tear_trust_record_decision("mnist-onnx-v1",
-                                   proposal.action,
-                                   decision,
-                                   decision_reason,
-                                   0) < 0) {
-        tear_event("optimization_decision_record_failed");
-    } else {
-        tear_event("optimization_decision_recorded_by_runtime_manager");
-    }
+    record_and_report_optimizer_decision(proposal.action,
+                                         decision,
+                                         decision_reason);
 }
 
 int tear_runtime_manager_main(int argc, char **argv)

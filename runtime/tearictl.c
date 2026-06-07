@@ -13,8 +13,10 @@ static void usage(const char *prog)
             "usage:\n"
             "  %s enroll <manifest>\n"
             "  %s verify <manifest>\n"
-	    "  %s update-model <manifest>\n"
-            "  %s report\n",
+            "  %s update-model <manifest>\n"
+            "  %s report\n"
+            "  %s report-decision\n",
+            prog,
             prog,
             prog,
             prog,
@@ -73,6 +75,22 @@ static int cmd_report(void)
     return 0;
 }
 
+static int cmd_report_decision(void)
+{
+	char decision[512];
+
+	if (tear_trust_report_decision(decision, sizeof(decision)) < 0) {
+		fprintf(stderr, "TEAR: report decision failed\n");
+		tear_event("tearictl_report_decision_failed");
+		return 1;
+	}
+
+	printf("DECISION %s\n", decision);
+	tear_event("tearictl_report_decision_done");
+
+	return 0;
+}
+
 static int cmd_update_model(const char *path)
 {
         struct tear_model_manifest manifest;
@@ -124,6 +142,15 @@ int main(int argc, char **argv)
         }
 
         return cmd_report();
+    }
+
+    if (strcmp(argv[1], "report-decision") == 0) {
+        if (argc != 2) {
+            usage(argv[0]);
+            return 1;
+        }
+
+        return cmd_report_decision();
     }
 
     if (strcmp(argv[1], "update-model") == 0) {
