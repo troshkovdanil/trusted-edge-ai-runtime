@@ -5,6 +5,7 @@
 #include "model_manifest.h"
 #include "telemetry.h"
 #include "trust_client.h"
+#include "runtime_paths.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -14,7 +15,6 @@
 #include <unistd.h>
 #include <stdlib.h>
 
-#define TEAR_OPTD_SOCKET "/tmp/tear-optd.sock"
 #define TEAR_MNIST_METRICS "/tmp/tear-mnist-metrics"
 
 struct runtime_config {
@@ -63,7 +63,7 @@ static int ask_optd(struct opt_proposal *proposal)
         .sun_family = AF_UNIX,
     };
 
-    strncpy(addr.sun_path, TEAR_OPTD_SOCKET, sizeof(addr.sun_path) - 1);
+    strncpy(addr.sun_path, tear_optd_socket_path(), sizeof(addr.sun_path) - 1);
 
     if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
         close(fd);

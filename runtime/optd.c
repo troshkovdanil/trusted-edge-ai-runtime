@@ -2,14 +2,13 @@
 
 #include "optimizer_policy.h"
 #include "telemetry.h"
+#include "runtime_paths.h"
 
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
-
-#define TEAR_OPTD_SOCKET "/tmp/tear-optd.sock"
 
 static int create_socket(void)
 {
@@ -22,9 +21,11 @@ static int create_socket(void)
         .sun_family = AF_UNIX,
     };
 
-    strncpy(addr.sun_path, TEAR_OPTD_SOCKET, sizeof(addr.sun_path) - 1);
+    const char *socket_path = tear_optd_socket_path();
 
-    unlink(TEAR_OPTD_SOCKET);
+    strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
+
+    unlink(socket_path);
 
     if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
         close(fd);

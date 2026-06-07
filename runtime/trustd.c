@@ -6,6 +6,7 @@
 #ifdef TEAR_ENABLE_OPTEE
 #include "tear_optee_client.h"
 #endif
+#include "runtime_paths.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -13,7 +14,6 @@
 #include <sys/un.h>
 #include <unistd.h>
 
-#define TEAR_TRUSTD_SOCKET "/tmp/tear-trustd.sock"
 #define TEAR_TRUSTED_STATE "/tmp/tear-trusted-state"
 #define TEAR_TRUSTED_DECISIONS "/tmp/tear-trusted-decisions"
 
@@ -33,11 +33,13 @@ static int create_socket(void)
         .sun_family = AF_UNIX,
     };
 
+    const char *socket_path = tear_trustd_socket_path();
+
     strncpy(addr.sun_path,
-            TEAR_TRUSTD_SOCKET,
+            socket_path,
             sizeof(addr.sun_path) - 1);
 
-    unlink(TEAR_TRUSTD_SOCKET);
+    unlink(socket_path);
 
     if (bind(fd,
              (struct sockaddr *)&addr,

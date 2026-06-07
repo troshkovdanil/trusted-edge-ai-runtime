@@ -43,6 +43,8 @@ ORT_AARCH64_DIR := external/onnxruntime-aarch64
 ORT_AARCH64_INCLUDE := $(ORT_AARCH64_DIR)/include
 ORT_AARCH64_LIB := $(ORT_AARCH64_DIR)/lib
 
+RUNTIME_PATHS_SRCS := runtime/runtime_paths.c
+
 .PHONY: build test initramfs kernel-image qemu-system verify clean clean-all validate-agent host-build host-test host-supervisor-test mnist-assets host-mnist-test host-adaptive-supervisor-test full-verify optee-qemu-install optee-qemu-build optee-qemu-run optee-qemu-test optee-ta optee-ca optee-trustd
 
 mnist-assets:
@@ -64,22 +66,26 @@ build: mnist-assets
 		runtime/runtime_manager.c \
 		runtime/model_manifest.c \
 		runtime/trust_client.c \
+		$(RUNTIME_PATHS_SRCS) \
 		runtime/telemetry.c
 	$(CC) -static -O2 -Wall -Wextra \
 		-o $(TRUSTD) \
 		runtime/trustd.c \
 		runtime/trusted_state.c \
+		$(RUNTIME_PATHS_SRCS) \
 		runtime/telemetry.c
 	$(CC) -static -O2 -Wall -Wextra \
 		-o $(TEARICTL) \
 		runtime/tearictl.c \
 		runtime/model_manifest.c \
 		runtime/trust_client.c \
+		$(RUNTIME_PATHS_SRCS) \
 		runtime/telemetry.c
 	$(CC) -static -O2 -Wall -Wextra \
 		-o $(OPTD) \
 		runtime/optd.c \
 		runtime/optimizer_policy.c \
+		$(RUNTIME_PATHS_SRCS) \
 		runtime/telemetry.c
 	$(CC) -O2 -Wall -Wextra \
 		-I$(ORT_AARCH64_INCLUDE) \
@@ -107,22 +113,26 @@ host-build: mnist-assets
 		runtime/runtime_manager.c \
 		runtime/model_manifest.c \
 		runtime/trust_client.c \
+		$(RUNTIME_PATHS_SRCS) \
 		runtime/telemetry.c
 	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
 		-o $(HOST_TRUSTD) \
 		runtime/trustd.c \
 		runtime/trusted_state.c \
+		$(RUNTIME_PATHS_SRCS) \
 		runtime/telemetry.c
 	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
 		-o $(HOST_TEARICTL) \
 		runtime/tearictl.c \
 		runtime/model_manifest.c \
 		runtime/trust_client.c \
+		$(RUNTIME_PATHS_SRCS) \
 		runtime/telemetry.c
 	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
 		-o $(HOST_OPTD) \
 		runtime/optd.c \
 		runtime/optimizer_policy.c \
+		$(RUNTIME_PATHS_SRCS) \
 		runtime/telemetry.c
 
 test: build
@@ -286,6 +296,7 @@ optee-trustd: optee-ca
 		-o $(OPTEE_TRUSTD) \
 		runtime/trustd.c \
 		runtime/trusted_state.c \
+		$(RUNTIME_PATHS_SRCS) \
 		runtime/telemetry.c \
 		optee/ca/tear_optee_client.c \
 		-L$(OPTEE_CLIENT_LIB) \
