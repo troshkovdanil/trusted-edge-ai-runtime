@@ -323,32 +323,43 @@ in normal-world runtime components.
 TEAR validation now includes an end-to-end OP-TEE QEMU environment exercising
 trusted model lifecycle operations through the secure world.
 
-## Next
+### MVP-7: OP-TEE QEMU adaptive MNIST
 
-The next major milestone is extending TEAR's adaptive control path into the
-OP-TEE-backed environment.
+TEAR can run the adaptive MNIST sample inside the OP-TEE QEMU normal world.
 
-Planned vertical slice:
+This flow validates:
 
-```text
-MNIST workload
-  -> runtime metrics
-  -> optimizer proposal
-  -> trusted decision recording
-  -> OP-TEE persistence
+- real ARM64 ONNX Runtime MNIST inference
+- optimizer daemon proposal handling
+- runtime policy decision events
+- OP-TEE-backed optimization decision recording
+- read-back of the latest optimization decision from the TA
+
+Run:
+
+```bash
+make optee-qemu-mnist-adaptive-test
 ```
 
-Future work:
+The test boots OP-TEE QEMU, runs the MNIST workload, records the optimization decision through the OP-TEE TA, reports it back, and verifies the event sequence.
 
-- trusted optimization decision storage
-- adaptive workload execution on ARM64 QEMU
-- OTA-aware optimization state
-- policy-controlled runtime adaptation
-- backend selection (CPU/NPU/GPU)
-- thermal-aware adaptation
-- power-aware adaptation
-- fleet observability
-- attestation-aware optimization
+## Roadmap
+
+Near term:
+
+- consolidate OP-TEE tests into a single QEMU boot
+- support multiple workloads per supervisor run
+- reduce QEMU test execution time
+- simplify and clean up legacy initramfs/QEMU test infrastructure
+- improve separation between host-native and OP-TEE execution paths
+
+Future:
+
+- hardware deployment
+- RPMB-backed storage
+- trusted optimization history
+- signed optimization evidence
+- fleet telemetry integration
 
 ## License
 
