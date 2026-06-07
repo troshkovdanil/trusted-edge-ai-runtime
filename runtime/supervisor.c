@@ -7,7 +7,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/reboot.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -32,12 +31,6 @@ struct supervisor_config {
     const char *manifest;
     int enable_optimizer;
 };
-
-static void poweroff_guest(void)
-{
-    sync();
-    reboot(RB_POWER_OFF);
-}
 
 static struct supervisor_config parse_args(int argc, char **argv)
 {
@@ -235,7 +228,6 @@ int main(int argc, char **argv)
 
     if (trustd_pid < 0) {
         tear_event("trustd_start_failed");
-        poweroff_guest();
         return 1;
     }
 
@@ -246,19 +238,16 @@ int main(int argc, char **argv)
 
         if (optd_pid < 0) {
             tear_event("optd_start_failed");
-            poweroff_guest();
             return 1;
         }
     }
 
     if (cfg.enable_optimizer) {
         if (provision_selected_manifest(cfg.manifest) < 0) {
-            poweroff_guest();
             return 1;
         }
     } else {
         if (provision_demo_model() < 0) {
-            poweroff_guest();
             return 1;
         }
     }
@@ -270,7 +259,6 @@ int main(int argc, char **argv)
     if (pid < 0) {
         perror("fork");
         tear_event_kv("supervisor_error", "errno", errno);
-        poweroff_guest();
         return 1;
     }
 
@@ -286,7 +274,6 @@ int main(int argc, char **argv)
     if (waitpid(pid, &status, 0) < 0) {
         perror("waitpid");
         tear_event_kv("supervisor_error", "errno", errno);
-        poweroff_guest();
         return 1;
     }
 
@@ -302,7 +289,5 @@ int main(int argc, char **argv)
         kill(optd_pid, SIGTERM);
 
     tear_event("supervisor_shutdown");
-    poweroff_guest();
-
     return 0;
 }
