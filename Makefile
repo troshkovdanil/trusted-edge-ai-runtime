@@ -29,6 +29,7 @@ ORT_INCLUDE := external/onnxruntime/include/onnxruntime_c_api.h
 
 OPTEE_QEMU_DIR := external/optee-qemu-v8
 OPTEE_TA_DEV_KIT := $(abspath $(OPTEE_QEMU_DIR)/optee_os/out/arm/export-ta_arm64)
+OPTEE_TA_DEV_KIT_MK := $(OPTEE_TA_DEV_KIT)/mk/ta_dev_kit.mk
 OPTEE_CROSS_COMPILE := $(abspath $(OPTEE_QEMU_DIR)/toolchains/aarch64/bin/aarch64-linux-gnu-)
 TEAR_TA_BUILD := $(BUILD)/optee/tear_ta
 TEAR_TA := $(TEAR_TA_BUILD)/7c9d7b3a-2f4e-4c8f-9a11-6b4454454152.ta
@@ -47,7 +48,7 @@ ORT_AARCH64_LIB := $(ORT_AARCH64_DIR)/lib
 mnist-assets:
 	./scripts/fetch-mnist-onnx.sh
 
-build:
+build: mnist-assets
 	mkdir -p $(BUILD)
 	$(CC) -static -O2 -Wall -Wextra \
 		-o $(HELLO) runtime/hello.c
@@ -251,7 +252,10 @@ optee-qemu-mnist-adaptive-test: optee-qemu-mnist-adaptive-build
 	VERIFY_SCRIPT="$(abspath scripts/verify-optee-qemu-mnist-adaptive-run.sh)" \
 	./scripts/run-optee-qemu-headless.sh
 
-optee-ta:
+$(OPTEE_TA_DEV_KIT_MK):
+	./scripts/optee-qemu.sh
+
+optee-ta: $(OPTEE_TA_DEV_KIT_MK)
 	mkdir -p $(TEAR_TA_BUILD)
 	$(MAKE) -C optee/ta/tear_ta \
 		O=$(abspath $(TEAR_TA_BUILD)) \
