@@ -5,5 +5,6 @@
 
 const char *tear_trustd_socket_path(void);
 const char *tear_optd_socket_path(void);
+const char *tear_supervisor_socket_path(void);
 
 #endif

@@ -57,7 +57,7 @@ build: mnist-assets
 	$(CC) -static -O2 -Wall -Wextra \
 		-o $(INIT) initramfs/init.c
 	$(CC) -static -O2 -Wall -Wextra \
-		-o $(SUPERVISOR) runtime/supervisor.c runtime/telemetry.c
+		-o $(SUPERVISOR) runtime/supervisor.c $(RUNTIME_PATHS_SRCS) runtime/telemetry.c
 	$(CC) -static -O2 -Wall -Wextra \
 		-o $(DEMO_MODEL) runtime/demo_model.c runtime/telemetry.c
 	$(CC) -static -O2 -Wall -Wextra \
@@ -99,7 +99,7 @@ host-build: mnist-assets
 	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
 		-o $(HOST_HELLO) runtime/hello.c
 	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
-		-o $(HOST_SUPERVISOR) runtime/supervisor.c runtime/telemetry.c
+		-o $(HOST_SUPERVISOR) runtime/supervisor.c $(RUNTIME_PATHS_SRCS) runtime/telemetry.c
 	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
 		-o $(HOST_DEMO_MODEL) runtime/demo_model.c runtime/telemetry.c
 	gcc -O2 -Wall -Wextra -DTEAR_HOST_BUILD \

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
+#include "runtime_paths.h"
 #include "telemetry.h"
 
 #include <errno.h>
@@ -7,6 +8,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -26,11 +29,93 @@
 #define MODEL_V2_PATH "/etc/tear/model-v2.json"
 #endif
 
+enum supervisor_state {
+    SUPERVISOR_STATE_INIT,
+    SUPERVISOR_STATE_READY,
+    SUPERVISOR_STATE_RUNNING,
+    SUPERVISOR_STATE_SHUTTING_DOWN,
+};
+
 struct supervisor_config {
     const char *workload;
     const char *manifest;
     int enable_optimizer;
+    int daemon_mode;
 };
+
+static enum supervisor_state supervisor_state = SUPERVISOR_STATE_INIT;
+static volatile sig_atomic_t supervisor_running = 1;
+
+static void handle_signal(int signo)
+{
+    (void)signo;
+    supervisor_running = 0;
+}
+
+static const char *state_name(enum supervisor_state state)
+{
+    switch (state) {
+    case SUPERVISOR_STATE_INIT:
+        return "INIT";
+    case SUPERVISOR_STATE_READY:
+        return "READY";
+    case SUPERVISOR_STATE_RUNNING:
+        return "RUNNING";
+    case SUPERVISOR_STATE_SHUTTING_DOWN:
+        return "SHUTTING_DOWN";
+    default:
+        return "UNKNOWN";
+    }
+}
+
+static int create_supervisor_socket(void)
+{
+    const char *socket_path = tear_supervisor_socket_path();
+    int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+
+    if (fd < 0)
+        return -1;
+
+    struct sockaddr_un addr = {
+        .sun_family = AF_UNIX,
+    };
+
+    strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
+    unlink(socket_path);
+
+    if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+        close(fd);
+        return -1;
+    }
+
+    if (listen(fd, 4) < 0) {
+        close(fd);
+        return -1;
+    }
+
+    return fd;
+}
+
+static void handle_supervisor_client(int client)
+{
+    char buf[128];
+    ssize_t n = read(client, buf, sizeof(buf) - 1);
+
+    if (n <= 0)
+        return;
+
+    buf[n] = '\0';
+
+    if (strncmp(buf, "PING", 4) == 0) {
+        dprintf(client, "PONG\n");
+    } else if (strncmp(buf, "STATUS", 6) == 0) {
+        dprintf(client,
+                "STATUS %s\n",
+                state_name(supervisor_state));
+    } else {
+        dprintf(client, "ERR unknown_command\n");
+    }
+}
 
 static struct supervisor_config parse_args(int argc, char **argv)
 {
@@ -38,6 +123,7 @@ static struct supervisor_config parse_args(int argc, char **argv)
         .workload = "/bin/tear-hello",
         .manifest = MODEL_V2_PATH,
         .enable_optimizer = 0,
+        .daemon_mode = 0,
     };
 
     for (int i = 1; i < argc; i++) {
@@ -47,6 +133,8 @@ static struct supervisor_config parse_args(int argc, char **argv)
             cfg.manifest = argv[++i];
         } else if (strcmp(argv[i], "--enable-optimizer") == 0) {
             cfg.enable_optimizer = 1;
+        } else if (strcmp(argv[i], "--daemon") == 0) {
+            cfg.daemon_mode = 1;
         }
     }
 
@@ -106,6 +194,15 @@ static pid_t start_optd(void)
     sleep(1);
 
     return pid;
+}
+
+static void stop_child(pid_t pid)
+{
+    if (pid <= 0)
+        return;
+
+    kill(pid, SIGTERM);
+    waitpid(pid, NULL, 0);
 }
 
 static int run_tearictl(const char *command, const char *arg)
@@ -218,6 +315,99 @@ static void run_runtime_manager(const struct supervisor_config *cfg)
     }
 }
 
+static int run_workload_once(const struct supervisor_config *cfg)
+{
+    if (cfg->enable_optimizer) {
+        if (provision_selected_manifest(cfg->manifest) < 0)
+            return 1;
+    } else {
+        if (provision_demo_model() < 0)
+            return 1;
+    }
+
+    supervisor_state = SUPERVISOR_STATE_RUNNING;
+    tear_event("workload_start");
+
+    pid_t pid = fork();
+
+    if (pid < 0) {
+        perror("fork");
+        tear_event_kv("supervisor_error", "errno", errno);
+        supervisor_state = SUPERVISOR_STATE_READY;
+        return 1;
+    }
+
+    if (pid == 0) {
+        run_runtime_manager(cfg);
+
+        perror("execl runtime manager");
+        _exit(127);
+    }
+
+    int status = 0;
+
+    if (waitpid(pid, &status, 0) < 0) {
+        perror("waitpid");
+        tear_event_kv("supervisor_error", "errno", errno);
+        supervisor_state = SUPERVISOR_STATE_READY;
+        return 1;
+    }
+
+    if (WIFEXITED(status)) {
+        tear_event_kv("workload_exit", "status", WEXITSTATUS(status));
+    } else if (WIFSIGNALED(status)) {
+        tear_event_kv("workload_signal", "signal", WTERMSIG(status));
+    } else {
+        tear_event("workload_unknown_exit");
+    }
+
+    supervisor_state = SUPERVISOR_STATE_READY;
+
+    return WIFEXITED(status) && WEXITSTATUS(status) == 0 ? 0 : 1;
+}
+
+static int run_supervisor_daemon(pid_t trustd_pid, pid_t optd_pid)
+{
+    int server = create_supervisor_socket();
+
+    if (server < 0) {
+        perror("supervisor socket");
+        tear_event("supervisor_socket_failed");
+        return 1;
+    }
+
+    signal(SIGTERM, handle_signal);
+    signal(SIGINT, handle_signal);
+
+    supervisor_state = SUPERVISOR_STATE_READY;
+    tear_event("supervisor_daemon_ready");
+
+    while (supervisor_running) {
+        int client = accept(server, NULL, NULL);
+
+        if (client < 0) {
+            if (errno == EINTR)
+                continue;
+            perror("accept supervisor");
+            continue;
+        }
+
+        handle_supervisor_client(client);
+        close(client);
+    }
+
+    supervisor_state = SUPERVISOR_STATE_SHUTTING_DOWN;
+    tear_event("supervisor_daemon_shutdown");
+
+    close(server);
+    unlink(tear_supervisor_socket_path());
+
+    stop_child(optd_pid);
+    stop_child(trustd_pid);
+
+    return 0;
+}
+
 int main(int argc, char **argv)
 {
     struct supervisor_config cfg = parse_args(argc, argv);
@@ -238,56 +428,22 @@ int main(int argc, char **argv)
 
         if (optd_pid < 0) {
             tear_event("optd_start_failed");
+            stop_child(trustd_pid);
             return 1;
         }
     }
 
-    if (cfg.enable_optimizer) {
-        if (provision_selected_manifest(cfg.manifest) < 0) {
-            return 1;
-        }
-    } else {
-        if (provision_demo_model() < 0) {
-            return 1;
-        }
-    }
+    if (cfg.daemon_mode)
+        return run_supervisor_daemon(trustd_pid, optd_pid);
 
-    tear_event("workload_start");
+    supervisor_state = SUPERVISOR_STATE_READY;
 
-    pid_t pid = fork();
+    int ret = run_workload_once(&cfg);
 
-    if (pid < 0) {
-        perror("fork");
-        tear_event_kv("supervisor_error", "errno", errno);
-        return 1;
-    }
-
-    if (pid == 0) {
-        run_runtime_manager(&cfg);
-
-        perror("execl runtime manager");
-        _exit(127);
-    }
-
-    int status = 0;
-
-    if (waitpid(pid, &status, 0) < 0) {
-        perror("waitpid");
-        tear_event_kv("supervisor_error", "errno", errno);
-        return 1;
-    }
-
-    if (WIFEXITED(status)) {
-        tear_event_kv("workload_exit", "status", WEXITSTATUS(status));
-    } else if (WIFSIGNALED(status)) {
-        tear_event_kv("workload_signal", "signal", WTERMSIG(status));
-    } else {
-        tear_event("workload_unknown_exit");
-    }
-
-    if (optd_pid > 0)
-        kill(optd_pid, SIGTERM);
+    stop_child(optd_pid);
+    stop_child(trustd_pid);
 
     tear_event("supervisor_shutdown");
-    return 0;
+
+    return ret;
 }

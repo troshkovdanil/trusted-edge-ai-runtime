@@ -6,6 +6,7 @@
 
 #define TEAR_TRUSTD_SOCKET_DEFAULT "/tmp/tear-trustd.sock"
 #define TEAR_OPTD_SOCKET_DEFAULT "/tmp/tear-optd.sock"
+#define TEAR_SUPERVISOR_SOCKET_DEFAULT "/tmp/tear-supervisor.sock"
 
 static const char *env_or_default(const char *env_name,
                                   const char *default_value)
@@ -28,4 +29,10 @@ const char *tear_optd_socket_path(void)
 {
     return env_or_default("TEAR_OPTD_SOCKET",
                           TEAR_OPTD_SOCKET_DEFAULT);
+}
+
+const char *tear_supervisor_socket_path(void)
+{
+    return env_or_default("TEAR_SUPERVISOR_SOCKET",
+                          TEAR_SUPERVISOR_SOCKET_DEFAULT);
 }
