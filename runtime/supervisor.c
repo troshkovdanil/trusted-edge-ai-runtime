@@ -52,6 +52,18 @@ static void handle_signal(int signo)
     supervisor_running = 0;
 }
 
+static void install_signal_handlers(void)
+{
+    struct sigaction sa;
+
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = handle_signal;
+    sigemptyset(&sa.sa_mask);
+
+    sigaction(SIGTERM, &sa, NULL);
+    sigaction(SIGINT, &sa, NULL);
+}
+
 static const char *state_name(enum supervisor_state state)
 {
     switch (state) {
@@ -376,8 +388,7 @@ static int run_supervisor_daemon(pid_t trustd_pid, pid_t optd_pid)
         return 1;
     }
 
-    signal(SIGTERM, handle_signal);
-    signal(SIGINT, handle_signal);
+    install_signal_handlers();
 
     supervisor_state = SUPERVISOR_STATE_READY;
     tear_event("supervisor_daemon_ready");
@@ -387,7 +398,8 @@ static int run_supervisor_daemon(pid_t trustd_pid, pid_t optd_pid)
 
         if (client < 0) {
             if (errno == EINTR)
-                continue;
+                break;
+
             perror("accept supervisor");
             continue;
         }
