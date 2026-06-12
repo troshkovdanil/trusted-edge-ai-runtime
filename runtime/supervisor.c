@@ -18,15 +18,11 @@
 #define OPTD_PATH "build/host/tear-optd-host"
 #define TEARICTL_PATH "build/host/tearictl-host"
 #define RUNTIME_MANAGER_PATH "build/host/tear-runtime-manager-host"
-#define MODEL_V1_PATH "examples/model-v1.json"
-#define MODEL_V2_PATH "examples/model-v2.json"
 #else
 #define TRUSTD_PATH "/bin/tear-trustd"
 #define OPTD_PATH "/bin/tear-optd"
 #define TEARICTL_PATH "/bin/tearictl"
 #define RUNTIME_MANAGER_PATH "/bin/tear-runtime-manager"
-#define MODEL_V1_PATH "/etc/tear/model-v1.json"
-#define MODEL_V2_PATH "/etc/tear/model-v2.json"
 #endif
 
 enum supervisor_state {
@@ -191,8 +187,8 @@ static void handle_supervisor_client(int client)
 static struct supervisor_config parse_args(int argc, char **argv)
 {
     struct supervisor_config cfg = {
-        .workload = "/bin/tear-hello",
-        .manifest = MODEL_V2_PATH,
+        .workload = NULL,
+        .manifest = NULL,
         .enable_optimizer = 0,
         .daemon_mode = 0,
     };
@@ -210,6 +206,26 @@ static struct supervisor_config parse_args(int argc, char **argv)
     }
 
     return cfg;
+}
+
+static int validate_config(const struct supervisor_config *cfg)
+{
+    if (cfg->daemon_mode)
+        return 0;
+
+    if (!cfg->workload || !cfg->manifest) {
+        fprintf(stderr,
+                "usage: tear-supervisor "
+                "--workload <path> "
+                "--manifest <path> "
+                "[--enable-optimizer]\n");
+        fprintf(stderr,
+                "       tear-supervisor --daemon "
+                "[--enable-optimizer]\n");
+        return -1;
+    }
+
+    return 0;
 }
 
 static pid_t start_trustd(void)
@@ -304,45 +320,6 @@ static int run_tearictl(const char *command, const char *arg)
     return WIFEXITED(status) && WEXITSTATUS(status) == 0 ? 0 : -1;
 }
 
-static int provision_demo_model(void)
-{
-    tear_event("provisioning_start");
-
-    if (run_tearictl("enroll", MODEL_V1_PATH) < 0) {
-        tear_event("provisioning_failed");
-        return -1;
-    }
-
-    tear_event("provisioning_done");
-
-    if (run_tearictl("report", NULL) < 0) {
-        tear_event("provisioning_report_failed");
-        return -1;
-    }
-
-    tear_event("provisioning_report_done");
-
-    tear_event("model_update_start");
-
-    if (run_tearictl("update-model", MODEL_V2_PATH) < 0) {
-        tear_event("model_update_failed");
-        return -1;
-    }
-
-    tear_event("model_update_done");
-
-    tear_event("rollback_validation_start");
-
-    if (run_tearictl("update-model", MODEL_V1_PATH) == 0) {
-        tear_event("rollback_validation_failed");
-        return -1;
-    }
-
-    tear_event("rollback_validation_done");
-
-    return 0;
-}
-
 static int provision_selected_manifest(const char *manifest)
 {
     tear_event("provisioning_start");
@@ -388,13 +365,8 @@ static void run_runtime_manager(const struct supervisor_config *cfg)
 
 static int run_workload_once(const struct supervisor_config *cfg)
 {
-    if (cfg->enable_optimizer) {
-        if (provision_selected_manifest(cfg->manifest) < 0)
-            return 1;
-    } else {
-        if (provision_demo_model() < 0)
-            return 1;
-    }
+    if (provision_selected_manifest(cfg->manifest) < 0)
+        return 1;
 
     supervisor_state = SUPERVISOR_STATE_RUNNING;
     tear_event("workload_start");
@@ -482,6 +454,9 @@ static int run_supervisor_daemon(pid_t trustd_pid, pid_t optd_pid)
 int main(int argc, char **argv)
 {
     struct supervisor_config cfg = parse_args(argc, argv);
+
+    if (validate_config(&cfg) < 0)
+        return 1;
 
     tear_event("supervisor_start");
 

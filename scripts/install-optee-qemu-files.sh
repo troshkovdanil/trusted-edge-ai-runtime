@@ -132,7 +132,9 @@ echo "TEAR_OPTEE_TRUSTD_UPDATE_SOCKET_TEST done"
 echo "TEAR_OPTEE_QEMU_TEST start"
 TEAR_TRUSTD_PATH=/bin/tear-trustd-optee \
 TEAR_TRUSTD_BACKEND=optee \
-/bin/tear-supervisor --workload /bin/demo-model
+/bin/tear-supervisor \
+  --workload /bin/demo-model \
+  --manifest /etc/tear/model-v2.json
 rc=$?
 echo "TEAR_OPTEE_QEMU_TEST exit=$rc"
 

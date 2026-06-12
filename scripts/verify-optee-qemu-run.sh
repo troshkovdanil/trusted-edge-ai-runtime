@@ -118,19 +118,9 @@ check_log_ordered "event=optee_model_enroll"
 check_log_ordered "event=tearictl_enroll_done"
 check_log_ordered "event=provisioning_done"
 
-check_log_ordered "STATE demo-model 1 mock sha256-demo-model-v1"
+check_log_ordered "STATE demo-model 2 mock sha256-demo-model-v2"
 check_log_ordered "event=tearictl_report_done"
 check_log_ordered "event=provisioning_report_done"
-
-check_log_ordered "event=model_update_start"
-check_log_ordered "event=optee_model_update_ok"
-check_log_ordered "event=tearictl_update_model_done"
-check_log_ordered "event=model_update_done"
-
-check_log_ordered "event=rollback_validation_start"
-check_log_ordered "event=optee_model_update_rejected"
-check_log_ordered "event=tearictl_update_model_failed"
-check_log_ordered "event=rollback_validation_done"
 
 check_log_ordered "event=workload_start"
 check_log_ordered "event=runtime_manager_start"
@@ -154,4 +144,5 @@ check_log_ordered "event=runtime_manager_shutdown"
 check_log_ordered "event=workload_exit status=0"
 check_log_ordered "event=supervisor_shutdown"
 
+check_log_ordered "TEAR_OPTEE_QEMU_TEST exit=0"
 echo "TEAR verify: all checks passed"
