@@ -45,6 +45,7 @@ struct supervisor_config {
 
 static enum supervisor_state supervisor_state = SUPERVISOR_STATE_INIT;
 static volatile sig_atomic_t supervisor_running = 1;
+static int run_workload_once(const struct supervisor_config *cfg);
 
 static void handle_signal(int signo)
 {
@@ -108,6 +109,42 @@ static int create_supervisor_socket(void)
     return fd;
 }
 
+static int parse_run_command(const char *buf,
+                             struct supervisor_config *run_cfg)
+{
+    char workload[256];
+    char manifest[256];
+    char opt[32] = {0};
+
+    memset(run_cfg, 0, sizeof(*run_cfg));
+
+    int fields = sscanf(buf,
+                        "RUN %255s %255s %31s",
+                        workload,
+                        manifest,
+                        opt);
+
+    if (fields < 2)
+        return -1;
+
+    run_cfg->workload = strdup(workload);
+    run_cfg->manifest = strdup(manifest);
+
+    if (!run_cfg->workload || !run_cfg->manifest)
+        return -1;
+
+    if (fields == 3 && strcmp(opt, "optimizer") == 0)
+        run_cfg->enable_optimizer = 1;
+
+    return 0;
+}
+
+static void free_run_config(struct supervisor_config *cfg)
+{
+    free((void *)cfg->workload);
+    free((void *)cfg->manifest);
+}
+
 static void handle_supervisor_client(int client)
 {
     char buf[128];
@@ -124,6 +161,28 @@ static void handle_supervisor_client(int client)
         dprintf(client,
                 "STATUS %s\n",
                 state_name(supervisor_state));
+    } else if (strncmp(buf, "RUN ", 4) == 0) {
+        struct supervisor_config run_cfg;
+        int ret;
+
+        if (supervisor_state == SUPERVISOR_STATE_RUNNING) {
+           dprintf(client, "ERR busy\n");
+           return;
+        }
+
+        if (parse_run_command(buf, &run_cfg) < 0) {
+            dprintf(client, "ERR invalid_run_command\n");
+            return;
+        }
+
+        ret = run_workload_once(&run_cfg);
+
+        free_run_config(&run_cfg);
+
+        if (ret == 0)
+            dprintf(client, "OK\n");
+        else
+            dprintf(client, "ERR run_failed\n");
     } else {
         dprintf(client, "ERR unknown_command\n");
     }
