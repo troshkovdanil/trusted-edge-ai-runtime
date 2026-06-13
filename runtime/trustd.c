@@ -60,7 +60,7 @@ static int same_manifest(
     const struct tear_model_manifest *a,
     const struct tear_model_manifest *b)
 {
-    return strcmp(a->model_id, b->model_id) == 0 &&
+    return strcmp(a->artifact_id, b->artifact_id) == 0 &&
            a->version == b->version &&
            strcmp(a->backend, b->backend) == 0 &&
            strcmp(a->model_hash, b->model_hash) == 0;
@@ -81,7 +81,7 @@ static int parse_manifest_message(
 
     return sscanf(buf,
                   fmt,
-                  m->model_id,
+                  m->artifact_id,
                   &m->version,
                   m->backend,
                   m->model_hash) == 4 ? 0 : -1;
@@ -103,7 +103,7 @@ static void handle_enroll(int client, const char *buf,
 		char state[256];
 
 		snprintf(state, sizeof(state), "%s %d %s %s",
-			 m.model_id, m.version, m.backend, m.model_hash);
+			 m.artifact_id, m.version, m.backend, m.model_hash);
 
 		if (tear_optee_enroll(state) == 0) {
 			tear_event("optee_model_enroll");
@@ -131,7 +131,7 @@ static void handle_enroll(int client, const char *buf,
 static int model_update_allowed(const struct tear_model_manifest *old,
                                 const struct tear_model_manifest *new)
 {
-        if (strcmp(old->model_id, new->model_id) != 0)
+        if (strcmp(old->artifact_id, new->artifact_id) != 0)
                 return 0;
 
         if (strcmp(old->backend, new->backend) != 0)
@@ -157,7 +157,7 @@ static void handle_update(int client, const char *buf,
 		char state[256];
 
 		snprintf(state, sizeof(state), "%s %d %s %s",
-			 incoming.model_id,
+			 incoming.artifact_id,
 			 incoming.version,
 			 incoming.backend,
 			 incoming.model_hash);
@@ -215,7 +215,7 @@ static void handle_verify(int client, const char *buf,
 		char state[256];
 
 		snprintf(state, sizeof(state), "%s %d %s %s",
-			 incoming.model_id,
+			 incoming.artifact_id,
 			 incoming.version,
 			 incoming.backend,
 			 incoming.model_hash);
@@ -266,7 +266,7 @@ static void handle_report(int client, enum tear_trust_backend backend)
     if (tear_trusted_state_load(TEAR_TRUSTED_STATE, &m) == 0) {
         dprintf(client,
                 "STATE %s %d %s %s\n",
-                m.model_id,
+                m.artifact_id,
                 m.version,
                 m.backend,
                 m.model_hash);
@@ -279,7 +279,7 @@ static void handle_record_decision(int client,
 				   const char *buf,
 				   enum tear_trust_backend backend)
 {
-	char model_id[64];
+	char artifact_id[64];
 	char proposal[128];
 	char decision[64];
 	char reason[128];
@@ -287,7 +287,7 @@ static void handle_record_decision(int client,
 
 	if (sscanf(buf,
 		   "RECORD_DECISION %63s %127s %63s %127s %ld",
-		   model_id,
+		   artifact_id,
 		   proposal,
 		   decision,
 		   reason,
@@ -299,7 +299,7 @@ static void handle_record_decision(int client,
 
 	if (backend == TEAR_TRUST_BACKEND_OPTEE) {
 #ifdef TEAR_ENABLE_OPTEE
-		if (tear_optee_record_decision(model_id,
+		if (tear_optee_record_decision(artifact_id,
 					       proposal,
 					       decision,
 					       reason,
@@ -320,7 +320,7 @@ static void handle_record_decision(int client,
 	}
 
 	if (tear_trusted_state_append_decision(TEAR_TRUSTED_DECISIONS,
-					       model_id,
+					       artifact_id,
 					       proposal,
 					       decision,
 					       reason,

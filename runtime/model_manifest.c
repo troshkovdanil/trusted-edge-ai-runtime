@@ -143,9 +143,9 @@ int tear_manifest_load(
 
     fclose(f);
 
-    if (extract_string(buf, "model_id",
-                       manifest->model_id,
-                       sizeof(manifest->model_id)) < 0)
+    if (extract_string(buf, "artifact_id",
+                       manifest->artifact_id,
+                       sizeof(manifest->artifact_id)) < 0)
         goto fail;
 
     if (extract_int(buf, "version",
@@ -179,7 +179,7 @@ void tear_manifest_print(
     const struct tear_model_manifest *manifest)
 {
     printf("TEAR manifest:\n");
-    printf("  model_id=%s\n", manifest->model_id);
+    printf("  artifact_id=%s\n", manifest->artifact_id);
     printf("  version=%d\n", manifest->version);
     printf("  backend=%s\n", manifest->backend);
     printf("  model_hash=%s\n", manifest->model_hash);

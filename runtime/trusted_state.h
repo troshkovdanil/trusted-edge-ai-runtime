@@ -14,7 +14,7 @@ int tear_trusted_state_load(
     struct tear_model_manifest *manifest);
 
 int tear_trusted_state_append_decision(const char *path,
-                                       const char *model_id,
+                                       const char *artifact_id,
                                        const char *proposal,
                                        const char *decision,
                                        const char *reason,

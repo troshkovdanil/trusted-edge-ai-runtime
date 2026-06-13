@@ -58,7 +58,7 @@ int tear_trust_enroll(
 
     dprintf(fd,
             "ENROLL %s %d %s %s\n",
-            manifest->model_id,
+            manifest->artifact_id,
             manifest->version,
             manifest->backend,
             manifest->model_hash);
@@ -77,7 +77,7 @@ int tear_trust_update_model(const struct tear_model_manifest *manifest)
                 return -1;
 
         dprintf(fd, "UPDATE %s %d %s %s\n",
-                manifest->model_id,
+                manifest->artifact_id,
                 manifest->version,
                 manifest->backend,
                 manifest->model_hash);
@@ -97,7 +97,7 @@ int tear_trust_verify(
 
     dprintf(fd,
             "VERIFY %s %d %s %s\n",
-            manifest->model_id,
+            manifest->artifact_id,
             manifest->version,
             manifest->backend,
             manifest->model_hash);
@@ -135,7 +135,7 @@ int tear_trust_report(void)
     return 0;
 }
 
-int tear_trust_record_decision(const char *model_id,
+int tear_trust_record_decision(const char *artifact_id,
                                const char *proposal,
                                const char *decision,
                                const char *reason,
@@ -148,7 +148,7 @@ int tear_trust_record_decision(const char *model_id,
 
     dprintf(fd,
             "RECORD_DECISION %s %s %s %s %ld\n",
-            model_id,
+            artifact_id,
             proposal,
             decision,
             reason,

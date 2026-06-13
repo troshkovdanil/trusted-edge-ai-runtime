@@ -162,14 +162,14 @@ static void approve_or_reject_proposal(const struct opt_proposal *proposal,
     *reason = "unknown_proposal";
 }
 
-static void record_and_report_optimizer_decision(const char *model_id,
+static void record_and_report_optimizer_decision(const char *artifact_id,
                                                  const char *proposal,
                                                  const char *decision,
                                                  const char *reason)
 {
     char reported_decision[512];
 
-    if (tear_trust_record_decision(model_id,
+    if (tear_trust_record_decision(artifact_id,
                                    proposal,
                                    decision,
                                    reason,
@@ -190,7 +190,7 @@ static void record_and_report_optimizer_decision(const char *model_id,
     tear_event("optimization_decision_reported_by_runtime_manager");
 }
 
-static void record_optimizer_decision(const char *model_id)
+static void record_optimizer_decision(const char *artifact_id)
 {
     struct opt_proposal proposal;
     const char *decision;
@@ -199,7 +199,7 @@ static void record_optimizer_decision(const char *model_id)
     if (ask_optd(&proposal) < 0) {
         tear_event("optimizer_proposal_failed");
 
-        record_and_report_optimizer_decision(model_id,
+        record_and_report_optimizer_decision(artifact_id,
                                              "none",
                                              "rejected",
                                              "optimizer_unavailable");
@@ -217,7 +217,7 @@ static void record_optimizer_decision(const char *model_id)
     tear_event(decision);
     tear_event(decision_reason);
 
-    record_and_report_optimizer_decision(model_id,
+    record_and_report_optimizer_decision(artifact_id,
                                          proposal.action,
                                          decision,
                                          decision_reason);
@@ -324,7 +324,7 @@ int tear_runtime_manager_main(int argc, char **argv)
     }
 
     if (use_optimizer)
-        record_optimizer_decision(manifest.model_id);
+        record_optimizer_decision(manifest.artifact_id);
 
     tear_event("runtime_manager_shutdown");
 

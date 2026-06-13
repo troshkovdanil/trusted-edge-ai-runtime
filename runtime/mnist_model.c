@@ -224,7 +224,7 @@ int main(int argc, char **argv)
     print_digit(input);
 
     printf("TEAR: MNIST workload start\n");
-    printf("TEAR: model_id=%s backend=%s sample=%s\n",
+    printf("TEAR: artifact_id=%s backend=%s sample=%s\n",
            MODEL_ID, BACKEND, sample_name(sample_kind));
 
     check_status(api, api->CreateEnv(ORT_LOGGING_LEVEL_WARNING,

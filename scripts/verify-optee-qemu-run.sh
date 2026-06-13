@@ -126,7 +126,7 @@ check_log_ordered "event=workload_start"
 check_log_ordered "event=runtime_manager_start"
 
 check_log_ordered "event=manifest_loaded"
-check_log_ordered "model_id=demo-model"
+check_log_ordered "artifact_id=demo-model"
 check_log_ordered "version=2"
 check_log_ordered "backend=mock"
 check_log_ordered "model_hash=sha256-demo-model-v2"

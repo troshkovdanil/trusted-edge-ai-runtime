@@ -1,5 +1,5 @@
 {
-  "model_id": "demo-model",
+  "artifact_id": "demo-model",
   "model_name": "TEAR Demo Model",
   "version": 2,
   "backend": "mock",

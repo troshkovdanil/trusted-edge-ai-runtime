@@ -1,5 +1,5 @@
 {
-  "model_id": "mnist-onnx-v1",
+  "artifact_id": "mnist-onnx-v1",
   "version": 1,
   "backend": "onnxruntime-cpu",
   "model_hash": "sha256-mnist-onnx-v1",

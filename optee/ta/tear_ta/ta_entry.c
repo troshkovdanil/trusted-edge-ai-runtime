@@ -149,7 +149,7 @@ static TEE_Result read_trusted_decision(void *buf, size_t buf_len,
 }
 
 struct tear_ta_state {
-	char model_id[64];
+	char artifact_id[64];
 	int version;
 	char backend[32];
 	char model_hash[128];
@@ -205,7 +205,7 @@ static int parse_state(const char *buf, struct tear_ta_state *state)
 
 	TEE_MemFill(state, 0, sizeof(*state));
 
-	if (copy_token(state->model_id, sizeof(state->model_id), &cursor) < 0)
+	if (copy_token(state->artifact_id, sizeof(state->artifact_id), &cursor) < 0)
 		return -1;
 
 	if (copy_token(version_buf, sizeof(version_buf), &cursor) < 0)
@@ -229,7 +229,7 @@ static int parse_state(const char *buf, struct tear_ta_state *state)
 static bool update_allowed(const struct tear_ta_state *old,
 			   const struct tear_ta_state *new)
 {
-	if (strcmp(old->model_id, new->model_id) != 0)
+	if (strcmp(old->artifact_id, new->artifact_id) != 0)
 		return false;
 
 	if (strcmp(old->backend, new->backend) != 0)

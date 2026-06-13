@@ -6,7 +6,7 @@
 #include <string.h>
 
 int tear_trusted_state_append_decision(const char *path,
-                                       const char *model_id,
+                                       const char *artifact_id,
                                        const char *proposal,
                                        const char *decision,
                                        const char *reason,
@@ -18,8 +18,8 @@ int tear_trusted_state_append_decision(const char *path,
         return -1;
 
     fprintf(f,
-            "model_id=%s proposal=%s decision=%s reason=%s value=%ld\n",
-            model_id, proposal, decision, reason, value);
+            "artifact_id=%s proposal=%s decision=%s reason=%s value=%ld\n",
+            artifact_id, proposal, decision, reason, value);
 
     fclose(f);
     return 0;
@@ -36,7 +36,7 @@ int tear_trusted_state_store(
         return -1;
     }
 
-    fprintf(f, "%s\n", manifest->model_id);
+    fprintf(f, "%s\n", manifest->artifact_id);
     fprintf(f, "%d\n", manifest->version);
     fprintf(f, "%s\n", manifest->backend);
     fprintf(f, "%s\n", manifest->model_hash);
@@ -58,8 +58,8 @@ int tear_trusted_state_load(
 
     memset(manifest, 0, sizeof(*manifest));
 
-    if (!fgets(manifest->model_id,
-               sizeof(manifest->model_id), f))
+    if (!fgets(manifest->artifact_id,
+               sizeof(manifest->artifact_id), f))
         goto fail;
 
     if (fscanf(f, "%d\n", &manifest->version) != 1)
@@ -73,8 +73,8 @@ int tear_trusted_state_load(
                sizeof(manifest->model_hash), f))
         goto fail;
 
-    manifest->model_id[
-        strcspn(manifest->model_id, "\n")] = '\0';
+    manifest->artifact_id[
+        strcspn(manifest->artifact_id, "\n")] = '\0';
 
     manifest->backend[
         strcspn(manifest->backend, "\n")] = '\0';
