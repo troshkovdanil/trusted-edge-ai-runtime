@@ -40,6 +40,22 @@ static int create_socket(void)
     return fd;
 }
 
+static int parse_metric_line(const char *line,
+                             const char *metric_name,
+                             long *value)
+{
+    const char *event = strstr(line, "event=mnist");
+    const char *metric = strstr(line, metric_name);
+
+    if (!event || !metric)
+        return -1;
+
+    if (sscanf(metric, "%*[^=]=%ld", value) != 1)
+        return -1;
+
+    return 0;
+}
+
 static int load_metrics(const char *path, struct tear_inference_metrics *metrics)
 {
     FILE *f = fopen(path, "r");
@@ -56,17 +72,17 @@ static int load_metrics(const char *path, struct tear_inference_metrics *metrics
     while (fgets(line, sizeof(line), f)) {
         long value;
 
-        if (sscanf(line,
-                   "TEAR_EVENT %*s event=mnist confidence_margin_x1000=%ld",
-                   &value) == 1) {
+        if (parse_metric_line(line,
+                              "confidence_margin_x1000",
+                              &value) == 0) {
             metrics->confidence_margin_x1000 = value;
             have_margin = 1;
             continue;
         }
 
-        if (sscanf(line,
-                   "TEAR_EVENT %*s event=mnist input_density_x1000=%ld",
-                   &value) == 1) {
+        if (parse_metric_line(line,
+                              "input_density_x1000",
+                              &value) == 0) {
             metrics->input_density_x1000 = value;
             have_density = 1;
             continue;
