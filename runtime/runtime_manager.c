@@ -18,8 +18,10 @@
 #define TEAR_MNIST_METRICS "/tmp/tear-mnist-metrics"
 
 struct runtime_config {
+    const char *name;
     const char *workload;
     const char *manifest;
+    const char *args;
     int enable_optimizer;
 };
 
@@ -32,16 +34,22 @@ struct opt_proposal {
 static struct runtime_config parse_args(int argc, char **argv)
 {
     struct runtime_config cfg = {
+        .name = "runtime-workload",
         .workload = NULL,
         .manifest = NULL,
+        .args = "",
         .enable_optimizer = 0,
     };
 
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--workload") == 0 && i + 1 < argc) {
+        if (strcmp(argv[i], "--name") == 0 && i + 1 < argc) {
+            cfg.name = argv[++i];
+        } else if (strcmp(argv[i], "--workload") == 0 && i + 1 < argc) {
             cfg.workload = argv[++i];
         } else if (strcmp(argv[i], "--manifest") == 0 && i + 1 < argc) {
             cfg.manifest = argv[++i];
+        } else if (strcmp(argv[i], "--args") == 0 && i + 1 < argc) {
+            cfg.args = argv[++i];
         } else if (strcmp(argv[i], "--enable-optimizer") == 0) {
             cfg.enable_optimizer = 1;
         }
@@ -55,8 +63,10 @@ static int validate_config(const struct runtime_config *cfg)
     if (!cfg->workload || !cfg->manifest) {
         fprintf(stderr,
                 "usage: tear-runtime-manager "
+                "[--name <name>] "
                 "--workload <path> "
                 "--manifest <path> "
+                "[--args <args>] "
                 "[--enable-optimizer]\n");
         return -1;
     }
@@ -213,6 +223,26 @@ static void record_optimizer_decision(const char *model_id)
                                          decision_reason);
 }
 
+static void run_workload_process(const struct runtime_config *cfg)
+{
+    char command[512];
+
+    if (cfg->args && cfg->args[0] != '\0') {
+        snprintf(command,
+                 sizeof(command),
+                 "%s %s",
+                 cfg->workload,
+                 cfg->args);
+
+        execl("/bin/sh", "sh", "-c", command, NULL);
+    } else {
+        execl(cfg->workload, cfg->workload, NULL);
+    }
+
+    perror("execl");
+    _exit(127);
+}
+
 int tear_runtime_manager_main(int argc, char **argv)
 {
     struct runtime_config cfg = parse_args(argc, argv);
@@ -220,6 +250,9 @@ int tear_runtime_manager_main(int argc, char **argv)
     int use_optimizer = 0;
 
     tear_event("runtime_manager_start");
+
+    if (cfg.name)
+        tear_event(cfg.name);
 
     if (validate_config(&cfg) < 0) {
         tear_event("runtime_manager_invalid_config");
@@ -269,10 +302,7 @@ int tear_runtime_manager_main(int argc, char **argv)
         if (use_optimizer)
             setenv("TEAR_TELEMETRY_FILE", TEAR_MNIST_METRICS, 1);
 
-        execl(cfg.workload, cfg.workload, NULL);
-
-        perror("execl");
-        _exit(127);
+        run_workload_process(&cfg);
     }
 
     int status = 0;

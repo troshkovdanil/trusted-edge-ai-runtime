@@ -41,7 +41,7 @@ ORT_AARCH64_LIB := $(ORT_AARCH64_DIR)/lib
 
 RUNTIME_PATHS_SRCS := runtime/runtime_paths.c
 
-.PHONY: build clean clean-all host-build host-test host-supervisor-test mnist-assets host-mnist-test host-adaptive-supervisor-test full-verify optee-qemu-install optee-qemu-build optee-qemu-run optee-qemu-test optee-ta optee-ca optee-trustd
+.PHONY: build clean clean-all host-build host-test host-supervisor-test host-mnist-test host-adaptive-supervisor-test host-plan-test full-verify mnist-assets optee-qemu-install optee-qemu-build optee-qemu-run optee-qemu-test optee-qemu-mnist-adaptive-install optee-qemu-mnist-adaptive-build optee-qemu-mnist-adaptive-run optee-qemu-mnist-adaptive-test optee-ta optee-ca optee-trustd
 
 mnist-assets:
 	./scripts/fetch-mnist-onnx.sh
@@ -129,7 +129,7 @@ host-build: mnist-assets
 
 clean:
 	rm -rf $(BUILD)/rootfs
-	rm -f $(SUPERVISOR) $(DEMO_MODEL) $(RUNTIME_MANAGER) $(TRUSTD) $(TEARICTL) $(OPTD) $(MNIST_MODEL) $(INITRAMFS) $(BUILD)/telemetry.log
+	rm -f $(SUPERVISOR) $(DEMO_MODEL) $(RUNTIME_MANAGER) $(TRUSTD) $(TEARICTL) $(OPTD) $(MNIST_MODEL) $(BUILD)/telemetry.log
 	rm -f $(BUILD)/optee-normal-world.log $(BUILD)/optee-secure-world.log
 	rm -rf $(BUILD)/optee
 	rm -rf $(BUILD)/host
@@ -144,12 +144,7 @@ host-test: host-build
 	./$(HOST_HELLO)
 
 host-supervisor-test: host-build
-	mkdir -p $(HOST_BUILD)
-	ln -sf tear-trustd-host $(HOST_BUILD)/tear-trustd
-	ln -sf tearictl-host $(HOST_BUILD)/tearictl
-	ln -sf tear-runtime-manager-host $(HOST_BUILD)/tear-runtime-manager
-	ln -sf demo-model-host $(HOST_BUILD)/demo-model
-	PATH="$(abspath $(HOST_BUILD)):$$PATH" \
+	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock
 	./$(HOST_SUPERVISOR) \
 	    --workload "$(abspath $(HOST_DEMO_MODEL))" \
 	    --manifest examples/model-v2.json \
@@ -181,25 +176,53 @@ host-mnist-test: host-build
 
 host-adaptive-supervisor-test: host-build
 	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-trusted-decisions /tmp/tear-mnist-metrics
-	TEAR_MNIST_SAMPLE=clean7 \
-	./$(HOST_SUPERVISOR) --workload "$(abspath $(HOST_MNIST_MODEL))" --manifest examples/mnist-model.json --enable-optimizer > $(HOST_BUILD)/adaptive-clean7.log 2>&1
+	./$(HOST_SUPERVISOR) \
+	    --workload "$(abspath $(HOST_MNIST_MODEL))" \
+	    --manifest examples/mnist-model.json \
+	    --args "--sample clean7" \
+	    --enable-optimizer \
+	    > $(HOST_BUILD)/adaptive-clean7.log 2>&1
 	grep -q "event=mnist_inference_metrics" /tmp/tear-mnist-metrics
 	grep -q "event=optimizer_proposal_received" $(HOST_BUILD)/adaptive-clean7.log
 	grep -q "proposal=keep_current_profile decision=approved reason=policy_allows" /tmp/tear-trusted-decisions
 	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-trusted-decisions /tmp/tear-mnist-metrics
-	TEAR_MNIST_SAMPLE=weak7 \
-	./$(HOST_SUPERVISOR) --workload "$(abspath $(HOST_MNIST_MODEL))" --manifest examples/mnist-model.json --enable-optimizer > $(HOST_BUILD)/adaptive-weak7.log 2>&1
+	./$(HOST_SUPERVISOR) \
+	    --workload "$(abspath $(HOST_MNIST_MODEL))" \
+	    --manifest examples/mnist-model.json \
+	    --args "--sample weak7" \
+	    --enable-optimizer \
+	    > $(HOST_BUILD)/adaptive-weak7.log 2>&1
 	grep -q "event=mnist_inference_metrics" /tmp/tear-mnist-metrics
 	grep -q "event=optimizer_proposal_received" $(HOST_BUILD)/adaptive-weak7.log
 	grep -q "proposal=request_high_accuracy_profile decision=rejected reason=profile_unavailable" /tmp/tear-trusted-decisions
 	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-trusted-decisions /tmp/tear-mnist-metrics
-	TEAR_MNIST_SAMPLE=noise \
-	./$(HOST_SUPERVISOR) --workload "$(abspath $(HOST_MNIST_MODEL))" --manifest examples/mnist-model.json --enable-optimizer > $(HOST_BUILD)/adaptive-noise.log 2>&1
+	./$(HOST_SUPERVISOR) \
+	    --workload "$(abspath $(HOST_MNIST_MODEL))" \
+	    --manifest examples/mnist-model.json \
+	    --args "--sample noise" \
+	    --enable-optimizer \
+	    > $(HOST_BUILD)/adaptive-noise.log 2>&1
 	grep -q "event=mnist_inference_metrics" /tmp/tear-mnist-metrics
 	grep -q "event=optimizer_proposal_received" $(HOST_BUILD)/adaptive-noise.log
 	grep -q "proposal=reject_input decision=approved reason=input_rejected" /tmp/tear-trusted-decisions
 
-full-verify: host-test host-supervisor-test host-mnist-test host-adaptive-supervisor-test
+host-plan-test: host-build
+	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-supervisor.sock /tmp/tear-trusted-decisions /tmp/tear-mnist-metrics
+	./$(HOST_SUPERVISOR) --daemon --enable-optimizer > $(HOST_BUILD)/plan.log 2>&1 & \
+	    supervisor_pid=$$!; \
+	    sleep 2; \
+	    python3 -c 'import socket; s=socket.socket(socket.AF_UNIX, socket.SOCK_STREAM); s.connect("/tmp/tear-supervisor.sock"); s.sendall(b"RUN_PLAN plans/host-demo.plan\n"); print(s.recv(4096).decode(), end=""); s.close()' > $(HOST_BUILD)/plan-client.log; \
+	    kill -INT $$supervisor_pid; \
+	    wait $$supervisor_pid || true
+	grep -q "OK" $(HOST_BUILD)/plan-client.log
+	grep -q "event=run_plan_start" $(HOST_BUILD)/plan.log
+	grep -q "event=demo" $(HOST_BUILD)/plan.log
+	grep -q "event=mnist-clean7" $(HOST_BUILD)/plan.log
+	grep -q "event=mnist-weak7" $(HOST_BUILD)/plan.log
+	grep -q "event=mnist-noise" $(HOST_BUILD)/plan.log
+	grep -q "event=run_plan_done" $(HOST_BUILD)/plan.log
+
+full-verify: host-test host-supervisor-test host-mnist-test host-adaptive-supervisor-test host-plan-test
 
 optee-qemu-install: build optee-ta optee-ca optee-trustd
 	./scripts/install-optee-qemu-files.sh $(OPTEE_QEMU_DIR)

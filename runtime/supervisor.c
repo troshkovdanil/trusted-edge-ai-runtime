@@ -33,8 +33,10 @@ enum supervisor_state {
 };
 
 struct supervisor_config {
+    const char *name;
     const char *workload;
     const char *manifest;
+    const char *args;
     int enable_optimizer;
     int daemon_mode;
 };
@@ -106,40 +108,112 @@ static int create_supervisor_socket(void)
     return fd;
 }
 
+static char *trim_newline(char *s)
+{
+    size_t len = strlen(s);
+
+    while (len > 0 &&
+           (s[len - 1] == '\n' || s[len - 1] == '\r')) {
+        s[len - 1] = '\0';
+        len--;
+    }
+
+    return s;
+}
+
+static char *next_token(char **cursor)
+{
+    char *start;
+
+    while (**cursor == ' ' || **cursor == '\t')
+        (*cursor)++;
+
+    if (**cursor == '\0')
+        return NULL;
+
+    start = *cursor;
+
+    while (**cursor != '\0' &&
+           **cursor != ' ' &&
+           **cursor != '\t')
+        (*cursor)++;
+
+    if (**cursor != '\0') {
+        **cursor = '\0';
+        (*cursor)++;
+    }
+
+    return start;
+}
+
 static int parse_run_command(const char *buf,
                              struct supervisor_config *run_cfg)
 {
-    char workload[256];
-    char manifest[256];
-    char opt[32] = {0};
+    char local[512];
+    char *cursor;
+    char *command;
+    char *name;
+    char *workload;
+    char *manifest;
+    char *token;
+    char *args = NULL;
 
     memset(run_cfg, 0, sizeof(*run_cfg));
 
-    int fields = sscanf(buf,
-                        "RUN %255s %255s %31s",
-                        workload,
-                        manifest,
-                        opt);
+    strncpy(local, buf, sizeof(local) - 1);
+    local[sizeof(local) - 1] = '\0';
+    trim_newline(local);
 
-    if (fields < 2)
+    cursor = local;
+
+    command = next_token(&cursor);
+    if (!command || strcmp(command, "RUN") != 0)
         return -1;
 
+    name = next_token(&cursor);
+    workload = next_token(&cursor);
+    manifest = next_token(&cursor);
+
+    if (!name || !workload || !manifest)
+        return -1;
+
+    while ((token = next_token(&cursor)) != NULL) {
+        if (strcmp(token, "optimizer") == 0) {
+            run_cfg->enable_optimizer = 1;
+        } else if (strcmp(token, "--") == 0) {
+            while (*cursor == ' ' || *cursor == '\t')
+                cursor++;
+            args = cursor;
+            break;
+        } else {
+            return -1;
+        }
+    }
+
+    run_cfg->name = strdup(name);
     run_cfg->workload = strdup(workload);
     run_cfg->manifest = strdup(manifest);
 
-    if (!run_cfg->workload || !run_cfg->manifest)
-        return -1;
+    if (args && args[0] != '\0')
+        run_cfg->args = strdup(args);
+    else
+        run_cfg->args = strdup("");
 
-    if (fields == 3 && strcmp(opt, "optimizer") == 0)
-        run_cfg->enable_optimizer = 1;
+    if (!run_cfg->name ||
+        !run_cfg->workload ||
+        !run_cfg->manifest ||
+        !run_cfg->args)
+        return -1;
 
     return 0;
 }
 
 static void free_run_config(struct supervisor_config *cfg)
 {
+    free((void *)cfg->name);
     free((void *)cfg->workload);
     free((void *)cfg->manifest);
+    free((void *)cfg->args);
 }
 
 static int run_command_line(const char *line)
@@ -208,7 +282,7 @@ static int run_plan_file(const char *path)
 
 static void handle_supervisor_client(int client)
 {
-    char buf[128];
+    char buf[512];
     ssize_t n = read(client, buf, sizeof(buf) - 1);
 
     if (n <= 0)
@@ -247,8 +321,8 @@ static void handle_supervisor_client(int client)
         int ret;
 
         if (supervisor_state == SUPERVISOR_STATE_RUNNING) {
-           dprintf(client, "ERR busy\n");
-           return;
+            dprintf(client, "ERR busy\n");
+            return;
         }
 
         if (parse_run_command(buf, &run_cfg) < 0) {
@@ -272,8 +346,10 @@ static void handle_supervisor_client(int client)
 static struct supervisor_config parse_args(int argc, char **argv)
 {
     struct supervisor_config cfg = {
+        .name = "cli-workload",
         .workload = NULL,
         .manifest = NULL,
+        .args = "",
         .enable_optimizer = 0,
         .daemon_mode = 0,
     };
@@ -283,6 +359,8 @@ static struct supervisor_config parse_args(int argc, char **argv)
             cfg.workload = argv[++i];
         } else if (strcmp(argv[i], "--manifest") == 0 && i + 1 < argc) {
             cfg.manifest = argv[++i];
+        } else if (strcmp(argv[i], "--args") == 0 && i + 1 < argc) {
+            cfg.args = argv[++i];
         } else if (strcmp(argv[i], "--enable-optimizer") == 0) {
             cfg.enable_optimizer = 1;
         } else if (strcmp(argv[i], "--daemon") == 0) {
@@ -303,6 +381,7 @@ static int validate_config(const struct supervisor_config *cfg)
                 "usage: tear-supervisor "
                 "--workload <path> "
                 "--manifest <path> "
+                "[--args <args>] "
                 "[--enable-optimizer]\n");
         fprintf(stderr,
                 "       tear-supervisor --daemon "
@@ -431,25 +510,36 @@ static void run_runtime_manager(const struct supervisor_config *cfg)
     if (cfg->enable_optimizer) {
         execl(RUNTIME_MANAGER_PATH,
               RUNTIME_MANAGER_PATH,
+              "--name",
+              cfg->name,
               "--workload",
               cfg->workload,
               "--manifest",
               cfg->manifest,
+              "--args",
+              cfg->args,
               "--enable-optimizer",
               NULL);
     } else {
         execl(RUNTIME_MANAGER_PATH,
               RUNTIME_MANAGER_PATH,
+              "--name",
+              cfg->name,
               "--workload",
               cfg->workload,
               "--manifest",
               cfg->manifest,
+              "--args",
+              cfg->args,
               NULL);
     }
 }
 
 static int run_workload_once(const struct supervisor_config *cfg)
 {
+    if (cfg->name)
+        tear_event(cfg->name);
+
     if (provision_selected_manifest(cfg->manifest) < 0)
         return 1;
 
