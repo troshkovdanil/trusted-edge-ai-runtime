@@ -36,23 +36,22 @@ cp -v external/onnxruntime-aarch64/lib/libonnxruntime.so* "$TARGET/usr/lib/"
 cp -v examples/model-v1.json "$TARGET/etc/tear/"
 cp -v examples/model-v2.json "$TARGET/etc/tear/"
 
-
 if [ "$TEST_MODE" = "mnist-adaptive" ]; then
     cat > "$TARGET/etc/init.d/S99tear-test" <<'EOS'
 #!/bin/sh
 
 echo "TEAR_OPTEE_MNIST_ADAPTIVE_TEST start"
-rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-trusted-decisions /tmp/tear-mnist-metrics
+rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-trusted-decisions /tmp/tear-metrics-cli-workload
 
-TEAR_MNIST_SAMPLE=weak7 \
 TEAR_TRUSTD_PATH=/bin/tear-trustd-optee \
 TEAR_TRUSTD_BACKEND=optee \
 /bin/tear-supervisor \
   --workload /bin/mnist-model \
   --manifest /etc/tear/mnist-model.json \
+  --args "--sample weak7" \
   --enable-optimizer || exit 1
 
-grep -q "event=mnist_inference_metrics" /tmp/tear-mnist-metrics || exit 1
+grep -q "event=mnist_inference_metrics" /tmp/tear-metrics-cli-workload || exit 1
 echo "TEAR_OPTEE_MNIST_ADAPTIVE_TEST done"
 
 poweroff -f
@@ -65,21 +64,17 @@ echo "TEAR_OPTEE_CA_TEST start"
 /bin/tear-optee-ca || exit 1
 echo "TEAR_OPTEE_CA_TEST done"
 
-
 echo "TEAR_OPTEE_TRUSTD_SELF_TEST start"
 /bin/tear-trustd-optee --backend optee --self-test || exit 1
 echo "TEAR_OPTEE_TRUSTD_SELF_TEST done"
-
 
 echo "TEAR_OPTEE_TRUSTD_ENROLL_SELF_TEST start"
 /bin/tear-trustd-optee --backend optee --self-test-enroll || exit 1
 echo "TEAR_OPTEE_TRUSTD_ENROLL_SELF_TEST done"
 
-
 echo "TEAR_OPTEE_TRUSTD_VERIFY_SELF_TEST start"
 /bin/tear-trustd-optee --backend optee --self-test-verify || exit 1
 echo "TEAR_OPTEE_TRUSTD_VERIFY_SELF_TEST done"
-
 
 echo "TEAR_OPTEE_TRUSTD_ENROLL_SOCKET_TEST start"
 /bin/tear-trustd-optee --backend optee &
@@ -91,7 +86,6 @@ sleep 1
 }
 kill "$trustd_pid"
 echo "TEAR_OPTEE_TRUSTD_ENROLL_SOCKET_TEST done"
-
 
 echo "TEAR_OPTEE_TRUSTD_VERIFY_SOCKET_TEST start"
 /bin/tear-trustd-optee --backend optee &
@@ -107,7 +101,6 @@ sleep 1
 }
 kill "$trustd_pid"
 echo "TEAR_OPTEE_TRUSTD_VERIFY_SOCKET_TEST done"
-
 
 echo "TEAR_OPTEE_TRUSTD_UPDATE_SOCKET_TEST start"
 /bin/tear-trustd-optee --backend optee &
@@ -127,7 +120,6 @@ sleep 1
 }
 kill "$trustd_pid"
 echo "TEAR_OPTEE_TRUSTD_UPDATE_SOCKET_TEST done"
-
 
 echo "TEAR_OPTEE_QEMU_TEST start"
 TEAR_TRUSTD_PATH=/bin/tear-trustd-optee \

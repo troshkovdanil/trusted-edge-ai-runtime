@@ -15,7 +15,8 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#define TEAR_MNIST_METRICS "/tmp/tear-mnist-metrics"
+#define TEAR_METRICS_PATH_PREFIX "/tmp/tear-metrics-"
+#define TEAR_METRICS_PATH_MAX 256
 
 struct runtime_config {
     const char *name;
@@ -74,7 +75,19 @@ static int validate_config(const struct runtime_config *cfg)
     return 0;
 }
 
-static int ask_optd(struct opt_proposal *proposal)
+static void build_metrics_path(const char *workload_name,
+                               char *path,
+                               size_t path_size)
+{
+    snprintf(path,
+             path_size,
+             "%s%s",
+             TEAR_METRICS_PATH_PREFIX,
+             workload_name ? workload_name : "unknown");
+}
+
+static int ask_optd(const char *metrics_path,
+                    struct opt_proposal *proposal)
 {
     int fd = socket(AF_UNIX, SOCK_STREAM, 0);
 
@@ -94,7 +107,7 @@ static int ask_optd(struct opt_proposal *proposal)
         return -1;
     }
 
-    dprintf(fd, "PROPOSE %s\n", TEAR_MNIST_METRICS);
+    dprintf(fd, "PROPOSE %s\n", metrics_path);
 
     char buf[256];
     ssize_t n = read(fd, buf, sizeof(buf) - 1);
@@ -190,13 +203,14 @@ static void record_and_report_optimizer_decision(const char *artifact_id,
     tear_event("optimization_decision_reported_by_runtime_manager");
 }
 
-static void record_optimizer_decision(const char *artifact_id)
+static void record_optimizer_decision(const char *artifact_id,
+                                      const char *metrics_path)
 {
     struct opt_proposal proposal;
     const char *decision;
     const char *decision_reason;
 
-    if (ask_optd(&proposal) < 0) {
+    if (ask_optd(metrics_path, &proposal) < 0) {
         tear_event("optimizer_proposal_failed");
 
         record_and_report_optimizer_decision(artifact_id,
@@ -248,6 +262,9 @@ int tear_runtime_manager_main(int argc, char **argv)
     struct runtime_config cfg = parse_args(argc, argv);
     struct tear_model_manifest manifest;
     int use_optimizer = 0;
+    char metrics_path[TEAR_METRICS_PATH_MAX];
+
+    build_metrics_path(cfg.name, metrics_path, sizeof(metrics_path));
 
     tear_event("runtime_manager_start");
 
@@ -290,6 +307,9 @@ int tear_runtime_manager_main(int argc, char **argv)
     if (cfg.enable_optimizer && !manifest.optimization_capable)
         tear_event("optimizer_skipped_manifest_not_capable");
 
+    if (use_optimizer)
+        unlink(metrics_path);
+
     pid_t pid = fork();
 
     if (pid < 0) {
@@ -300,7 +320,7 @@ int tear_runtime_manager_main(int argc, char **argv)
 
     if (pid == 0) {
         if (use_optimizer)
-            setenv("TEAR_TELEMETRY_FILE", TEAR_MNIST_METRICS, 1);
+            setenv("TEAR_TELEMETRY_FILE", metrics_path, 1);
 
         run_workload_process(&cfg);
     }
@@ -324,7 +344,7 @@ int tear_runtime_manager_main(int argc, char **argv)
     }
 
     if (use_optimizer)
-        record_optimizer_decision(manifest.artifact_id);
+        record_optimizer_decision(manifest.artifact_id, metrics_path);
 
     tear_event("runtime_manager_shutdown");
 
