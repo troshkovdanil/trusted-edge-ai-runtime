@@ -42,6 +42,7 @@ struct supervisor_config {
 static enum supervisor_state supervisor_state = SUPERVISOR_STATE_INIT;
 static volatile sig_atomic_t supervisor_running = 1;
 static int run_workload_once(const struct supervisor_config *cfg);
+static int run_plan_file(const char *path);
 
 static void handle_signal(int signo)
 {
@@ -141,6 +142,70 @@ static void free_run_config(struct supervisor_config *cfg)
     free((void *)cfg->manifest);
 }
 
+static int run_command_line(const char *line)
+{
+    struct supervisor_config run_cfg;
+    int ret;
+
+    if (parse_run_command(line, &run_cfg) < 0)
+        return -1;
+
+    ret = run_workload_once(&run_cfg);
+
+    free_run_config(&run_cfg);
+
+    return ret;
+}
+
+static int should_skip_plan_line(const char *line)
+{
+    while (*line == ' ' || *line == '\t')
+        line++;
+
+    return *line == '\0' || *line == '\n' || *line == '#';
+}
+
+static int run_plan_file(const char *path)
+{
+    FILE *fp;
+    char line[512];
+    int line_no = 0;
+
+    fp = fopen(path, "r");
+    if (!fp) {
+        perror("open plan");
+        tear_event("run_plan_open_failed");
+        return -1;
+    }
+
+    tear_event("run_plan_start");
+
+    while (fgets(line, sizeof(line), fp)) {
+        line_no++;
+
+        if (should_skip_plan_line(line))
+            continue;
+
+        if (strncmp(line, "RUN ", 4) != 0) {
+            tear_event_kv("run_plan_invalid_line", "line", line_no);
+            fclose(fp);
+            return -1;
+        }
+
+        if (run_command_line(line) < 0) {
+            tear_event_kv("run_plan_failed", "line", line_no);
+            fclose(fp);
+            return -1;
+        }
+    }
+
+    fclose(fp);
+
+    tear_event("run_plan_done");
+
+    return 0;
+}
+
 static void handle_supervisor_client(int client)
 {
     char buf[128];
@@ -157,6 +222,26 @@ static void handle_supervisor_client(int client)
         dprintf(client,
                 "STATUS %s\n",
                 state_name(supervisor_state));
+    } else if (strncmp(buf, "RUN_PLAN ", 9) == 0) {
+        char path[256];
+        int ret;
+
+        if (supervisor_state == SUPERVISOR_STATE_RUNNING) {
+            dprintf(client, "ERR busy\n");
+            return;
+        }
+
+        if (sscanf(buf, "RUN_PLAN %255s", path) != 1) {
+            dprintf(client, "ERR invalid_run_plan_command\n");
+            return;
+        }
+
+        ret = run_plan_file(path);
+
+        if (ret == 0)
+            dprintf(client, "OK\n");
+        else
+            dprintf(client, "ERR run_plan_failed\n");
     } else if (strncmp(buf, "RUN ", 4) == 0) {
         struct supervisor_config run_cfg;
         int ret;

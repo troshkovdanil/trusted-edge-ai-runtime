@@ -1,0 +1,3 @@
+# TEAR host daemon validation plan
+RUN build/host/demo-model-host examples/model-v2.json
+RUN build/host/mnist-model-host examples/mnist-model.json optimizer
