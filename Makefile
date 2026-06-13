@@ -162,19 +162,19 @@ host-mnist-test: host-build
 	grep -q "TEAR: MNIST workload start" $(HOST_BUILD)/mnist-clean7.log
 	grep -q "TEAR: artifact_id=mnist-onnx-v1 backend=onnxruntime-cpu sample=clean7" $(HOST_BUILD)/mnist-clean7.log
 	grep -q "TEAR: metric predicted_digit=" $(HOST_BUILD)/mnist-clean7.log
-	grep -q "TEAR_EVENT .*event=mnist confidence_margin_x1000=" $(HOST_BUILD)/mnist-clean7.log
+	grep -q "TEAR_METRIC .*name=confidence_margin_x1000" $(HOST_BUILD)/mnist-clean7.log
 	grep -q "TEAR: MNIST workload finished" $(HOST_BUILD)/mnist-clean7.log
 	./$(HOST_MNIST_MODEL) --sample weak7 > $(HOST_BUILD)/mnist-weak7.log 2>&1
 	grep -q "TEAR: MNIST workload start" $(HOST_BUILD)/mnist-weak7.log
 	grep -q "TEAR: artifact_id=mnist-onnx-v1 backend=onnxruntime-cpu sample=weak7" $(HOST_BUILD)/mnist-weak7.log
 	grep -q "TEAR: metric predicted_digit=" $(HOST_BUILD)/mnist-weak7.log
-	grep -q "TEAR_EVENT .*event=mnist confidence_margin_x1000=" $(HOST_BUILD)/mnist-weak7.log
+	grep -q "TEAR_METRIC .*name=confidence_margin_x1000" $(HOST_BUILD)/mnist-weak7.log
 	grep -q "TEAR: MNIST workload finished" $(HOST_BUILD)/mnist-weak7.log
 	./$(HOST_MNIST_MODEL) --sample noise > $(HOST_BUILD)/mnist-noise.log 2>&1
 	grep -q "TEAR: MNIST workload start" $(HOST_BUILD)/mnist-noise.log
 	grep -q "TEAR: artifact_id=mnist-onnx-v1 backend=onnxruntime-cpu sample=noise" $(HOST_BUILD)/mnist-noise.log
 	grep -q "TEAR: metric predicted_digit=" $(HOST_BUILD)/mnist-noise.log
-	grep -q "TEAR_EVENT .*event=mnist confidence_margin_x1000=" $(HOST_BUILD)/mnist-noise.log
+	grep -q "TEAR_METRIC .*name=confidence_margin_x1000" $(HOST_BUILD)/mnist-noise.log
 	grep -q "TEAR: MNIST workload finished" $(HOST_BUILD)/mnist-noise.log
 
 host-adaptive-supervisor-test: host-build
@@ -185,7 +185,7 @@ host-adaptive-supervisor-test: host-build
 	    --args "--sample clean7" \
 	    --enable-optimizer \
 	    > $(HOST_BUILD)/adaptive-clean7.log 2>&1
-	grep -q "event=mnist_inference_metrics" /tmp/tear-metrics-cli-workload
+	grep -q "TEAR_METRIC .*name=confidence_margin_x1000" /tmp/tear-metrics-cli-workload
 	grep -q "event=optimizer_proposal_received" $(HOST_BUILD)/adaptive-clean7.log
 	grep -q "proposal=keep_current_profile decision=approved reason=policy_allows" /tmp/tear-trusted-decisions
 	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-trusted-decisions /tmp/tear-metrics-cli-workload
@@ -195,7 +195,7 @@ host-adaptive-supervisor-test: host-build
 	    --args "--sample weak7" \
 	    --enable-optimizer \
 	    > $(HOST_BUILD)/adaptive-weak7.log 2>&1
-	grep -q "event=mnist_inference_metrics" /tmp/tear-metrics-cli-workload
+	grep -q "TEAR_METRIC .*name=confidence_margin_x1000" /tmp/tear-metrics-cli-workload
 	grep -q "event=optimizer_proposal_received" $(HOST_BUILD)/adaptive-weak7.log
 	grep -q "proposal=request_high_accuracy_profile decision=rejected reason=profile_unavailable" /tmp/tear-trusted-decisions
 	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-trusted-decisions /tmp/tear-metrics-cli-workload
@@ -205,12 +205,12 @@ host-adaptive-supervisor-test: host-build
 	    --args "--sample noise" \
 	    --enable-optimizer \
 	    > $(HOST_BUILD)/adaptive-noise.log 2>&1
-	grep -q "event=mnist_inference_metrics" /tmp/tear-metrics-cli-workload
+	grep -q "TEAR_METRIC .*name=confidence_margin_x1000" /tmp/tear-metrics-cli-workload
 	grep -q "event=optimizer_proposal_received" $(HOST_BUILD)/adaptive-noise.log
 	grep -q "proposal=reject_input decision=approved reason=input_rejected" /tmp/tear-trusted-decisions
 
 host-plan-test: host-build
-	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-supervisor.sock /tmp/tear-trusted-decisions /tmp/tear-metrics-cli-workload
+	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-supervisor.sock /tmp/tear-trusted-decisions /tmp/tear-metrics-*
 	./$(HOST_SUPERVISOR) --daemon --enable-optimizer > $(HOST_BUILD)/plan.log 2>&1 & \
 	    supervisor_pid=$$!; \
 	    sleep 2; \
@@ -224,6 +224,9 @@ host-plan-test: host-build
 	grep -q "event=mnist-weak7" $(HOST_BUILD)/plan.log
 	grep -q "event=mnist-noise" $(HOST_BUILD)/plan.log
 	grep -q "event=run_plan_done" $(HOST_BUILD)/plan.log
+	grep -q "TEAR_METRIC .*name=confidence_margin_x1000" /tmp/tear-metrics-mnist-clean7
+	grep -q "TEAR_METRIC .*name=confidence_margin_x1000" /tmp/tear-metrics-mnist-weak7
+	grep -q "TEAR_METRIC .*name=confidence_margin_x1000" /tmp/tear-metrics-mnist-noise
 
 full-verify: host-test host-supervisor-test host-mnist-test host-adaptive-supervisor-test host-plan-test
 

@@ -300,15 +300,21 @@ int main(int argc, char **argv)
     printf("TEAR: predicted_digit=%d latency_us=%lld\n",
            predicted_digit, (long long)latency_us);
 
-    tear_event("mnist_inference_metrics");
-    tear_event_kv("mnist", "sample_kind", sample_kind);
-    tear_event_kv("mnist", "predicted_digit", predicted_digit);
-    tear_event_kv("mnist", "top1_score_x1000", top1_score_x1000);
-    tear_event_kv("mnist", "top2_score_x1000", top2_score_x1000);
-    tear_event_kv("mnist", "confidence_margin_x1000",
-                  confidence_margin_x1000);
-    tear_event_kv("mnist", "input_density_x1000", density_x1000);
-    tear_event_kv("mnist", "latency_us", (long)latency_us);
+    tear_event_ex("mnist_model", NULL, MODEL_ID, "mnist_inference_metrics");
+    tear_metric_long("mnist_model", NULL, MODEL_ID,
+                     "sample_kind", sample_kind);
+    tear_metric_long("mnist_model", NULL, MODEL_ID,
+                     "predicted_digit", predicted_digit);
+    tear_metric_long("mnist_model", NULL, MODEL_ID,
+                     "top1_score_x1000", top1_score_x1000);
+    tear_metric_long("mnist_model", NULL, MODEL_ID,
+                     "top2_score_x1000", top2_score_x1000);
+    tear_metric_long("mnist_model", NULL, MODEL_ID,
+                     "confidence_margin_x1000", confidence_margin_x1000);
+    tear_metric_long("mnist_model", NULL, MODEL_ID,
+                     "input_density_x1000", density_x1000);
+    tear_metric_long("mnist_model", NULL, MODEL_ID,
+                     "latency_us", (long)latency_us);
 
     printf("TEAR: MNIST workload finished\n");
 

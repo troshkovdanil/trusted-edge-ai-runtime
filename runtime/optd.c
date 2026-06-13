@@ -44,13 +44,19 @@ static int parse_metric_line(const char *line,
                              const char *metric_name,
                              long *value)
 {
-    const char *event = strstr(line, "event=mnist");
-    const char *metric = strstr(line, metric_name);
+    const char *record = strstr(line, "TEAR_METRIC");
+    const char *name = strstr(line, "name=");
+    const char *metric_value = strstr(line, "value=");
 
-    if (!event || !metric)
+    if (!record || !name || !metric_value)
         return -1;
 
-    if (sscanf(metric, "%*[^=]=%ld", value) != 1)
+    if (strncmp(name + strlen("name="),
+                metric_name,
+                strlen(metric_name)) != 0)
+        return -1;
+
+    if (sscanf(metric_value, "value=%ld", value) != 1)
         return -1;
 
     return 0;

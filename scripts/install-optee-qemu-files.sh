@@ -51,7 +51,8 @@ TEAR_TRUSTD_BACKEND=optee \
   --args "--sample weak7" \
   --enable-optimizer || exit 1
 
-grep -q "event=mnist_inference_metrics" /tmp/tear-metrics-cli-workload || exit 1
+grep -q "TEAR_METRIC .*name=confidence_margin_x1000" /tmp/tear-metrics-cli-workload || exit 1
+grep -q "TEAR_METRIC .*name=input_density_x1000" /tmp/tear-metrics-cli-workload || exit 1
 echo "TEAR_OPTEE_MNIST_ADAPTIVE_TEST done"
 
 poweroff -f
