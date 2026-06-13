@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "model_manifest.h"
-#include "telemetry.h"
+#include "observability.h"
 #include "trusted_state.h"
 #ifdef TEAR_ENABLE_OPTEE
 #include "tear_optee_client.h"

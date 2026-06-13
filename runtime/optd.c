@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "optimizer_policy.h"
-#include "telemetry.h"
+#include "observability.h"
 #include "runtime_paths.h"
 
 #include <stdio.h>

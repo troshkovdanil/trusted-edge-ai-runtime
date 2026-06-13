@@ -4,7 +4,7 @@
 
 #include "model_manifest.h"
 #include "runtime_paths.h"
-#include "telemetry.h"
+#include "observability.h"
 #include "trust_client.h"
 
 #include <stdio.h>

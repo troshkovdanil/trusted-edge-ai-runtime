@@ -40,6 +40,15 @@ ORT_AARCH64_INCLUDE := $(ORT_AARCH64_DIR)/include
 ORT_AARCH64_LIB := $(ORT_AARCH64_DIR)/lib
 
 RUNTIME_PATHS_SRCS := runtime/runtime_paths.c
+OBSERVABILITY_SRCS := runtime/observability.c
+MANIFEST_SRCS := runtime/model_manifest.c
+TRUST_CLIENT_SRCS := runtime/trust_client.c
+TRUSTD_SRCS := runtime/trustd.c runtime/trusted_state.c
+OPTD_SRCS := runtime/optd.c runtime/optimizer_policy.c
+RUNTIME_MANAGER_SRCS := runtime/runtime_manager_main.c runtime/runtime_manager.c
+TEARICTL_SRCS := runtime/tearictl.c
+DEMO_MODEL_SRCS := runtime/demo_model.c
+MNIST_MODEL_SRCS := runtime/mnist_model.c
 
 .PHONY: build clean clean-all host-build host-test host-supervisor-test host-mnist-test host-adaptive-supervisor-test host-plan-test full-verify mnist-assets optee-qemu-install optee-qemu-build optee-qemu-run optee-qemu-test optee-qemu-mnist-adaptive-install optee-qemu-mnist-adaptive-build optee-qemu-mnist-adaptive-run optee-qemu-mnist-adaptive-test optee-ta optee-ca optee-trustd
 
@@ -49,39 +58,36 @@ mnist-assets:
 build: mnist-assets
 	mkdir -p $(BUILD)
 	$(CC) -static -O2 -Wall -Wextra \
-		-o $(SUPERVISOR) runtime/supervisor.c $(RUNTIME_PATHS_SRCS) runtime/telemetry.c
+		-o $(SUPERVISOR) runtime/supervisor.c $(RUNTIME_PATHS_SRCS) $(OBSERVABILITY_SRCS)
 	$(CC) -static -O2 -Wall -Wextra \
-		-o $(DEMO_MODEL) runtime/demo_model.c runtime/telemetry.c
+		-o $(DEMO_MODEL) $(DEMO_MODEL_SRCS) $(OBSERVABILITY_SRCS)
 	$(CC) -static -O2 -Wall -Wextra \
 		-o $(RUNTIME_MANAGER) \
-		runtime/runtime_manager_main.c \
-		runtime/runtime_manager.c \
-		runtime/model_manifest.c \
-		runtime/trust_client.c \
+		$(RUNTIME_MANAGER_SRCS) \
+		$(MANIFEST_SRCS) \
+		$(TRUST_CLIENT_SRCS) \
 		$(RUNTIME_PATHS_SRCS) \
-		runtime/telemetry.c
+		$(OBSERVABILITY_SRCS)
 	$(CC) -static -O2 -Wall -Wextra \
 		-o $(TRUSTD) \
-		runtime/trustd.c \
-		runtime/trusted_state.c \
+		$(TRUSTD_SRCS) \
 		$(RUNTIME_PATHS_SRCS) \
-		runtime/telemetry.c
+		$(OBSERVABILITY_SRCS)
 	$(CC) -static -O2 -Wall -Wextra \
 		-o $(TEARICTL) \
-		runtime/tearictl.c \
-		runtime/model_manifest.c \
-		runtime/trust_client.c \
+		$(TEARICTL_SRCS) \
+		$(MANIFEST_SRCS) \
+		$(TRUST_CLIENT_SRCS) \
 		$(RUNTIME_PATHS_SRCS) \
-		runtime/telemetry.c
+		$(OBSERVABILITY_SRCS)
 	$(CC) -static -O2 -Wall -Wextra \
 		-o $(OPTD) \
-		runtime/optd.c \
-		runtime/optimizer_policy.c \
+		$(OPTD_SRCS) \
 		$(RUNTIME_PATHS_SRCS) \
-		runtime/telemetry.c
+		$(OBSERVABILITY_SRCS)
 	$(CC) -O2 -Wall -Wextra \
 		-I$(ORT_AARCH64_INCLUDE) \
-		-o $(MNIST_MODEL) runtime/mnist_model.c runtime/telemetry.c \
+		-o $(MNIST_MODEL) $(MNIST_MODEL_SRCS) $(OBSERVABILITY_SRCS) \
 		-L$(ORT_AARCH64_LIB) \
 		-lonnxruntime \
 		-Wl,-rpath,/usr/lib
@@ -91,41 +97,38 @@ host-build: mnist-assets
 	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
 		-o $(HOST_HELLO) runtime/hello.c
 	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
-		-o $(HOST_SUPERVISOR) runtime/supervisor.c $(RUNTIME_PATHS_SRCS) runtime/telemetry.c
+		-o $(HOST_SUPERVISOR) runtime/supervisor.c $(RUNTIME_PATHS_SRCS) $(OBSERVABILITY_SRCS)
 	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
-		-o $(HOST_DEMO_MODEL) runtime/demo_model.c runtime/telemetry.c
+		-o $(HOST_DEMO_MODEL) $(DEMO_MODEL_SRCS) $(OBSERVABILITY_SRCS)
 	gcc -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
 		-Iexternal/onnxruntime/include \
-		-o $(HOST_MNIST_MODEL) runtime/mnist_model.c runtime/telemetry.c \
+		-o $(HOST_MNIST_MODEL) $(MNIST_MODEL_SRCS) $(OBSERVABILITY_SRCS) \
 		-Lexternal/onnxruntime/lib -lonnxruntime \
 		-Wl,-rpath,'$$ORIGIN/../../external/onnxruntime/lib'
 	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
 		-o $(HOST_RUNTIME_MANAGER) \
-		runtime/runtime_manager_main.c \
-		runtime/runtime_manager.c \
-		runtime/model_manifest.c \
-		runtime/trust_client.c \
+		$(RUNTIME_MANAGER_SRCS) \
+		$(MANIFEST_SRCS) \
+		$(TRUST_CLIENT_SRCS) \
 		$(RUNTIME_PATHS_SRCS) \
-		runtime/telemetry.c
+		$(OBSERVABILITY_SRCS)
 	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
 		-o $(HOST_TRUSTD) \
-		runtime/trustd.c \
-		runtime/trusted_state.c \
+		$(TRUSTD_SRCS) \
 		$(RUNTIME_PATHS_SRCS) \
-		runtime/telemetry.c
+		$(OBSERVABILITY_SRCS)
 	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
 		-o $(HOST_TEARICTL) \
-		runtime/tearictl.c \
-		runtime/model_manifest.c \
-		runtime/trust_client.c \
+		$(TEARICTL_SRCS) \
+		$(MANIFEST_SRCS) \
+		$(TRUST_CLIENT_SRCS) \
 		$(RUNTIME_PATHS_SRCS) \
-		runtime/telemetry.c
+		$(OBSERVABILITY_SRCS)
 	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
 		-o $(HOST_OPTD) \
-		runtime/optd.c \
-		runtime/optimizer_policy.c \
+		$(OPTD_SRCS) \
 		$(RUNTIME_PATHS_SRCS) \
-		runtime/telemetry.c
+		$(OBSERVABILITY_SRCS)
 
 clean:
 	rm -rf $(BUILD)/rootfs
@@ -281,10 +284,9 @@ optee-trustd: optee-ca
 		-Ioptee/ta/tear_ta/include \
 		-I$(OPTEE_CLIENT_INCLUDE) \
 		-o $(OPTEE_TRUSTD) \
-		runtime/trustd.c \
-		runtime/trusted_state.c \
+		$(TRUSTD_SRCS) \
 		$(RUNTIME_PATHS_SRCS) \
-		runtime/telemetry.c \
+		$(OBSERVABILITY_SRCS) \
 		optee/ca/tear_optee_client.c \
 		-L$(OPTEE_CLIENT_LIB) \
 		-Wl,-rpath-link,$(OPTEE_CLIENT_LIB) \

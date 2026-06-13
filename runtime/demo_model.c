@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
-#include "telemetry.h"
+#include "observability.h"
 
 #include <stdio.h>
 #include <unistd.h>
