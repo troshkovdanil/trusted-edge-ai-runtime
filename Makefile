@@ -218,12 +218,12 @@ host-plan-test: host-build
 	    kill -INT $$supervisor_pid; \
 	    wait $$supervisor_pid || true
 	grep -q "OK" $(HOST_BUILD)/plan-client.log
-	grep -q "event=run_plan_start" $(HOST_BUILD)/plan.log
-	grep -q "event=demo" $(HOST_BUILD)/plan.log
-	grep -q "event=mnist-clean7" $(HOST_BUILD)/plan.log
-	grep -q "event=mnist-weak7" $(HOST_BUILD)/plan.log
-	grep -q "event=mnist-noise" $(HOST_BUILD)/plan.log
-	grep -q "event=run_plan_done" $(HOST_BUILD)/plan.log
+	grep -q "component=supervisor event=run_plan_start" $(HOST_BUILD)/plan.log
+	grep -q "component=supervisor workload=demo event=workload_selected" $(HOST_BUILD)/plan.log
+	grep -q "component=supervisor workload=mnist-clean7 event=workload_selected" $(HOST_BUILD)/plan.log
+	grep -q "component=supervisor workload=mnist-weak7 event=workload_selected" $(HOST_BUILD)/plan.log
+	grep -q "component=supervisor workload=mnist-noise event=workload_selected" $(HOST_BUILD)/plan.log
+	grep -q "component=supervisor event=run_plan_done" $(HOST_BUILD)/plan.log
 	grep -q "TEAR_METRIC .*name=confidence_margin_x1000" /tmp/tear-metrics-mnist-clean7
 	grep -q "TEAR_METRIC .*name=confidence_margin_x1000" /tmp/tear-metrics-mnist-weak7
 	grep -q "TEAR_METRIC .*name=confidence_margin_x1000" /tmp/tear-metrics-mnist-noise

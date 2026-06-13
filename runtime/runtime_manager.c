@@ -15,6 +15,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
+#define TEAR_COMPONENT "runtime_manager"
 #define TEAR_METRICS_PATH_PREFIX "/tmp/tear-metrics-"
 #define TEAR_METRICS_PATH_MAX 256
 
@@ -31,6 +32,27 @@ struct opt_proposal {
     char reason[128];
     int available;
 };
+
+static void runtime_event(const char *workload,
+                          const char *artifact_id,
+                          const char *event)
+{
+    tear_event_ex(TEAR_COMPONENT, workload, artifact_id, event);
+}
+
+static void runtime_event_kv(const char *workload,
+                             const char *artifact_id,
+                             const char *event,
+                             const char *key,
+                             long value)
+{
+    tear_event_ex_kv(TEAR_COMPONENT,
+                     workload,
+                     artifact_id,
+                     event,
+                     key,
+                     value);
+}
 
 static struct runtime_config parse_args(int argc, char **argv)
 {
@@ -175,7 +197,8 @@ static void approve_or_reject_proposal(const struct opt_proposal *proposal,
     *reason = "unknown_proposal";
 }
 
-static void record_and_report_optimizer_decision(const char *artifact_id,
+static void record_and_report_optimizer_decision(const char *workload,
+                                                 const char *artifact_id,
                                                  const char *proposal,
                                                  const char *decision,
                                                  const char *reason)
@@ -187,23 +210,32 @@ static void record_and_report_optimizer_decision(const char *artifact_id,
                                    decision,
                                    reason,
                                    0) < 0) {
-        tear_event("optimization_decision_record_failed");
+        runtime_event(workload,
+                      artifact_id,
+                      "optimization_decision_record_failed");
         return;
     }
 
-    tear_event("optimization_decision_recorded_by_runtime_manager");
+    runtime_event(workload,
+                  artifact_id,
+                  "optimization_decision_recorded_by_runtime_manager");
 
     if (tear_trust_report_decision(reported_decision,
                                    sizeof(reported_decision)) < 0) {
-        tear_event("optimization_decision_report_failed");
+        runtime_event(workload,
+                      artifact_id,
+                      "optimization_decision_report_failed");
         return;
     }
 
     printf("TEAR: reported_decision %s\n", reported_decision);
-    tear_event("optimization_decision_reported_by_runtime_manager");
+    runtime_event(workload,
+                  artifact_id,
+                  "optimization_decision_reported_by_runtime_manager");
 }
 
-static void record_optimizer_decision(const char *artifact_id,
+static void record_optimizer_decision(const char *workload,
+                                      const char *artifact_id,
                                       const char *metrics_path)
 {
     struct opt_proposal proposal;
@@ -211,9 +243,10 @@ static void record_optimizer_decision(const char *artifact_id,
     const char *decision_reason;
 
     if (ask_optd(metrics_path, &proposal) < 0) {
-        tear_event("optimizer_proposal_failed");
+        runtime_event(workload, artifact_id, "optimizer_proposal_failed");
 
-        record_and_report_optimizer_decision(artifact_id,
+        record_and_report_optimizer_decision(workload,
+                                             artifact_id,
                                              "none",
                                              "rejected",
                                              "optimizer_unavailable");
@@ -221,17 +254,18 @@ static void record_optimizer_decision(const char *artifact_id,
     }
 
     if (!proposal.available)
-        tear_event("optimizer_no_proposal");
+        runtime_event(workload, artifact_id, "optimizer_no_proposal");
     else
-        tear_event("optimizer_proposal_received");
+        runtime_event(workload, artifact_id, "optimizer_proposal_received");
 
     approve_or_reject_proposal(&proposal, &decision, &decision_reason);
 
-    tear_event(proposal.action);
-    tear_event(decision);
-    tear_event(decision_reason);
+    runtime_event(workload, artifact_id, proposal.action);
+    runtime_event(workload, artifact_id, decision);
+    runtime_event(workload, artifact_id, decision_reason);
 
-    record_and_report_optimizer_decision(artifact_id,
+    record_and_report_optimizer_decision(workload,
+                                         artifact_id,
                                          proposal.action,
                                          decision,
                                          decision_reason);
@@ -266,46 +300,51 @@ int tear_runtime_manager_main(int argc, char **argv)
 
     build_metrics_path(cfg.name, metrics_path, sizeof(metrics_path));
 
-    tear_event("runtime_manager_start");
-
-    if (cfg.name)
-        tear_event(cfg.name);
+    runtime_event(cfg.name, NULL, "runtime_manager_start");
 
     if (validate_config(&cfg) < 0) {
-        tear_event("runtime_manager_invalid_config");
+        runtime_event(cfg.name, NULL, "runtime_manager_invalid_config");
         return 1;
     }
+
+    runtime_event(cfg.name, NULL, "manifest_load_start");
 
     if (tear_manifest_load(cfg.manifest, &manifest) < 0) {
         fprintf(stderr, "TEAR: failed to load manifest\n");
-        tear_event("manifest_load_failed");
+        runtime_event(cfg.name, NULL, "manifest_load_failed");
         return 1;
     }
 
-    tear_event("manifest_loaded");
+    runtime_event(cfg.name, manifest.artifact_id, "manifest_loaded");
 
     tear_manifest_print(&manifest);
 
     if (tear_trust_verify(&manifest) < 0) {
         fprintf(stderr, "TEAR: manifest verification failed\n");
-        tear_event("manifest_verify_failed");
+        runtime_event(cfg.name,
+                      manifest.artifact_id,
+                      "manifest_verify_failed");
         return 1;
     }
 
-    tear_event("manifest_verified");
+    runtime_event(cfg.name, manifest.artifact_id, "manifest_verified");
 
     if (manifest.optimization_capable && !cfg.enable_optimizer) {
         fprintf(stderr,
                 "TEAR: workload is optimization-capable "
                 "but optimizer is disabled\n");
-        tear_event("optimizer_required_but_disabled");
+        runtime_event(cfg.name,
+                      manifest.artifact_id,
+                      "optimizer_required_but_disabled");
         return 1;
     }
 
     use_optimizer = cfg.enable_optimizer && manifest.optimization_capable;
 
     if (cfg.enable_optimizer && !manifest.optimization_capable)
-        tear_event("optimizer_skipped_manifest_not_capable");
+        runtime_event(cfg.name,
+                      manifest.artifact_id,
+                      "optimizer_skipped_manifest_not_capable");
 
     if (use_optimizer)
         unlink(metrics_path);
@@ -314,7 +353,9 @@ int tear_runtime_manager_main(int argc, char **argv)
 
     if (pid < 0) {
         perror("fork");
-        tear_event("runtime_manager_fork_failed");
+        runtime_event(cfg.name,
+                      manifest.artifact_id,
+                      "runtime_manager_fork_failed");
         return 1;
     }
 
@@ -329,24 +370,34 @@ int tear_runtime_manager_main(int argc, char **argv)
 
     if (waitpid(pid, &status, 0) < 0) {
         perror("waitpid");
-        tear_event("runtime_manager_wait_failed");
+        runtime_event(cfg.name,
+                      manifest.artifact_id,
+                      "runtime_manager_wait_failed");
         return 1;
     }
 
     if (WIFEXITED(status)) {
-        tear_event_kv("runtime_workload_exit",
-                      "status",
-                      WEXITSTATUS(status));
+        runtime_event_kv(cfg.name,
+                         manifest.artifact_id,
+                         "runtime_workload_exit",
+                         "status",
+                         WEXITSTATUS(status));
     } else if (WIFSIGNALED(status)) {
-        tear_event_kv("runtime_workload_signal",
-                      "signal",
-                      WTERMSIG(status));
+        runtime_event_kv(cfg.name,
+                         manifest.artifact_id,
+                         "runtime_workload_signal",
+                         "signal",
+                         WTERMSIG(status));
     }
 
     if (use_optimizer)
-        record_optimizer_decision(manifest.artifact_id, metrics_path);
+        record_optimizer_decision(cfg.name,
+                                  manifest.artifact_id,
+                                  metrics_path);
 
-    tear_event("runtime_manager_shutdown");
+    runtime_event(cfg.name,
+                  manifest.artifact_id,
+                  "runtime_manager_shutdown");
 
     return WIFEXITED(status) && WEXITSTATUS(status) == 0 ? 0 : 1;
 }

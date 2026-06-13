@@ -25,6 +25,8 @@
 #define RUNTIME_MANAGER_PATH "/bin/tear-runtime-manager"
 #endif
 
+#define TEAR_COMPONENT "supervisor"
+
 enum supervisor_state {
     SUPERVISOR_STATE_INIT,
     SUPERVISOR_STATE_READY,
@@ -45,6 +47,32 @@ static enum supervisor_state supervisor_state = SUPERVISOR_STATE_INIT;
 static volatile sig_atomic_t supervisor_running = 1;
 static int run_workload_once(const struct supervisor_config *cfg);
 static int run_plan_file(const char *path);
+
+static void supervisor_event(const char *event)
+{
+    tear_event_ex(TEAR_COMPONENT, NULL, NULL, event);
+}
+
+static void supervisor_event_kv(const char *event,
+                                const char *key,
+                                long value)
+{
+    tear_event_ex_kv(TEAR_COMPONENT, NULL, NULL, event, key, value);
+}
+
+static void supervisor_workload_event(const char *workload,
+                                      const char *event)
+{
+    tear_event_ex(TEAR_COMPONENT, workload, NULL, event);
+}
+
+static void supervisor_workload_event_kv(const char *workload,
+                                         const char *event,
+                                         const char *key,
+                                         long value)
+{
+    tear_event_ex_kv(TEAR_COMPONENT, workload, NULL, event, key, value);
+}
 
 static void handle_signal(int signo)
 {
@@ -248,11 +276,11 @@ static int run_plan_file(const char *path)
     fp = fopen(path, "r");
     if (!fp) {
         perror("open plan");
-        tear_event("run_plan_open_failed");
+        supervisor_event("run_plan_open_failed");
         return -1;
     }
 
-    tear_event("run_plan_start");
+    supervisor_event("run_plan_start");
 
     while (fgets(line, sizeof(line), fp)) {
         line_no++;
@@ -261,13 +289,13 @@ static int run_plan_file(const char *path)
             continue;
 
         if (strncmp(line, "RUN ", 4) != 0) {
-            tear_event_kv("run_plan_invalid_line", "line", line_no);
+            supervisor_event_kv("run_plan_invalid_line", "line", line_no);
             fclose(fp);
             return -1;
         }
 
         if (run_command_line(line) < 0) {
-            tear_event_kv("run_plan_failed", "line", line_no);
+            supervisor_event_kv("run_plan_failed", "line", line_no);
             fclose(fp);
             return -1;
         }
@@ -275,7 +303,7 @@ static int run_plan_file(const char *path)
 
     fclose(fp);
 
-    tear_event("run_plan_done");
+    supervisor_event("run_plan_done");
 
     return 0;
 }
@@ -484,23 +512,23 @@ static int run_tearictl(const char *command, const char *arg)
     return WIFEXITED(status) && WEXITSTATUS(status) == 0 ? 0 : -1;
 }
 
-static int provision_selected_manifest(const char *manifest)
+static int provision_selected_manifest(const struct supervisor_config *cfg)
 {
-    tear_event("provisioning_start");
+    supervisor_workload_event(cfg->name, "provisioning_start");
 
-    if (run_tearictl("enroll", manifest) < 0) {
-        tear_event("provisioning_failed");
+    if (run_tearictl("enroll", cfg->manifest) < 0) {
+        supervisor_workload_event(cfg->name, "provisioning_failed");
         return -1;
     }
 
-    tear_event("provisioning_done");
+    supervisor_workload_event(cfg->name, "provisioning_done");
 
     if (run_tearictl("report", NULL) < 0) {
-        tear_event("provisioning_report_failed");
+        supervisor_workload_event(cfg->name, "provisioning_report_failed");
         return -1;
     }
 
-    tear_event("provisioning_report_done");
+    supervisor_workload_event(cfg->name, "provisioning_report_done");
 
     return 0;
 }
@@ -537,20 +565,22 @@ static void run_runtime_manager(const struct supervisor_config *cfg)
 
 static int run_workload_once(const struct supervisor_config *cfg)
 {
-    if (cfg->name)
-        tear_event(cfg->name);
+    supervisor_workload_event(cfg->name, "workload_selected");
 
-    if (provision_selected_manifest(cfg->manifest) < 0)
+    if (provision_selected_manifest(cfg) < 0)
         return 1;
 
     supervisor_state = SUPERVISOR_STATE_RUNNING;
-    tear_event("workload_start");
+    supervisor_workload_event(cfg->name, "workload_start");
 
     pid_t pid = fork();
 
     if (pid < 0) {
         perror("fork");
-        tear_event_kv("supervisor_error", "errno", errno);
+        supervisor_workload_event_kv(cfg->name,
+                                     "supervisor_error",
+                                     "errno",
+                                     errno);
         supervisor_state = SUPERVISOR_STATE_READY;
         return 1;
     }
@@ -566,17 +596,26 @@ static int run_workload_once(const struct supervisor_config *cfg)
 
     if (waitpid(pid, &status, 0) < 0) {
         perror("waitpid");
-        tear_event_kv("supervisor_error", "errno", errno);
+        supervisor_workload_event_kv(cfg->name,
+                                     "supervisor_error",
+                                     "errno",
+                                     errno);
         supervisor_state = SUPERVISOR_STATE_READY;
         return 1;
     }
 
     if (WIFEXITED(status)) {
-        tear_event_kv("workload_exit", "status", WEXITSTATUS(status));
+        supervisor_workload_event_kv(cfg->name,
+                                     "workload_exit",
+                                     "status",
+                                     WEXITSTATUS(status));
     } else if (WIFSIGNALED(status)) {
-        tear_event_kv("workload_signal", "signal", WTERMSIG(status));
+        supervisor_workload_event_kv(cfg->name,
+                                     "workload_signal",
+                                     "signal",
+                                     WTERMSIG(status));
     } else {
-        tear_event("workload_unknown_exit");
+        supervisor_workload_event(cfg->name, "workload_unknown_exit");
     }
 
     supervisor_state = SUPERVISOR_STATE_READY;
@@ -590,14 +629,14 @@ static int run_supervisor_daemon(pid_t trustd_pid, pid_t optd_pid)
 
     if (server < 0) {
         perror("supervisor socket");
-        tear_event("supervisor_socket_failed");
+        supervisor_event("supervisor_socket_failed");
         return 1;
     }
 
     install_signal_handlers();
 
     supervisor_state = SUPERVISOR_STATE_READY;
-    tear_event("supervisor_daemon_ready");
+    supervisor_event("supervisor_daemon_ready");
 
     while (supervisor_running) {
         int client = accept(server, NULL, NULL);
@@ -615,7 +654,7 @@ static int run_supervisor_daemon(pid_t trustd_pid, pid_t optd_pid)
     }
 
     supervisor_state = SUPERVISOR_STATE_SHUTTING_DOWN;
-    tear_event("supervisor_daemon_shutdown");
+    supervisor_event("supervisor_daemon_shutdown");
 
     close(server);
     unlink(tear_supervisor_socket_path());
@@ -633,12 +672,12 @@ int main(int argc, char **argv)
     if (validate_config(&cfg) < 0)
         return 1;
 
-    tear_event("supervisor_start");
+    supervisor_event("supervisor_start");
 
     pid_t trustd_pid = start_trustd();
 
     if (trustd_pid < 0) {
-        tear_event("trustd_start_failed");
+        supervisor_event("trustd_start_failed");
         return 1;
     }
 
@@ -648,7 +687,7 @@ int main(int argc, char **argv)
         optd_pid = start_optd();
 
         if (optd_pid < 0) {
-            tear_event("optd_start_failed");
+            supervisor_event("optd_start_failed");
             stop_child(trustd_pid);
             return 1;
         }
@@ -664,7 +703,7 @@ int main(int argc, char **argv)
     stop_child(optd_pid);
     stop_child(trustd_pid);
 
-    tear_event("supervisor_shutdown");
+    supervisor_event("supervisor_shutdown");
 
     return ret;
 }
