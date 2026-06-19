@@ -218,13 +218,15 @@ static void approve_or_reject_proposal(const struct opt_proposal *proposal,
 
 static void record_and_report_optimizer_decision(const char *workload,
                                                  const char *artifact_id,
+                                                 const char *run_id,
                                                  const char *proposal,
                                                  const char *decision,
                                                  const char *reason)
 {
     char reported_decision[512];
 
-    if (tear_trust_record_decision(artifact_id,
+    if (tear_trust_record_decision(run_id,
+                                   artifact_id,
                                    proposal,
                                    decision,
                                    reason,
@@ -248,6 +250,7 @@ static void record_and_report_optimizer_decision(const char *workload,
     }
 
     printf("TEAR: reported_decision %s\n", reported_decision);
+
     runtime_event(workload,
                   artifact_id,
                   "optimization_decision_reported_by_runtime_manager");
@@ -255,6 +258,7 @@ static void record_and_report_optimizer_decision(const char *workload,
 
 static void record_optimizer_decision(const char *workload,
                                       const char *artifact_id,
+                                      const char *run_id,
                                       const char *metrics_path)
 {
     struct opt_proposal proposal;
@@ -266,6 +270,7 @@ static void record_optimizer_decision(const char *workload,
 
         record_and_report_optimizer_decision(workload,
                                              artifact_id,
+                                             run_id,
                                              "none",
                                              "rejected",
                                              "optimizer_unavailable");
@@ -285,6 +290,7 @@ static void record_optimizer_decision(const char *workload,
 
     record_and_report_optimizer_decision(workload,
                                          artifact_id,
+                                         run_id,
                                          proposal.action,
                                          decision,
                                          decision_reason);
@@ -452,6 +458,7 @@ int tear_runtime_manager_main(int argc, char **argv)
     if (use_optimizer)
         record_optimizer_decision(cfg.name,
                                   manifest.artifact_id,
+                                  run_id,
                                   metrics_path);
 
     runtime_event(cfg.name,

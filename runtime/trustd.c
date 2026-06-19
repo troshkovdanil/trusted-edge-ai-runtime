@@ -285,6 +285,7 @@ static void handle_record_decision(int client,
                                    const char *buf,
                                    enum tear_trust_backend backend)
 {
+    char run_id[64];
     char artifact_id[64];
     char proposal[128];
     char decision[64];
@@ -292,12 +293,13 @@ static void handle_record_decision(int client,
     long value;
 
     if (sscanf(buf,
-               "RECORD_DECISION %63s %127s %63s %127s %ld",
+               "RECORD_DECISION %63s %63s %127s %63s %127s %ld",
+               run_id,
                artifact_id,
                proposal,
                decision,
                reason,
-               &value) != 5) {
+               &value) != 6) {
         trustd_event(NULL, "optimization_decision_record_failed");
         dprintf(client, "ERR\n");
         return;
@@ -305,7 +307,8 @@ static void handle_record_decision(int client,
 
     if (backend == TEAR_TRUST_BACKEND_OPTEE) {
 #ifdef TEAR_ENABLE_OPTEE
-        if (tear_optee_record_decision(artifact_id,
+        if (tear_optee_record_decision(run_id,
+                                       artifact_id,
                                        proposal,
                                        decision,
                                        reason,
@@ -326,6 +329,7 @@ static void handle_record_decision(int client,
     }
 
     if (tear_trusted_state_append_decision(TEAR_TRUSTED_DECISIONS,
+                                           run_id,
                                            artifact_id,
                                            proposal,
                                            decision,

@@ -6,6 +6,7 @@
 #include <string.h>
 
 int tear_trusted_state_append_decision(const char *path,
+                                       const char *run_id,
                                        const char *artifact_id,
                                        const char *proposal,
                                        const char *decision,
@@ -18,8 +19,8 @@ int tear_trusted_state_append_decision(const char *path,
         return -1;
 
     fprintf(f,
-            "artifact_id=%s proposal=%s decision=%s reason=%s value=%ld\n",
-            artifact_id, proposal, decision, reason, value);
+            "run_id=%s artifact_id=%s proposal=%s decision=%s reason=%s value=%ld\n",
+            run_id, artifact_id, proposal, decision, reason, value);
 
     fclose(f);
     return 0;

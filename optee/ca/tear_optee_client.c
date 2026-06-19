@@ -142,7 +142,8 @@ int tear_optee_report(char *state, size_t state_size)
 	return 0;
 }
 
-int tear_optee_record_decision(const char *artifact_id,
+int tear_optee_record_decision(const char *run_id,
+			       const char *artifact_id,
 			       const char *proposal,
 			       const char *decision,
 			       const char *reason,
@@ -151,11 +152,12 @@ int tear_optee_record_decision(const char *artifact_id,
 	char record[512];
 	int n;
 
-	if (!artifact_id || !proposal || !decision || !reason)
+	if (!run_id || !artifact_id || !proposal || !decision || !reason)
 		return -1;
 
 	n = snprintf(record, sizeof(record),
-		     "artifact_id=%s proposal=%s decision=%s reason=%s value=%ld",
+		     "run_id=%s artifact_id=%s proposal=%s decision=%s reason=%s value=%ld",
+		     run_id,
 		     artifact_id,
 		     proposal,
 		     decision,

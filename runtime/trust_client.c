@@ -72,19 +72,23 @@ int tear_trust_enroll(
 
 int tear_trust_update_model(const struct tear_model_manifest *manifest)
 {
-        int fd = connect_socket();
-        if (fd < 0)
-                return -1;
+    int fd = connect_socket();
 
-        dprintf(fd, "UPDATE %s %d %s %s\n",
-                manifest->artifact_id,
-                manifest->version,
-                manifest->backend,
-                manifest->model_hash);
+    if (fd < 0)
+        return -1;
 
-        int ret = expect_ok(fd);
-        close(fd);
-        return ret;
+    dprintf(fd,
+            "UPDATE %s %d %s %s\n",
+            manifest->artifact_id,
+            manifest->version,
+            manifest->backend,
+            manifest->model_hash);
+
+    int ret = expect_ok(fd);
+
+    close(fd);
+
+    return ret;
 }
 
 int tear_trust_verify(
@@ -135,7 +139,8 @@ int tear_trust_report(void)
     return 0;
 }
 
-int tear_trust_record_decision(const char *artifact_id,
+int tear_trust_record_decision(const char *run_id,
+                               const char *artifact_id,
                                const char *proposal,
                                const char *decision,
                                const char *reason,
@@ -147,7 +152,8 @@ int tear_trust_record_decision(const char *artifact_id,
         return -1;
 
     dprintf(fd,
-            "RECORD_DECISION %s %s %s %s %ld\n",
+            "RECORD_DECISION %s %s %s %s %s %ld\n",
+            run_id,
             artifact_id,
             proposal,
             decision,

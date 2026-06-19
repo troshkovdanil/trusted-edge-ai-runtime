@@ -16,7 +16,8 @@ int tear_trust_update_model(const struct tear_model_manifest *manifest);
 
 int tear_trust_report(void);
 
-int tear_trust_record_decision(const char *artifact_id,
+int tear_trust_record_decision(const char *run_id,
+                               const char *artifact_id,
                                const char *proposal,
                                const char *decision,
                                const char *reason,

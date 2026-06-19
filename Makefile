@@ -198,7 +198,7 @@ host-adaptive-supervisor-test: host-build
 	    > $(HOST_BUILD)/adaptive-clean7.log 2>&1
 	grep -q "TEAR_METRIC .*name=confidence_margin_x1000" /tmp/tear-metric-mnist-onnx-v1-mnist-default-*
 	grep -q "event=optimizer_proposal_received" $(HOST_BUILD)/adaptive-clean7.log
-	grep -q "proposal=keep_current_profile decision=approved reason=policy_allows" /tmp/tear-trusted-decisions
+	grep -Eq "run_id=run-[0-9]+-[0-9]+ artifact_id=mnist-onnx-v1 proposal=keep_current_profile decision=approved reason=policy_allows" /tmp/tear-trusted-decisions
 	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-trusted-decisions /tmp/tear-metric-mnist-onnx-v1-mnist-default-*
 	./$(HOST_SUPERVISOR) \
 	    --workload "$(abspath $(HOST_MNIST_MODEL))" \
@@ -209,7 +209,7 @@ host-adaptive-supervisor-test: host-build
 	    > $(HOST_BUILD)/adaptive-weak7.log 2>&1
 	grep -q "TEAR_METRIC .*name=confidence_margin_x1000" /tmp/tear-metric-mnist-onnx-v1-mnist-default-*
 	grep -q "event=optimizer_proposal_received" $(HOST_BUILD)/adaptive-weak7.log
-	grep -q "proposal=request_high_accuracy_profile decision=rejected reason=profile_unavailable" /tmp/tear-trusted-decisions
+	grep -Eq "run_id=run-[0-9]+-[0-9]+ artifact_id=mnist-onnx-v1 proposal=request_high_accuracy_profile decision=rejected reason=profile_unavailable" /tmp/tear-trusted-decisions
 	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-trusted-decisions /tmp/tear-metric-mnist-onnx-v1-mnist-default-*
 	./$(HOST_SUPERVISOR) \
 	    --workload "$(abspath $(HOST_MNIST_MODEL))" \
@@ -220,7 +220,7 @@ host-adaptive-supervisor-test: host-build
 	    > $(HOST_BUILD)/adaptive-noise.log 2>&1
 	grep -q "TEAR_METRIC .*name=confidence_margin_x1000" /tmp/tear-metric-mnist-onnx-v1-mnist-default-*
 	grep -q "event=optimizer_proposal_received" $(HOST_BUILD)/adaptive-noise.log
-	grep -q "proposal=reject_input decision=approved reason=input_rejected" /tmp/tear-trusted-decisions
+	grep -Eq "run_id=run-[0-9]+-[0-9]+ artifact_id=mnist-onnx-v1 proposal=reject_input decision=approved reason=input_rejected" /tmp/tear-trusted-decisions
 
 host-plan-test: host-build
 	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-supervisor.sock /tmp/tear-trusted-decisions /tmp/tear-metric-*
@@ -238,6 +238,9 @@ host-plan-test: host-build
 	grep -q "component=supervisor workload=mnist-noise event=workload_selected" $(HOST_BUILD)/plan.log
 	grep -q "component=supervisor event=run_plan_done" $(HOST_BUILD)/plan.log
 	grep -q "TEAR_METRIC .*name=confidence_margin_x1000" /tmp/tear-metric-mnist-onnx-v1-mnist-default-*
+	grep -Eq "run_id=run-[0-9]+-[0-9]+ artifact_id=mnist-onnx-v1 proposal=keep_current_profile decision=approved reason=policy_allows" /tmp/tear-trusted-decisions
+	grep -Eq "run_id=run-[0-9]+-[0-9]+ artifact_id=mnist-onnx-v1 proposal=request_high_accuracy_profile decision=rejected reason=profile_unavailable" /tmp/tear-trusted-decisions
+	grep -Eq "run_id=run-[0-9]+-[0-9]+ artifact_id=mnist-onnx-v1 proposal=reject_input decision=approved reason=input_rejected" /tmp/tear-trusted-decisions
 
 full-verify: host-test host-supervisor-test host-mnist-test host-adaptive-supervisor-test host-plan-test
 
