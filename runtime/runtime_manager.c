@@ -14,10 +14,12 @@
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <sys/wait.h>
+#include <time.h>
 #include <unistd.h>
 
 #define TEAR_COMPONENT "runtime_manager"
 #define TEAR_METRICS_PATH_MAX 256
+#define TEAR_RUN_ID_MAX 64
 
 struct tear_run_config {
     const char *name;
@@ -100,6 +102,29 @@ static int validate_config(const struct tear_run_config *cfg)
     }
 
     return 0;
+}
+
+static void build_run_id(char *run_id, size_t run_id_size)
+{
+    snprintf(run_id,
+             run_id_size,
+             "run-%ld-%ld",
+             (long)getpid(),
+             (long)time(NULL));
+}
+
+static int build_metrics_path(const struct tear_profile *profile,
+                              const char *run_id,
+                              char *path,
+                              size_t path_size)
+{
+    int n = snprintf(path,
+                     path_size,
+                     "%s-%s",
+                     profile->metrics_file_template,
+                     run_id);
+
+    return n >= 0 && (size_t)n < path_size ? 0 : -1;
 }
 
 static int ask_optd(const char *metrics_path,
@@ -265,16 +290,18 @@ static void record_optimizer_decision(const char *workload,
                                          decision_reason);
 }
 
-static void run_workload_process(const struct tear_run_config *cfg)
+static void run_workload_process(const struct tear_run_config *cfg,
+                                 const char *run_id)
 {
     char command[512];
 
     if (cfg->args && cfg->args[0] != '\0') {
         snprintf(command,
                  sizeof(command),
-                 "%s --profile %s %s",
+                 "%s --profile %s --run-id %s %s",
                  cfg->workload,
                  cfg->profile,
+                 run_id,
                  cfg->args);
 
         execl("/bin/sh", "sh", "-c", command, NULL);
@@ -283,6 +310,8 @@ static void run_workload_process(const struct tear_run_config *cfg)
               cfg->workload,
               "--profile",
               cfg->profile,
+              "--run-id",
+              run_id,
               NULL);
     }
 
@@ -297,6 +326,9 @@ int tear_runtime_manager_main(int argc, char **argv)
     struct tear_profile profile;
     int use_optimizer = 0;
     char metrics_path[TEAR_METRICS_PATH_MAX];
+    char run_id[TEAR_RUN_ID_MAX];
+
+    build_run_id(run_id, sizeof(run_id));
 
     runtime_event(cfg.name, NULL, "runtime_manager_start");
 
@@ -337,11 +369,18 @@ int tear_runtime_manager_main(int argc, char **argv)
     }
 
     runtime_event(cfg.name, manifest.artifact_id, "profile_manifest_verified");
+    runtime_event(cfg.name, manifest.artifact_id, run_id);
 
-    snprintf(metrics_path,
-             sizeof(metrics_path),
-             "%s",
-             profile.metrics_file_template);
+    if (build_metrics_path(&profile,
+                           run_id,
+                           metrics_path,
+                           sizeof(metrics_path)) < 0) {
+        fprintf(stderr, "TEAR: metrics path too long\n");
+        runtime_event(cfg.name,
+                      manifest.artifact_id,
+                      "metrics_path_too_long");
+        return 1;
+    }
 
     if (tear_trust_verify(&manifest) < 0) {
         fprintf(stderr, "TEAR: manifest verification failed\n");
@@ -384,7 +423,7 @@ int tear_runtime_manager_main(int argc, char **argv)
     }
 
     if (pid == 0)
-        run_workload_process(&cfg);
+        run_workload_process(&cfg, run_id);
 
     int status = 0;
 

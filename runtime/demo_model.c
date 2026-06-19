@@ -9,24 +9,44 @@
 #include <unistd.h>
 
 #define TEAR_COMPONENT "demo_model"
+#define TEAR_METRICS_PATH_MAX 256
 
-static const char *parse_profile_arg(int argc, char **argv)
+static const char *parse_arg_value(int argc, char **argv, const char *name)
 {
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--profile") == 0 && i + 1 < argc)
+        if (strcmp(argv[i], name) == 0 && i + 1 < argc)
             return argv[++i];
     }
 
     return NULL;
 }
 
+static int build_metrics_path(const struct tear_profile *profile,
+                              const char *run_id,
+                              char *path,
+                              size_t path_size)
+{
+    return snprintf(path,
+                    path_size,
+                    "%s-%s",
+                    profile->metrics_file_template,
+                    run_id) < (int)path_size ? 0 : -1;
+}
+
 int main(int argc, char **argv)
 {
-    const char *profile_path = parse_profile_arg(argc, argv);
+    const char *profile_path = parse_arg_value(argc, argv, "--profile");
+    const char *run_id = parse_arg_value(argc, argv, "--run-id");
     struct tear_profile profile;
+    char metrics_path[TEAR_METRICS_PATH_MAX];
 
     if (!profile_path) {
         fprintf(stderr, "TEAR model: missing --profile <path>\n");
+        return 1;
+    }
+
+    if (!run_id) {
+        fprintf(stderr, "TEAR model: missing --run-id <id>\n");
         return 1;
     }
 
@@ -36,9 +56,15 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    setenv("TEAR_TELEMETRY_FILE",
-           profile.metrics_file_template,
-           1);
+    if (build_metrics_path(&profile,
+                           run_id,
+                           metrics_path,
+                           sizeof(metrics_path)) < 0) {
+        fprintf(stderr, "TEAR model: metrics path too long\n");
+        return 1;
+    }
+
+    setenv("TEAR_TELEMETRY_FILE", metrics_path, 1);
 
     tear_event_ex(TEAR_COMPONENT,
                   profile.profile_id,
@@ -49,6 +75,7 @@ int main(int argc, char **argv)
     printf("TEAR model: profile_id=%s\n", profile.profile_id);
     printf("TEAR model: artifact_id=%s\n", profile.artifact_id);
     printf("TEAR model: backend=%s\n", profile.backend);
+    printf("TEAR model: run_id=%s\n", run_id);
 
     sleep(1);
 

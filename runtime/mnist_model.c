@@ -13,6 +13,7 @@
 
 #define MNIST_INPUT_SIZE (1 * 1 * 28 * 28)
 #define MNIST_CLASSES 10
+#define TEAR_METRICS_PATH_MAX 256
 
 static const char *MODEL_PATH = "models/mnist/mnist.onnx";
 
@@ -30,14 +31,28 @@ struct mnist_confidence {
     float margin;
 };
 
-static const char *parse_profile_arg(int argc, char **argv)
+static const char *parse_arg_value(int argc, char **argv, const char *name)
 {
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--profile") == 0 && i + 1 < argc)
+        if (strcmp(argv[i], name) == 0 && i + 1 < argc)
             return argv[++i];
     }
 
     return NULL;
+}
+
+static int build_metrics_path(const struct tear_profile *profile,
+                              const char *run_id,
+                              char *path,
+                              size_t path_size)
+{
+    int n = snprintf(path,
+                     path_size,
+                     "%s-%s",
+                     profile->metrics_file_template,
+                     run_id);
+
+    return n >= 0 && (size_t)n < path_size ? 0 : -1;
 }
 
 static const char *sample_name(enum mnist_sample_kind kind)
@@ -215,8 +230,10 @@ static void check_status(const OrtApi *api, OrtStatus *status,
 
 int main(int argc, char **argv)
 {
-    const char *profile_path = parse_profile_arg(argc, argv);
+    const char *profile_path = parse_arg_value(argc, argv, "--profile");
+    const char *run_id = parse_arg_value(argc, argv, "--run-id");
     struct tear_profile profile;
+    char metrics_path[TEAR_METRICS_PATH_MAX];
     enum mnist_sample_kind sample_kind = parse_sample_kind(argc, argv);
     const OrtApi *api = OrtGetApiBase()->GetApi(ORT_API_VERSION);
 
@@ -238,15 +255,26 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    if (!run_id) {
+        fprintf(stderr, "TEAR: MNIST missing --run-id <id>\n");
+        return 1;
+    }
+
     if (tear_profile_load(profile_path, &profile) < 0) {
         fprintf(stderr, "TEAR: MNIST failed to load profile %s\n",
                 profile_path);
         return 1;
     }
 
-    setenv("TEAR_TELEMETRY_FILE",
-           profile.metrics_file_template,
-           1);
+    if (build_metrics_path(&profile,
+                           run_id,
+                           metrics_path,
+                           sizeof(metrics_path)) < 0) {
+        fprintf(stderr, "TEAR: MNIST metrics path too long\n");
+        return 1;
+    }
+
+    setenv("TEAR_TELEMETRY_FILE", metrics_path, 1);
 
     fill_digit_sample(input, sample_kind);
     print_digit(input);
@@ -257,6 +285,7 @@ int main(int argc, char **argv)
            profile.artifact_id,
            profile.backend,
            sample_name(sample_kind));
+    printf("TEAR: run_id=%s\n", run_id);
 
     check_status(api, api->CreateEnv(ORT_LOGGING_LEVEL_WARNING,
                                      "tear-mnist", &env),
