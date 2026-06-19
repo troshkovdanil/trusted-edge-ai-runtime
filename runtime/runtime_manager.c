@@ -5,6 +5,7 @@
 #include "model_manifest.h"
 #include "runtime_paths.h"
 #include "observability.h"
+#include "profile.h"
 #include "trust_client.h"
 
 #include <stdio.h>
@@ -16,13 +17,13 @@
 #include <unistd.h>
 
 #define TEAR_COMPONENT "runtime_manager"
-#define TEAR_METRICS_PATH_PREFIX "/tmp/tear-metrics-"
 #define TEAR_METRICS_PATH_MAX 256
 
-struct runtime_config {
+struct tear_run_config {
     const char *name;
     const char *workload;
     const char *manifest;
+    const char *profile;
     const char *args;
     int enable_optimizer;
 };
@@ -54,12 +55,13 @@ static void runtime_event_kv(const char *workload,
                      value);
 }
 
-static struct runtime_config parse_args(int argc, char **argv)
+static struct tear_run_config parse_args(int argc, char **argv)
 {
-    struct runtime_config cfg = {
+    struct tear_run_config cfg = {
         .name = "runtime-workload",
         .workload = NULL,
         .manifest = NULL,
+        .profile = NULL,
         .args = "",
         .enable_optimizer = 0,
     };
@@ -71,6 +73,8 @@ static struct runtime_config parse_args(int argc, char **argv)
             cfg.workload = argv[++i];
         } else if (strcmp(argv[i], "--manifest") == 0 && i + 1 < argc) {
             cfg.manifest = argv[++i];
+        } else if (strcmp(argv[i], "--profile") == 0 && i + 1 < argc) {
+            cfg.profile = argv[++i];
         } else if (strcmp(argv[i], "--args") == 0 && i + 1 < argc) {
             cfg.args = argv[++i];
         } else if (strcmp(argv[i], "--enable-optimizer") == 0) {
@@ -81,31 +85,21 @@ static struct runtime_config parse_args(int argc, char **argv)
     return cfg;
 }
 
-static int validate_config(const struct runtime_config *cfg)
+static int validate_config(const struct tear_run_config *cfg)
 {
-    if (!cfg->workload || !cfg->manifest) {
+    if (!cfg->workload || !cfg->manifest || !cfg->profile) {
         fprintf(stderr,
                 "usage: tear-runtime-manager "
                 "[--name <name>] "
                 "--workload <path> "
                 "--manifest <path> "
+                "--profile <path> "
                 "[--args <args>] "
                 "[--enable-optimizer]\n");
         return -1;
     }
 
     return 0;
-}
-
-static void build_metrics_path(const char *workload_name,
-                               char *path,
-                               size_t path_size)
-{
-    snprintf(path,
-             path_size,
-             "%s%s",
-             TEAR_METRICS_PATH_PREFIX,
-             workload_name ? workload_name : "unknown");
 }
 
 static int ask_optd(const char *metrics_path,
@@ -271,20 +265,25 @@ static void record_optimizer_decision(const char *workload,
                                          decision_reason);
 }
 
-static void run_workload_process(const struct runtime_config *cfg)
+static void run_workload_process(const struct tear_run_config *cfg)
 {
     char command[512];
 
     if (cfg->args && cfg->args[0] != '\0') {
         snprintf(command,
                  sizeof(command),
-                 "%s %s",
+                 "%s --profile %s %s",
                  cfg->workload,
+                 cfg->profile,
                  cfg->args);
 
         execl("/bin/sh", "sh", "-c", command, NULL);
     } else {
-        execl(cfg->workload, cfg->workload, NULL);
+        execl(cfg->workload,
+              cfg->workload,
+              "--profile",
+              cfg->profile,
+              NULL);
     }
 
     perror("execl");
@@ -293,12 +292,11 @@ static void run_workload_process(const struct runtime_config *cfg)
 
 int tear_runtime_manager_main(int argc, char **argv)
 {
-    struct runtime_config cfg = parse_args(argc, argv);
+    struct tear_run_config cfg = parse_args(argc, argv);
     struct tear_model_manifest manifest;
+    struct tear_profile profile;
     int use_optimizer = 0;
     char metrics_path[TEAR_METRICS_PATH_MAX];
-
-    build_metrics_path(cfg.name, metrics_path, sizeof(metrics_path));
 
     runtime_event(cfg.name, NULL, "runtime_manager_start");
 
@@ -318,6 +316,32 @@ int tear_runtime_manager_main(int argc, char **argv)
     runtime_event(cfg.name, manifest.artifact_id, "manifest_loaded");
 
     tear_manifest_print(&manifest);
+
+    if (tear_profile_load(cfg.profile, &profile) < 0) {
+        fprintf(stderr, "TEAR: failed to load profile\n");
+        runtime_event(cfg.name,
+                      manifest.artifact_id,
+                      "profile_load_failed");
+        return 1;
+    }
+
+    runtime_event(cfg.name, manifest.artifact_id, "profile_loaded");
+
+    if (strcmp(profile.artifact_id, manifest.artifact_id) != 0 ||
+        strcmp(profile.backend, manifest.backend) != 0) {
+        fprintf(stderr, "TEAR: profile does not match manifest\n");
+        runtime_event(cfg.name,
+                      manifest.artifact_id,
+                      "profile_manifest_mismatch");
+        return 1;
+    }
+
+    runtime_event(cfg.name, manifest.artifact_id, "profile_manifest_verified");
+
+    snprintf(metrics_path,
+             sizeof(metrics_path),
+             "%s",
+             profile.metrics_file_template);
 
     if (tear_trust_verify(&manifest) < 0) {
         fprintf(stderr, "TEAR: manifest verification failed\n");
@@ -359,12 +383,8 @@ int tear_runtime_manager_main(int argc, char **argv)
         return 1;
     }
 
-    if (pid == 0) {
-        if (use_optimizer)
-            setenv("TEAR_TELEMETRY_FILE", metrics_path, 1);
-
+    if (pid == 0)
         run_workload_process(&cfg);
-    }
 
     int status = 0;
 

@@ -1,5 +1,4 @@
-# TEAR host daemon validation plan
-RUN demo build/host/demo-model-host examples/model-v2.json
-RUN mnist-clean7 build/host/mnist-model-host examples/mnist-model.json optimizer -- --sample clean7
-RUN mnist-weak7 build/host/mnist-model-host examples/mnist-model.json optimizer -- --sample weak7
-RUN mnist-noise build/host/mnist-model-host examples/mnist-model.json optimizer -- --sample noise
+RUN demo build/host/demo-model-host examples/model-v2.json profiles/demo.profile
+RUN mnist-clean7 build/host/mnist-model-host examples/mnist-model.json profiles/mnist.profile optimizer -- --sample clean7
+RUN mnist-weak7 build/host/mnist-model-host examples/mnist-model.json profiles/mnist.profile optimizer -- --sample weak7
+RUN mnist-noise build/host/mnist-model-host examples/mnist-model.json profiles/mnist.profile optimizer -- --sample noise

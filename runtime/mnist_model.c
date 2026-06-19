@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "observability.h"
+#include "profile.h"
 
 #include <onnxruntime_c_api.h>
 
@@ -14,8 +15,6 @@
 #define MNIST_CLASSES 10
 
 static const char *MODEL_PATH = "models/mnist/mnist.onnx";
-static const char *MODEL_ID = "mnist-onnx-v1";
-static const char *BACKEND = "onnxruntime-cpu";
 
 enum mnist_sample_kind {
     SAMPLE_CLEAN7 = 0,
@@ -30,6 +29,16 @@ struct mnist_confidence {
     float top2_score;
     float margin;
 };
+
+static const char *parse_profile_arg(int argc, char **argv)
+{
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--profile") == 0 && i + 1 < argc)
+            return argv[++i];
+    }
+
+    return NULL;
+}
 
 static const char *sample_name(enum mnist_sample_kind kind)
 {
@@ -47,15 +56,17 @@ static const char *sample_name(enum mnist_sample_kind kind)
 
 static enum mnist_sample_kind parse_sample_kind(int argc, char **argv)
 {
-    if (argc >= 3 && strcmp(argv[1], "--sample") == 0) {
-        if (strcmp(argv[2], "clean7") == 0)
-            return SAMPLE_CLEAN7;
+    for (int i = 1; i + 1 < argc; i++) {
+        if (strcmp(argv[i], "--sample") == 0) {
+            if (strcmp(argv[i + 1], "clean7") == 0)
+                return SAMPLE_CLEAN7;
 
-        if (strcmp(argv[2], "weak7") == 0)
-            return SAMPLE_WEAK7;
+            if (strcmp(argv[i + 1], "weak7") == 0)
+                return SAMPLE_WEAK7;
 
-        if (strcmp(argv[2], "noise") == 0)
-            return SAMPLE_NOISE;
+            if (strcmp(argv[i + 1], "noise") == 0)
+                return SAMPLE_NOISE;
+        }
     }
 
     const char *env_sample = getenv("TEAR_MNIST_SAMPLE");
@@ -204,6 +215,8 @@ static void check_status(const OrtApi *api, OrtStatus *status,
 
 int main(int argc, char **argv)
 {
+    const char *profile_path = parse_profile_arg(argc, argv);
+    struct tear_profile profile;
     enum mnist_sample_kind sample_kind = parse_sample_kind(argc, argv);
     const OrtApi *api = OrtGetApiBase()->GetApi(ORT_API_VERSION);
 
@@ -220,12 +233,30 @@ int main(int argc, char **argv)
     const char *input_names[] = {"Input3"};
     const char *output_names[] = {"Plus214_Output_0"};
 
+    if (!profile_path) {
+        fprintf(stderr, "TEAR: MNIST missing --profile <path>\n");
+        return 1;
+    }
+
+    if (tear_profile_load(profile_path, &profile) < 0) {
+        fprintf(stderr, "TEAR: MNIST failed to load profile %s\n",
+                profile_path);
+        return 1;
+    }
+
+    setenv("TEAR_TELEMETRY_FILE",
+           profile.metrics_file_template,
+           1);
+
     fill_digit_sample(input, sample_kind);
     print_digit(input);
 
     printf("TEAR: MNIST workload start\n");
-    printf("TEAR: artifact_id=%s backend=%s sample=%s\n",
-           MODEL_ID, BACKEND, sample_name(sample_kind));
+    printf("TEAR: profile_id=%s artifact_id=%s backend=%s sample=%s\n",
+           profile.profile_id,
+           profile.artifact_id,
+           profile.backend,
+           sample_name(sample_kind));
 
     check_status(api, api->CreateEnv(ORT_LOGGING_LEVEL_WARNING,
                                      "tear-mnist", &env),
@@ -300,21 +331,46 @@ int main(int argc, char **argv)
     printf("TEAR: predicted_digit=%d latency_us=%lld\n",
            predicted_digit, (long long)latency_us);
 
-    tear_event_ex("mnist_model", NULL, MODEL_ID, "mnist_inference_metrics");
-    tear_metric_long("mnist_model", NULL, MODEL_ID,
-                     "sample_kind", sample_kind);
-    tear_metric_long("mnist_model", NULL, MODEL_ID,
-                     "predicted_digit", predicted_digit);
-    tear_metric_long("mnist_model", NULL, MODEL_ID,
-                     "top1_score_x1000", top1_score_x1000);
-    tear_metric_long("mnist_model", NULL, MODEL_ID,
-                     "top2_score_x1000", top2_score_x1000);
-    tear_metric_long("mnist_model", NULL, MODEL_ID,
-                     "confidence_margin_x1000", confidence_margin_x1000);
-    tear_metric_long("mnist_model", NULL, MODEL_ID,
-                     "input_density_x1000", density_x1000);
-    tear_metric_long("mnist_model", NULL, MODEL_ID,
-                     "latency_us", (long)latency_us);
+    tear_event_ex("mnist_model",
+                  profile.profile_id,
+                  profile.artifact_id,
+                  "mnist_inference_metrics");
+
+    tear_metric_long("mnist_model",
+                     profile.profile_id,
+                     profile.artifact_id,
+                     "sample_kind",
+                     sample_kind);
+    tear_metric_long("mnist_model",
+                     profile.profile_id,
+                     profile.artifact_id,
+                     "predicted_digit",
+                     predicted_digit);
+    tear_metric_long("mnist_model",
+                     profile.profile_id,
+                     profile.artifact_id,
+                     "top1_score_x1000",
+                     top1_score_x1000);
+    tear_metric_long("mnist_model",
+                     profile.profile_id,
+                     profile.artifact_id,
+                     "top2_score_x1000",
+                     top2_score_x1000);
+    tear_metric_long("mnist_model",
+                     profile.profile_id,
+                     profile.artifact_id,
+                     "confidence_margin_x1000",
+                     confidence_margin_x1000);
+    tear_metric_long("mnist_model",
+                     profile.profile_id,
+                     profile.artifact_id,
+                     "input_density_x1000",
+                     density_x1000);
+    tear_metric_long("mnist_model",
+                     profile.profile_id,
+                     profile.artifact_id,
+                     "latency_us",
+                     (long)latency_us);
 
     printf("TEAR: MNIST workload finished\n");
 

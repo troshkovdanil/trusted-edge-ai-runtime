@@ -41,6 +41,7 @@ ORT_AARCH64_LIB := $(ORT_AARCH64_DIR)/lib
 
 RUNTIME_PATHS_SRCS := runtime/runtime_paths.c
 OBSERVABILITY_SRCS := runtime/observability.c
+PROFILE_SRCS := runtime/profile.c
 MANIFEST_SRCS := runtime/model_manifest.c
 TRUST_CLIENT_SRCS := runtime/trust_client.c
 TRUSTD_SRCS := runtime/trustd.c runtime/trusted_state.c
@@ -60,10 +61,11 @@ build: mnist-assets
 	$(CC) -static -O2 -Wall -Wextra \
 		-o $(SUPERVISOR) runtime/supervisor.c $(RUNTIME_PATHS_SRCS) $(OBSERVABILITY_SRCS)
 	$(CC) -static -O2 -Wall -Wextra \
-		-o $(DEMO_MODEL) $(DEMO_MODEL_SRCS) $(OBSERVABILITY_SRCS)
+		-o $(DEMO_MODEL) $(DEMO_MODEL_SRCS) $(PROFILE_SRCS) $(OBSERVABILITY_SRCS)
 	$(CC) -static -O2 -Wall -Wextra \
 		-o $(RUNTIME_MANAGER) \
 		$(RUNTIME_MANAGER_SRCS) \
+		$(PROFILE_SRCS) \
 		$(MANIFEST_SRCS) \
 		$(TRUST_CLIENT_SRCS) \
 		$(RUNTIME_PATHS_SRCS) \
@@ -87,7 +89,7 @@ build: mnist-assets
 		$(OBSERVABILITY_SRCS)
 	$(CC) -O2 -Wall -Wextra \
 		-I$(ORT_AARCH64_INCLUDE) \
-		-o $(MNIST_MODEL) $(MNIST_MODEL_SRCS) $(OBSERVABILITY_SRCS) \
+		-o $(MNIST_MODEL) $(MNIST_MODEL_SRCS) $(PROFILE_SRCS) $(OBSERVABILITY_SRCS) \
 		-L$(ORT_AARCH64_LIB) \
 		-lonnxruntime \
 		-Wl,-rpath,/usr/lib
@@ -99,15 +101,16 @@ host-build: mnist-assets
 	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
 		-o $(HOST_SUPERVISOR) runtime/supervisor.c $(RUNTIME_PATHS_SRCS) $(OBSERVABILITY_SRCS)
 	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
-		-o $(HOST_DEMO_MODEL) $(DEMO_MODEL_SRCS) $(OBSERVABILITY_SRCS)
+		-o $(HOST_DEMO_MODEL) $(DEMO_MODEL_SRCS) $(PROFILE_SRCS) $(OBSERVABILITY_SRCS)
 	gcc -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
 		-Iexternal/onnxruntime/include \
-		-o $(HOST_MNIST_MODEL) $(MNIST_MODEL_SRCS) $(OBSERVABILITY_SRCS) \
+		-o $(HOST_MNIST_MODEL) $(MNIST_MODEL_SRCS) $(PROFILE_SRCS) $(OBSERVABILITY_SRCS) \
 		-Lexternal/onnxruntime/lib -lonnxruntime \
 		-Wl,-rpath,'$$ORIGIN/../../external/onnxruntime/lib'
 	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
 		-o $(HOST_RUNTIME_MANAGER) \
 		$(RUNTIME_MANAGER_SRCS) \
+		$(PROFILE_SRCS) \
 		$(MANIFEST_SRCS) \
 		$(TRUST_CLIENT_SRCS) \
 		$(RUNTIME_PATHS_SRCS) \
@@ -147,70 +150,77 @@ host-test: host-build
 	./$(HOST_HELLO)
 
 host-supervisor-test: host-build
-	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock
+	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-metric-demo-model-demo-default
 	./$(HOST_SUPERVISOR) \
 	    --workload "$(abspath $(HOST_DEMO_MODEL))" \
 	    --manifest examples/model-v2.json \
+	    --profile profiles/demo.profile \
 	    > $(HOST_BUILD)/supervisor.log 2>&1
 	grep -q "event=supervisor_start" $(HOST_BUILD)/supervisor.log
 	grep -q "event=workload_start" $(HOST_BUILD)/supervisor.log
-	grep -q "event=inference_done" $(HOST_BUILD)/supervisor.log
+	grep -q "event=inference_done" /tmp/tear-metric-demo-model-demo-default
 	grep -q "event=workload_exit" $(HOST_BUILD)/supervisor.log
 
 host-mnist-test: host-build
-	./$(HOST_MNIST_MODEL) --sample clean7 > $(HOST_BUILD)/mnist-clean7.log 2>&1
+	rm -f /tmp/tear-metric-mnist-onnx-v1-mnist-default
+	./$(HOST_MNIST_MODEL) --profile profiles/mnist.profile --sample clean7 > $(HOST_BUILD)/mnist-clean7.log 2>&1
 	grep -q "TEAR: MNIST workload start" $(HOST_BUILD)/mnist-clean7.log
-	grep -q "TEAR: artifact_id=mnist-onnx-v1 backend=onnxruntime-cpu sample=clean7" $(HOST_BUILD)/mnist-clean7.log
+	grep -q "TEAR: profile_id=mnist-default artifact_id=mnist-onnx-v1 backend=onnxruntime-cpu sample=clean7" $(HOST_BUILD)/mnist-clean7.log
 	grep -q "TEAR: metric predicted_digit=" $(HOST_BUILD)/mnist-clean7.log
-	grep -q "TEAR_METRIC .*name=confidence_margin_x1000" $(HOST_BUILD)/mnist-clean7.log
+	grep -q "TEAR_METRIC .*name=confidence_margin_x1000" /tmp/tear-metric-mnist-onnx-v1-mnist-default
 	grep -q "TEAR: MNIST workload finished" $(HOST_BUILD)/mnist-clean7.log
-	./$(HOST_MNIST_MODEL) --sample weak7 > $(HOST_BUILD)/mnist-weak7.log 2>&1
+	rm -f /tmp/tear-metric-mnist-onnx-v1-mnist-default
+	./$(HOST_MNIST_MODEL) --profile profiles/mnist.profile --sample weak7 > $(HOST_BUILD)/mnist-weak7.log 2>&1
 	grep -q "TEAR: MNIST workload start" $(HOST_BUILD)/mnist-weak7.log
-	grep -q "TEAR: artifact_id=mnist-onnx-v1 backend=onnxruntime-cpu sample=weak7" $(HOST_BUILD)/mnist-weak7.log
+	grep -q "TEAR: profile_id=mnist-default artifact_id=mnist-onnx-v1 backend=onnxruntime-cpu sample=weak7" $(HOST_BUILD)/mnist-weak7.log
 	grep -q "TEAR: metric predicted_digit=" $(HOST_BUILD)/mnist-weak7.log
-	grep -q "TEAR_METRIC .*name=confidence_margin_x1000" $(HOST_BUILD)/mnist-weak7.log
+	grep -q "TEAR_METRIC .*name=confidence_margin_x1000" /tmp/tear-metric-mnist-onnx-v1-mnist-default
 	grep -q "TEAR: MNIST workload finished" $(HOST_BUILD)/mnist-weak7.log
-	./$(HOST_MNIST_MODEL) --sample noise > $(HOST_BUILD)/mnist-noise.log 2>&1
+	rm -f /tmp/tear-metric-mnist-onnx-v1-mnist-default
+	./$(HOST_MNIST_MODEL) --profile profiles/mnist.profile --sample noise > $(HOST_BUILD)/mnist-noise.log 2>&1
 	grep -q "TEAR: MNIST workload start" $(HOST_BUILD)/mnist-noise.log
-	grep -q "TEAR: artifact_id=mnist-onnx-v1 backend=onnxruntime-cpu sample=noise" $(HOST_BUILD)/mnist-noise.log
+	grep -q "TEAR: profile_id=mnist-default artifact_id=mnist-onnx-v1 backend=onnxruntime-cpu sample=noise" $(HOST_BUILD)/mnist-noise.log
 	grep -q "TEAR: metric predicted_digit=" $(HOST_BUILD)/mnist-noise.log
-	grep -q "TEAR_METRIC .*name=confidence_margin_x1000" $(HOST_BUILD)/mnist-noise.log
+	grep -q "TEAR_METRIC .*name=confidence_margin_x1000" /tmp/tear-metric-mnist-onnx-v1-mnist-default
 	grep -q "TEAR: MNIST workload finished" $(HOST_BUILD)/mnist-noise.log
 
 host-adaptive-supervisor-test: host-build
-	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-trusted-decisions /tmp/tear-metrics-cli-workload
+	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-trusted-decisions /tmp/tear-metric-mnist-onnx-v1-mnist-default
 	./$(HOST_SUPERVISOR) \
 	    --workload "$(abspath $(HOST_MNIST_MODEL))" \
 	    --manifest examples/mnist-model.json \
+	    --profile profiles/mnist.profile \
 	    --args "--sample clean7" \
 	    --enable-optimizer \
 	    > $(HOST_BUILD)/adaptive-clean7.log 2>&1
-	grep -q "TEAR_METRIC .*name=confidence_margin_x1000" /tmp/tear-metrics-cli-workload
+	grep -q "TEAR_METRIC .*name=confidence_margin_x1000" /tmp/tear-metric-mnist-onnx-v1-mnist-default
 	grep -q "event=optimizer_proposal_received" $(HOST_BUILD)/adaptive-clean7.log
 	grep -q "proposal=keep_current_profile decision=approved reason=policy_allows" /tmp/tear-trusted-decisions
-	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-trusted-decisions /tmp/tear-metrics-cli-workload
+	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-trusted-decisions /tmp/tear-metric-mnist-onnx-v1-mnist-default
 	./$(HOST_SUPERVISOR) \
 	    --workload "$(abspath $(HOST_MNIST_MODEL))" \
 	    --manifest examples/mnist-model.json \
+	    --profile profiles/mnist.profile \
 	    --args "--sample weak7" \
 	    --enable-optimizer \
 	    > $(HOST_BUILD)/adaptive-weak7.log 2>&1
-	grep -q "TEAR_METRIC .*name=confidence_margin_x1000" /tmp/tear-metrics-cli-workload
+	grep -q "TEAR_METRIC .*name=confidence_margin_x1000" /tmp/tear-metric-mnist-onnx-v1-mnist-default
 	grep -q "event=optimizer_proposal_received" $(HOST_BUILD)/adaptive-weak7.log
 	grep -q "proposal=request_high_accuracy_profile decision=rejected reason=profile_unavailable" /tmp/tear-trusted-decisions
-	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-trusted-decisions /tmp/tear-metrics-cli-workload
+	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-trusted-decisions /tmp/tear-metric-mnist-onnx-v1-mnist-default
 	./$(HOST_SUPERVISOR) \
 	    --workload "$(abspath $(HOST_MNIST_MODEL))" \
 	    --manifest examples/mnist-model.json \
+	    --profile profiles/mnist.profile \
 	    --args "--sample noise" \
 	    --enable-optimizer \
 	    > $(HOST_BUILD)/adaptive-noise.log 2>&1
-	grep -q "TEAR_METRIC .*name=confidence_margin_x1000" /tmp/tear-metrics-cli-workload
+	grep -q "TEAR_METRIC .*name=confidence_margin_x1000" /tmp/tear-metric-mnist-onnx-v1-mnist-default
 	grep -q "event=optimizer_proposal_received" $(HOST_BUILD)/adaptive-noise.log
 	grep -q "proposal=reject_input decision=approved reason=input_rejected" /tmp/tear-trusted-decisions
 
 host-plan-test: host-build
-	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-supervisor.sock /tmp/tear-trusted-decisions /tmp/tear-metrics-*
+	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-supervisor.sock /tmp/tear-trusted-decisions /tmp/tear-metric-*
 	./$(HOST_SUPERVISOR) --daemon --enable-optimizer > $(HOST_BUILD)/plan.log 2>&1 & \
 	    supervisor_pid=$$!; \
 	    sleep 2; \
@@ -224,9 +234,7 @@ host-plan-test: host-build
 	grep -q "component=supervisor workload=mnist-weak7 event=workload_selected" $(HOST_BUILD)/plan.log
 	grep -q "component=supervisor workload=mnist-noise event=workload_selected" $(HOST_BUILD)/plan.log
 	grep -q "component=supervisor event=run_plan_done" $(HOST_BUILD)/plan.log
-	grep -q "TEAR_METRIC .*name=confidence_margin_x1000" /tmp/tear-metrics-mnist-clean7
-	grep -q "TEAR_METRIC .*name=confidence_margin_x1000" /tmp/tear-metrics-mnist-weak7
-	grep -q "TEAR_METRIC .*name=confidence_margin_x1000" /tmp/tear-metrics-mnist-noise
+	grep -q "TEAR_METRIC .*name=confidence_margin_x1000" /tmp/tear-metric-mnist-onnx-v1-mnist-default
 
 full-verify: host-test host-supervisor-test host-mnist-test host-adaptive-supervisor-test host-plan-test
 

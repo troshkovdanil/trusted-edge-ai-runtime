@@ -36,23 +36,27 @@ cp -v external/onnxruntime-aarch64/lib/libonnxruntime.so* "$TARGET/usr/lib/"
 cp -v examples/model-v1.json "$TARGET/etc/tear/"
 cp -v examples/model-v2.json "$TARGET/etc/tear/"
 
+cp -v profiles/demo.profile "$TARGET/etc/tear/"
+cp -v profiles/mnist.profile "$TARGET/etc/tear/"
+
 if [ "$TEST_MODE" = "mnist-adaptive" ]; then
     cat > "$TARGET/etc/init.d/S99tear-test" <<'EOS'
 #!/bin/sh
 
 echo "TEAR_OPTEE_MNIST_ADAPTIVE_TEST start"
-rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-trusted-decisions /tmp/tear-metrics-cli-workload
+rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-trusted-decisions /tmp/tear-metric-mnist-onnx-v1-mnist-default
 
 TEAR_TRUSTD_PATH=/bin/tear-trustd-optee \
 TEAR_TRUSTD_BACKEND=optee \
 /bin/tear-supervisor \
   --workload /bin/mnist-model \
   --manifest /etc/tear/mnist-model.json \
+  --profile /etc/tear/mnist.profile \
   --args "--sample weak7" \
   --enable-optimizer || exit 1
 
-grep -q "TEAR_METRIC .*name=confidence_margin_x1000" /tmp/tear-metrics-cli-workload || exit 1
-grep -q "TEAR_METRIC .*name=input_density_x1000" /tmp/tear-metrics-cli-workload || exit 1
+grep -q "TEAR_METRIC .*name=confidence_margin_x1000" /tmp/tear-metric-mnist-onnx-v1-mnist-default || exit 1
+grep -q "TEAR_METRIC .*name=input_density_x1000" /tmp/tear-metric-mnist-onnx-v1-mnist-default || exit 1
 echo "TEAR_OPTEE_MNIST_ADAPTIVE_TEST done"
 
 poweroff -f
@@ -127,7 +131,8 @@ TEAR_TRUSTD_PATH=/bin/tear-trustd-optee \
 TEAR_TRUSTD_BACKEND=optee \
 /bin/tear-supervisor \
   --workload /bin/demo-model \
-  --manifest /etc/tear/model-v2.json
+  --manifest /etc/tear/model-v2.json \
+  --profile /etc/tear/demo.profile
 rc=$?
 echo "TEAR_OPTEE_QEMU_TEST exit=$rc"
 

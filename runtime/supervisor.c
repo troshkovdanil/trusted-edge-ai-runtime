@@ -34,10 +34,11 @@ enum supervisor_state {
     SUPERVISOR_STATE_SHUTTING_DOWN,
 };
 
-struct supervisor_config {
+struct tear_run_config {
     const char *name;
     const char *workload;
     const char *manifest;
+    const char *profile;
     const char *args;
     int enable_optimizer;
     int daemon_mode;
@@ -45,7 +46,7 @@ struct supervisor_config {
 
 static enum supervisor_state supervisor_state = SUPERVISOR_STATE_INIT;
 static volatile sig_atomic_t supervisor_running = 1;
-static int run_workload_once(const struct supervisor_config *cfg);
+static int run_workload_once(const struct tear_run_config *cfg);
 static int run_plan_file(const char *path);
 
 static void supervisor_event(const char *event)
@@ -175,7 +176,7 @@ static char *next_token(char **cursor)
 }
 
 static int parse_run_command(const char *buf,
-                             struct supervisor_config *run_cfg)
+                             struct tear_run_config *run_cfg)
 {
     char local[512];
     char *cursor;
@@ -183,6 +184,7 @@ static int parse_run_command(const char *buf,
     char *name;
     char *workload;
     char *manifest;
+    char *profile;
     char *token;
     char *args = NULL;
 
@@ -201,8 +203,9 @@ static int parse_run_command(const char *buf,
     name = next_token(&cursor);
     workload = next_token(&cursor);
     manifest = next_token(&cursor);
+    profile = next_token(&cursor);
 
-    if (!name || !workload || !manifest)
+    if (!name || !workload || !manifest || !profile)
         return -1;
 
     while ((token = next_token(&cursor)) != NULL) {
@@ -221,6 +224,7 @@ static int parse_run_command(const char *buf,
     run_cfg->name = strdup(name);
     run_cfg->workload = strdup(workload);
     run_cfg->manifest = strdup(manifest);
+    run_cfg->profile = strdup(profile);
 
     if (args && args[0] != '\0')
         run_cfg->args = strdup(args);
@@ -230,23 +234,25 @@ static int parse_run_command(const char *buf,
     if (!run_cfg->name ||
         !run_cfg->workload ||
         !run_cfg->manifest ||
+        !run_cfg->profile ||
         !run_cfg->args)
         return -1;
 
     return 0;
 }
 
-static void free_run_config(struct supervisor_config *cfg)
+static void free_run_config(struct tear_run_config *cfg)
 {
     free((void *)cfg->name);
     free((void *)cfg->workload);
     free((void *)cfg->manifest);
+    free((void *)cfg->profile);
     free((void *)cfg->args);
 }
 
 static int run_command_line(const char *line)
 {
-    struct supervisor_config run_cfg;
+    struct tear_run_config run_cfg;
     int ret;
 
     if (parse_run_command(line, &run_cfg) < 0)
@@ -345,7 +351,7 @@ static void handle_supervisor_client(int client)
         else
             dprintf(client, "ERR run_plan_failed\n");
     } else if (strncmp(buf, "RUN ", 4) == 0) {
-        struct supervisor_config run_cfg;
+        struct tear_run_config run_cfg;
         int ret;
 
         if (supervisor_state == SUPERVISOR_STATE_RUNNING) {
@@ -371,12 +377,13 @@ static void handle_supervisor_client(int client)
     }
 }
 
-static struct supervisor_config parse_args(int argc, char **argv)
+static struct tear_run_config parse_args(int argc, char **argv)
 {
-    struct supervisor_config cfg = {
+    struct tear_run_config cfg = {
         .name = "cli-workload",
         .workload = NULL,
         .manifest = NULL,
+        .profile = NULL,
         .args = "",
         .enable_optimizer = 0,
         .daemon_mode = 0,
@@ -387,6 +394,8 @@ static struct supervisor_config parse_args(int argc, char **argv)
             cfg.workload = argv[++i];
         } else if (strcmp(argv[i], "--manifest") == 0 && i + 1 < argc) {
             cfg.manifest = argv[++i];
+        } else if (strcmp(argv[i], "--profile") == 0 && i + 1 < argc) {
+            cfg.profile = argv[++i];
         } else if (strcmp(argv[i], "--args") == 0 && i + 1 < argc) {
             cfg.args = argv[++i];
         } else if (strcmp(argv[i], "--enable-optimizer") == 0) {
@@ -399,16 +408,17 @@ static struct supervisor_config parse_args(int argc, char **argv)
     return cfg;
 }
 
-static int validate_config(const struct supervisor_config *cfg)
+static int validate_config(const struct tear_run_config *cfg)
 {
     if (cfg->daemon_mode)
         return 0;
 
-    if (!cfg->workload || !cfg->manifest) {
+    if (!cfg->workload || !cfg->manifest || !cfg->profile) {
         fprintf(stderr,
                 "usage: tear-supervisor "
                 "--workload <path> "
                 "--manifest <path> "
+                "--profile <path> "
                 "[--args <args>] "
                 "[--enable-optimizer]\n");
         fprintf(stderr,
@@ -512,7 +522,7 @@ static int run_tearictl(const char *command, const char *arg)
     return WIFEXITED(status) && WEXITSTATUS(status) == 0 ? 0 : -1;
 }
 
-static int provision_selected_manifest(const struct supervisor_config *cfg)
+static int provision_selected_manifest(const struct tear_run_config *cfg)
 {
     supervisor_workload_event(cfg->name, "provisioning_start");
 
@@ -533,7 +543,7 @@ static int provision_selected_manifest(const struct supervisor_config *cfg)
     return 0;
 }
 
-static void run_runtime_manager(const struct supervisor_config *cfg)
+static void run_runtime_manager(const struct tear_run_config *cfg)
 {
     if (cfg->enable_optimizer) {
         execl(RUNTIME_MANAGER_PATH,
@@ -544,6 +554,8 @@ static void run_runtime_manager(const struct supervisor_config *cfg)
               cfg->workload,
               "--manifest",
               cfg->manifest,
+              "--profile",
+              cfg->profile,
               "--args",
               cfg->args,
               "--enable-optimizer",
@@ -557,13 +569,15 @@ static void run_runtime_manager(const struct supervisor_config *cfg)
               cfg->workload,
               "--manifest",
               cfg->manifest,
+              "--profile",
+              cfg->profile,
               "--args",
               cfg->args,
               NULL);
     }
 }
 
-static int run_workload_once(const struct supervisor_config *cfg)
+static int run_workload_once(const struct tear_run_config *cfg)
 {
     supervisor_workload_event(cfg->name, "workload_selected");
 
@@ -667,7 +681,7 @@ static int run_supervisor_daemon(pid_t trustd_pid, pid_t optd_pid)
 
 int main(int argc, char **argv)
 {
-    struct supervisor_config cfg = parse_args(argc, argv);
+    struct tear_run_config cfg = parse_args(argc, argv);
 
     if (validate_config(&cfg) < 0)
         return 1;

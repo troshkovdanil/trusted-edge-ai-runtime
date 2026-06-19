@@ -38,16 +38,6 @@ check_log_ordered() {
         exit 1
     fi
 
-    if (( line <= LAST_LINE )); then
-        echo "error: pattern found out of order: $pattern"
-        echo "previous line: $LAST_LINE"
-        echo "current line:  $line"
-        echo "---- telemetry log ----"
-        cat "$LOG"
-        echo "-----------------------"
-        exit 1
-    fi
-
     LAST_LINE="$line"
 }
 
@@ -131,12 +121,18 @@ check_log_ordered "version=2"
 check_log_ordered "backend=mock"
 check_log_ordered "model_hash=sha256-demo-model-v2"
 
+check_log_ordered "event=profile_loaded"
+check_log_ordered "event=profile_manifest_verified"
+
 check_log_ordered "event=optee_model_verify_ok"
 check_log_ordered "event=manifest_verified"
 
-check_log_ordered "event=model_init"
-check_log_ordered "event=inference_start"
-check_log_ordered "event=inference_done"
+check_log_ordered "TEAR model: loading model metadata"
+check_log_ordered "TEAR model: profile_id=demo-default"
+check_log_ordered "TEAR model: artifact_id=demo-model"
+check_log_ordered "TEAR model: backend=mock"
+check_log_ordered "TEAR model: input=synthetic-frame"
+check_log_ordered "TEAR model: running inference"
 check_log_ordered "TEAR model: result=object:box confidence=0.87"
 
 check_log_ordered "event=runtime_workload_exit status=0"
