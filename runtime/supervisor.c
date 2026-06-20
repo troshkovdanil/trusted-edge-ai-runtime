@@ -18,11 +18,19 @@
 #define OPTD_PATH "build/host/tear-optd-host"
 #define TEARICTL_PATH "build/host/tearictl-host"
 #define RUNTIME_MANAGER_PATH "build/host/tear-runtime-manager-host"
+#define DEFAULT_EVENT_PATH "build/host/tear-supervisor-events.log"
+#define TRUSTD_EVENT_PATH "build/host/tear-trustd-events.log"
+#define OPTD_EVENT_PATH "build/host/tear-optd-events.log"
+#define RUNTIME_MANAGER_EVENT_PATH "build/host/tear-runtime-manager-events.log"
 #else
 #define TRUSTD_PATH "/bin/tear-trustd"
 #define OPTD_PATH "/bin/tear-optd"
 #define TEARICTL_PATH "/bin/tearictl"
 #define RUNTIME_MANAGER_PATH "/bin/tear-runtime-manager"
+#define DEFAULT_EVENT_PATH "/tmp/tear-supervisor-events.log"
+#define TRUSTD_EVENT_PATH "/tmp/tear-trustd-events.log"
+#define OPTD_EVENT_PATH "/tmp/tear-optd-events.log"
+#define RUNTIME_MANAGER_EVENT_PATH "/tmp/tear-runtime-manager-events.log"
 #endif
 
 #define TEAR_COMPONENT "supervisor"
@@ -40,6 +48,7 @@ struct tear_run_config {
     const char *manifest;
     const char *profile;
     const char *args;
+    const char *event_log;
     int enable_optimizer;
     int daemon_mode;
 };
@@ -385,6 +394,7 @@ static struct tear_run_config parse_args(int argc, char **argv)
         .manifest = NULL,
         .profile = NULL,
         .args = "",
+        .event_log = DEFAULT_EVENT_PATH,
         .enable_optimizer = 0,
         .daemon_mode = 0,
     };
@@ -398,6 +408,8 @@ static struct tear_run_config parse_args(int argc, char **argv)
             cfg.profile = argv[++i];
         } else if (strcmp(argv[i], "--args") == 0 && i + 1 < argc) {
             cfg.args = argv[++i];
+        } else if (strcmp(argv[i], "--event-log") == 0 && i + 1 < argc) {
+            cfg.event_log = argv[++i];
         } else if (strcmp(argv[i], "--enable-optimizer") == 0) {
             cfg.enable_optimizer = 1;
         } else if (strcmp(argv[i], "--daemon") == 0) {
@@ -410,6 +422,11 @@ static struct tear_run_config parse_args(int argc, char **argv)
 
 static int validate_config(const struct tear_run_config *cfg)
 {
+    if (!cfg->event_log || cfg->event_log[0] == '\0') {
+        fprintf(stderr, "TEAR supervisor: missing --event-log <path>\n");
+        return -1;
+    }
+
     if (cfg->daemon_mode)
         return 0;
 
@@ -420,9 +437,11 @@ static int validate_config(const struct tear_run_config *cfg)
                 "--manifest <path> "
                 "--profile <path> "
                 "[--args <args>] "
+                "[--event-log <path>] "
                 "[--enable-optimizer]\n");
         fprintf(stderr,
                 "       tear-supervisor --daemon "
+                "[--event-log <path>] "
                 "[--enable-optimizer]\n");
         return -1;
     }
@@ -450,9 +469,15 @@ static pid_t start_trustd(void)
                   trustd_path,
                   "--backend",
                   trustd_backend,
+                  "--event-log",
+                  TRUSTD_EVENT_PATH,
                   NULL);
         } else {
-            execl(trustd_path, trustd_path, NULL);
+            execl(trustd_path,
+                  trustd_path,
+                  "--event-log",
+                  TRUSTD_EVENT_PATH,
+                  NULL);
         }
 
         perror("execl trustd");
@@ -474,7 +499,11 @@ static pid_t start_optd(void)
     }
 
     if (pid == 0) {
-        execl(OPTD_PATH, OPTD_PATH, NULL);
+        execl(OPTD_PATH,
+              OPTD_PATH,
+              "--event-log",
+              OPTD_EVENT_PATH,
+              NULL);
 
         perror("execl optd");
         _exit(127);
@@ -558,6 +587,8 @@ static void run_runtime_manager(const struct tear_run_config *cfg)
               cfg->profile,
               "--args",
               cfg->args,
+              "--event-log",
+              RUNTIME_MANAGER_EVENT_PATH,
               "--enable-optimizer",
               NULL);
     } else {
@@ -573,6 +604,8 @@ static void run_runtime_manager(const struct tear_run_config *cfg)
               cfg->profile,
               "--args",
               cfg->args,
+              "--event-log",
+              RUNTIME_MANAGER_EVENT_PATH,
               NULL);
     }
 }
@@ -681,21 +714,29 @@ static int run_supervisor_daemon(pid_t trustd_pid, pid_t optd_pid)
 
 int main(int argc, char **argv)
 {
+    int ret;
     struct tear_run_config cfg = parse_args(argc, argv);
+    pid_t trustd_pid;
+    pid_t optd_pid = -1;
 
     if (validate_config(&cfg) < 0)
         return 1;
 
-    supervisor_event("supervisor_start");
-
-    pid_t trustd_pid = start_trustd();
-
-    if (trustd_pid < 0) {
-        supervisor_event("trustd_start_failed");
+    if (tear_event_init(cfg.event_log) < 0) {
+        fprintf(stderr,
+                "TEAR supervisor: failed to initialize events\n");
         return 1;
     }
 
-    pid_t optd_pid = -1;
+    supervisor_event("supervisor_start");
+
+    trustd_pid = start_trustd();
+
+    if (trustd_pid < 0) {
+        supervisor_event("trustd_start_failed");
+        tear_event_shutdown();
+        return 1;
+    }
 
     if (cfg.enable_optimizer) {
         optd_pid = start_optd();
@@ -703,21 +744,28 @@ int main(int argc, char **argv)
         if (optd_pid < 0) {
             supervisor_event("optd_start_failed");
             stop_child(trustd_pid);
+            tear_event_shutdown();
             return 1;
         }
     }
 
-    if (cfg.daemon_mode)
-        return run_supervisor_daemon(trustd_pid, optd_pid);
+    if (cfg.daemon_mode) {
+        ret = run_supervisor_daemon(trustd_pid, optd_pid);
+        supervisor_event("supervisor_shutdown");
+        tear_event_shutdown();
+        return ret;
+    }
 
     supervisor_state = SUPERVISOR_STATE_READY;
 
-    int ret = run_workload_once(&cfg);
+    ret = run_workload_once(&cfg);
 
     stop_child(optd_pid);
     stop_child(trustd_pid);
 
     supervisor_event("supervisor_shutdown");
+
+    tear_event_shutdown();
 
     return ret;
 }

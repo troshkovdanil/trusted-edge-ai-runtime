@@ -4,12 +4,18 @@
 #include "profile.h"
 
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
 #define TEAR_COMPONENT "demo_model"
 #define TEAR_METRICS_PATH_MAX 256
+#define TEAR_EVENT_PATH_MAX 256
+
+#ifdef TEAR_HOST_BUILD
+#define DEFAULT_EVENT_PATH "build/host/tear-demo-model-events.log"
+#else
+#define DEFAULT_EVENT_PATH "/tmp/tear-demo-model-events.log"
+#endif
 
 static const char *parse_arg_value(int argc, char **argv, const char *name)
 {
@@ -21,24 +27,39 @@ static const char *parse_arg_value(int argc, char **argv, const char *name)
     return NULL;
 }
 
+static int build_run_path(const char *base,
+                          const char *run_id,
+                          char *path,
+                          size_t path_size)
+{
+    int n = snprintf(path,
+                     path_size,
+                     "%s-%s",
+                     base,
+                     run_id);
+
+    return n >= 0 && (size_t)n < path_size ? 0 : -1;
+}
+
 static int build_metrics_path(const struct tear_profile *profile,
                               const char *run_id,
                               char *path,
                               size_t path_size)
 {
-    return snprintf(path,
-                    path_size,
-                    "%s-%s",
-                    profile->metrics_file_template,
-                    run_id) < (int)path_size ? 0 : -1;
+    return build_run_path(profile->metrics_file_template,
+                          run_id,
+                          path,
+                          path_size);
 }
 
 int main(int argc, char **argv)
 {
     const char *profile_path = parse_arg_value(argc, argv, "--profile");
     const char *run_id = parse_arg_value(argc, argv, "--run-id");
+    const char *event_log = parse_arg_value(argc, argv, "--event-log");
     struct tear_profile profile;
     char metrics_path[TEAR_METRICS_PATH_MAX];
+    char default_event_path[TEAR_EVENT_PATH_MAX];
 
     if (!profile_path) {
         fprintf(stderr, "TEAR model: missing --profile <path>\n");
@@ -64,7 +85,28 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    setenv("TEAR_TELEMETRY_FILE", metrics_path, 1);
+    if (!event_log) {
+        if (build_run_path(DEFAULT_EVENT_PATH,
+                           run_id,
+                           default_event_path,
+                           sizeof(default_event_path)) < 0) {
+            fprintf(stderr, "TEAR model: event path too long\n");
+            return 1;
+        }
+
+        event_log = default_event_path;
+    }
+
+    if (tear_event_init(event_log) < 0) {
+        fprintf(stderr, "TEAR model: failed to initialize events\n");
+        return 1;
+    }
+
+    if (tear_metric_init(metrics_path) < 0) {
+        fprintf(stderr, "TEAR model: failed to initialize metrics\n");
+        tear_event_shutdown();
+        return 1;
+    }
 
     tear_event_ex(TEAR_COMPONENT,
                   profile.profile_id,
@@ -109,6 +151,9 @@ int main(int argc, char **argv)
                   profile.profile_id,
                   profile.artifact_id,
                   "model_shutdown");
+
+    tear_metric_shutdown();
+    tear_event_shutdown();
 
     return 0;
 }

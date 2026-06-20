@@ -39,12 +39,215 @@ cp -v examples/model-v2.json "$TARGET/etc/tear/"
 cp -v profiles/demo.profile "$TARGET/etc/tear/"
 cp -v profiles/mnist.profile "$TARGET/etc/tear/"
 
+cat > "$TARGET/bin/verify-tear-qemu-run.sh" <<'EOS'
+#!/bin/sh
+
+set -eu
+
+check_file_contains() {
+    file="$1"
+    pattern="$2"
+
+    if [ ! -f "$file" ]; then
+        echo "error: expected file not found: $file"
+        exit 1
+    fi
+
+    if ! grep -Eq "$pattern" "$file"; then
+        echo "error: expected pattern not found: $pattern"
+        echo "---- $file ----"
+        cat "$file"
+        echo "--------------"
+        exit 1
+    fi
+}
+
+check_glob_contains() {
+    glob="$1"
+    pattern="$2"
+    found=0
+
+    for file in $glob; do
+        [ -f "$file" ] || continue
+
+        if grep -Eq "$pattern" "$file"; then
+            found=1
+            break
+        fi
+    done
+
+    if [ "$found" -ne 1 ]; then
+        echo "error: expected pattern not found in $glob: $pattern"
+        for file in $glob; do
+            [ -f "$file" ] || continue
+            echo "---- $file ----"
+            cat "$file"
+            echo "--------------"
+        done
+        exit 1
+    fi
+}
+
+SUPERVISOR_EVENTS="/tmp/tear-supervisor-events.log"
+TRUSTD_EVENTS="/tmp/tear-trustd-events.log"
+RUNTIME_MANAGER_EVENTS="/tmp/tear-runtime-manager-events.log"
+WORKLOAD_EVENTS="/tmp/tear-runtime-manager-events.log-run-*"
+
+echo "TEAR_QEMU_GUEST_VERIFY start"
+
+check_file_contains "$TRUSTD_EVENTS" "event=trustd_optee_backend_ping_ok"
+check_file_contains "$TRUSTD_EVENTS" "event=trustd_optee_backend_enroll_ok"
+check_file_contains "$TRUSTD_EVENTS" "event=trustd_optee_backend_enroll_before_verify_ok"
+check_file_contains "$TRUSTD_EVENTS" "event=trustd_optee_backend_verify_ok"
+
+check_file_contains "$TRUSTD_EVENTS" "event=trustd_start"
+check_file_contains "$TRUSTD_EVENTS" "event=optee_model_enroll"
+check_file_contains "$TRUSTD_EVENTS" "event=optee_model_verify_ok"
+check_file_contains "$TRUSTD_EVENTS" "event=optee_model_update_ok"
+check_file_contains "$TRUSTD_EVENTS" "event=optee_model_update_rejected"
+
+check_file_contains "$SUPERVISOR_EVENTS" "event=supervisor_start"
+check_file_contains "$SUPERVISOR_EVENTS" "event=provisioning_start"
+check_file_contains "$SUPERVISOR_EVENTS" "event=provisioning_done"
+check_file_contains "$SUPERVISOR_EVENTS" "event=provisioning_report_done"
+check_file_contains "$SUPERVISOR_EVENTS" "event=workload_start"
+check_file_contains "$SUPERVISOR_EVENTS" "event=workload_exit status=0"
+check_file_contains "$SUPERVISOR_EVENTS" "event=supervisor_shutdown"
+
+check_file_contains "$RUNTIME_MANAGER_EVENTS" "event=runtime_manager_start"
+check_file_contains "$RUNTIME_MANAGER_EVENTS" "event=manifest_loaded"
+check_file_contains "$RUNTIME_MANAGER_EVENTS" "artifact_id=demo-model"
+check_file_contains "$RUNTIME_MANAGER_EVENTS" "event=profile_loaded"
+check_file_contains "$RUNTIME_MANAGER_EVENTS" "event=profile_manifest_verified"
+check_file_contains "$RUNTIME_MANAGER_EVENTS" "event=run-[0-9]+-[0-9]+"
+check_file_contains "$RUNTIME_MANAGER_EVENTS" "event=manifest_verified"
+check_file_contains "$RUNTIME_MANAGER_EVENTS" "event=runtime_workload_exit status=0"
+check_file_contains "$RUNTIME_MANAGER_EVENTS" "event=runtime_manager_shutdown"
+
+check_glob_contains "$WORKLOAD_EVENTS" "event=model_init"
+check_glob_contains "$WORKLOAD_EVENTS" "event=inference_start"
+check_glob_contains "$WORKLOAD_EVENTS" "event=inference_done"
+check_glob_contains "$WORKLOAD_EVENTS" "event=model_shutdown"
+
+check_glob_contains "/tmp/tear-metric-demo-model-demo-default-*" "TEAR_METRIC .*name=confidence_x100"
+
+echo "TEAR_QEMU_GUEST_VERIFY_OK"
+EOS
+
+cat > "$TARGET/bin/verify-tear-qemu-mnist-adaptive-run.sh" <<'EOS'
+#!/bin/sh
+
+set -eu
+
+check_file_contains() {
+    file="$1"
+    pattern="$2"
+
+    if [ ! -f "$file" ]; then
+        echo "error: expected file not found: $file"
+        exit 1
+    fi
+
+    if ! grep -Eq "$pattern" "$file"; then
+        echo "error: expected pattern not found: $pattern"
+        echo "---- $file ----"
+        cat "$file"
+        echo "--------------"
+        exit 1
+    fi
+}
+
+check_glob_contains() {
+    glob="$1"
+    pattern="$2"
+    found=0
+
+    for file in $glob; do
+        [ -f "$file" ] || continue
+
+        if grep -Eq "$pattern" "$file"; then
+            found=1
+            break
+        fi
+    done
+
+    if [ "$found" -ne 1 ]; then
+        echo "error: expected pattern not found in $glob: $pattern"
+        for file in $glob; do
+            [ -f "$file" ] || continue
+            echo "---- $file ----"
+            cat "$file"
+            echo "--------------"
+        done
+        exit 1
+    fi
+}
+
+SUPERVISOR_EVENTS="/tmp/tear-supervisor-events.log"
+TRUSTD_EVENTS="/tmp/tear-trustd-events.log"
+OPTD_EVENTS="/tmp/tear-optd-events.log"
+RUNTIME_MANAGER_EVENTS="/tmp/tear-runtime-manager-events.log"
+WORKLOAD_EVENTS="/tmp/tear-runtime-manager-events.log-run-*"
+
+echo "TEAR_QEMU_MNIST_ADAPTIVE_GUEST_VERIFY start"
+
+check_file_contains "$SUPERVISOR_EVENTS" "event=supervisor_start"
+check_file_contains "$SUPERVISOR_EVENTS" "event=provisioning_start"
+check_file_contains "$SUPERVISOR_EVENTS" "event=provisioning_done"
+check_file_contains "$SUPERVISOR_EVENTS" "event=provisioning_report_done"
+check_file_contains "$SUPERVISOR_EVENTS" "event=workload_start"
+check_file_contains "$SUPERVISOR_EVENTS" "event=workload_exit status=0"
+check_file_contains "$SUPERVISOR_EVENTS" "event=supervisor_shutdown"
+
+check_file_contains "$TRUSTD_EVENTS" "event=trustd_start"
+check_file_contains "$TRUSTD_EVENTS" "event=optee_model_enroll"
+check_file_contains "$TRUSTD_EVENTS" "event=optee_model_verify_ok"
+check_file_contains "$TRUSTD_EVENTS" "event=optee_record_decision_ok"
+check_file_contains "$TRUSTD_EVENTS" "event=optimization_decision_recorded"
+
+check_file_contains "$OPTD_EVENTS" "event=optd_start"
+check_file_contains "$OPTD_EVENTS" "event=optd_proposal"
+
+check_file_contains "$RUNTIME_MANAGER_EVENTS" "event=runtime_manager_start"
+check_file_contains "$RUNTIME_MANAGER_EVENTS" "event=manifest_loaded"
+check_file_contains "$RUNTIME_MANAGER_EVENTS" "artifact_id=mnist-onnx-v1"
+check_file_contains "$RUNTIME_MANAGER_EVENTS" "event=profile_loaded"
+check_file_contains "$RUNTIME_MANAGER_EVENTS" "event=profile_manifest_verified"
+check_file_contains "$RUNTIME_MANAGER_EVENTS" "event=run-[0-9]+-[0-9]+"
+check_file_contains "$RUNTIME_MANAGER_EVENTS" "event=manifest_verified"
+check_file_contains "$RUNTIME_MANAGER_EVENTS" "event=runtime_workload_exit status=0"
+check_file_contains "$RUNTIME_MANAGER_EVENTS" "event=optimizer_proposal_received"
+check_file_contains "$RUNTIME_MANAGER_EVENTS" "event=request_high_accuracy_profile"
+check_file_contains "$RUNTIME_MANAGER_EVENTS" "event=rejected"
+check_file_contains "$RUNTIME_MANAGER_EVENTS" "event=profile_unavailable"
+check_file_contains "$RUNTIME_MANAGER_EVENTS" "event=optimization_decision_recorded_by_runtime_manager"
+check_file_contains "$RUNTIME_MANAGER_EVENTS" "event=optimization_decision_reported_by_runtime_manager"
+check_file_contains "$RUNTIME_MANAGER_EVENTS" "event=runtime_manager_shutdown"
+
+check_glob_contains "$WORKLOAD_EVENTS" "event=mnist_inference_metrics"
+
+check_glob_contains "/tmp/tear-metric-mnist-onnx-v1-mnist-default-*" "TEAR_METRIC .*name=confidence_margin_x1000"
+check_glob_contains "/tmp/tear-metric-mnist-onnx-v1-mnist-default-*" "TEAR_METRIC .*name=input_density_x1000"
+
+# TODO proper fix with tearictl
+#check_file_contains "/tmp/tear-trusted-decisions" "run_id=run-[0-9]+-[0-9]+ artifact_id=mnist-onnx-v1 proposal=request_high_accuracy_profile decision=rejected reason=profile_unavailable"
+
+echo "TEAR_QEMU_MNIST_ADAPTIVE_GUEST_VERIFY_OK"
+EOS
+
+chmod +x "$TARGET/bin/verify-tear-qemu-run.sh"
+chmod +x "$TARGET/bin/verify-tear-qemu-mnist-adaptive-run.sh"
+
 if [ "$TEST_MODE" = "mnist-adaptive" ]; then
     cat > "$TARGET/etc/init.d/S99tear-test" <<'EOS'
 #!/bin/sh
 
 echo "TEAR_OPTEE_MNIST_ADAPTIVE_TEST start"
-rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-trusted-decisions /tmp/tear-metric-mnist-onnx-v1-mnist-default-*
+rm -f /tmp/tear-trustd.sock \
+      /tmp/tear-optd.sock \
+      /tmp/tear-supervisor.sock \
+      /tmp/tear-metric-mnist-onnx-v1-mnist-default-* \
+      /tmp/tear-*-events.log*
 
 TEAR_TRUSTD_PATH=/bin/tear-trustd-optee \
 TEAR_TRUSTD_BACKEND=optee \
@@ -53,10 +256,18 @@ TEAR_TRUSTD_BACKEND=optee \
   --manifest /etc/tear/mnist-model.json \
   --profile /etc/tear/mnist.profile \
   --args "--sample weak7" \
-  --enable-optimizer || exit 1
+  --enable-optimizer || {
+    echo "TEAR_OPTEE_MNIST_ADAPTIVE_TEST failed"
+    poweroff -f
+    exit 1
+}
 
-grep -q "TEAR_METRIC .*name=confidence_margin_x1000" /tmp/tear-metric-mnist-onnx-v1-mnist-default-* || exit 1
-grep -q "TEAR_METRIC .*name=input_density_x1000" /tmp/tear-metric-mnist-onnx-v1-mnist-default-* || exit 1
+/bin/verify-tear-qemu-mnist-adaptive-run.sh || {
+    echo "TEAR_OPTEE_MNIST_ADAPTIVE_VERIFY failed"
+    poweroff -f
+    exit 1
+}
+
 echo "TEAR_OPTEE_MNIST_ADAPTIVE_TEST done"
 
 poweroff -f
@@ -66,19 +277,37 @@ else
 #!/bin/sh
 
 echo "TEAR_OPTEE_CA_TEST start"
-/bin/tear-optee-ca || exit 1
+/bin/tear-optee-ca || {
+    echo "TEAR_OPTEE_CA_TEST failed"
+    poweroff -f
+    exit 1
+}
 echo "TEAR_OPTEE_CA_TEST done"
 
+rm -f /tmp/tear-trustd-events.log
+
 echo "TEAR_OPTEE_TRUSTD_SELF_TEST start"
-/bin/tear-trustd-optee --backend optee --self-test || exit 1
+/bin/tear-trustd-optee --backend optee --self-test || {
+    echo "TEAR_OPTEE_TRUSTD_SELF_TEST failed"
+    poweroff -f
+    exit 1
+}
 echo "TEAR_OPTEE_TRUSTD_SELF_TEST done"
 
 echo "TEAR_OPTEE_TRUSTD_ENROLL_SELF_TEST start"
-/bin/tear-trustd-optee --backend optee --self-test-enroll || exit 1
+/bin/tear-trustd-optee --backend optee --self-test-enroll || {
+    echo "TEAR_OPTEE_TRUSTD_ENROLL_SELF_TEST failed"
+    poweroff -f
+    exit 1
+}
 echo "TEAR_OPTEE_TRUSTD_ENROLL_SELF_TEST done"
 
 echo "TEAR_OPTEE_TRUSTD_VERIFY_SELF_TEST start"
-/bin/tear-trustd-optee --backend optee --self-test-verify || exit 1
+/bin/tear-trustd-optee --backend optee --self-test-verify || {
+    echo "TEAR_OPTEE_TRUSTD_VERIFY_SELF_TEST failed"
+    poweroff -f
+    exit 1
+}
 echo "TEAR_OPTEE_TRUSTD_VERIFY_SELF_TEST done"
 
 echo "TEAR_OPTEE_TRUSTD_ENROLL_SOCKET_TEST start"
@@ -87,6 +316,8 @@ trustd_pid=$!
 sleep 1
 /bin/tearictl enroll /etc/tear/model-v1.json || {
     kill "$trustd_pid"
+    echo "TEAR_OPTEE_TRUSTD_ENROLL_SOCKET_TEST failed"
+    poweroff -f
     exit 1
 }
 kill "$trustd_pid"
@@ -98,10 +329,14 @@ trustd_pid=$!
 sleep 1
 /bin/tearictl enroll /etc/tear/model-v1.json || {
     kill "$trustd_pid"
+    echo "TEAR_OPTEE_TRUSTD_VERIFY_SOCKET_TEST enroll failed"
+    poweroff -f
     exit 1
 }
 /bin/tearictl verify /etc/tear/model-v1.json || {
     kill "$trustd_pid"
+    echo "TEAR_OPTEE_TRUSTD_VERIFY_SOCKET_TEST verify failed"
+    poweroff -f
     exit 1
 }
 kill "$trustd_pid"
@@ -113,18 +348,33 @@ trustd_pid=$!
 sleep 1
 /bin/tearictl enroll /etc/tear/model-v1.json || {
     kill "$trustd_pid"
+    echo "TEAR_OPTEE_TRUSTD_UPDATE_SOCKET_TEST enroll failed"
+    poweroff -f
     exit 1
 }
 /bin/tearictl update-model /etc/tear/model-v2.json || {
     kill "$trustd_pid"
+    echo "TEAR_OPTEE_TRUSTD_UPDATE_SOCKET_TEST update failed"
+    poweroff -f
     exit 1
 }
 /bin/tearictl update-model /etc/tear/model-v1.json && {
     kill "$trustd_pid"
+    echo "TEAR_OPTEE_TRUSTD_UPDATE_SOCKET_TEST rollback accepted unexpectedly"
+    poweroff -f
     exit 1
 }
 kill "$trustd_pid"
 echo "TEAR_OPTEE_TRUSTD_UPDATE_SOCKET_TEST done"
+
+rm -f /tmp/tear-trustd.sock \
+      /tmp/tear-optd.sock \
+      /tmp/tear-supervisor.sock \
+      /tmp/tear-metric-demo-model-demo-default-* \
+      /tmp/tear-supervisor-events.log \
+      /tmp/tear-runtime-manager-events.log \
+      /tmp/tear-runtime-manager-events.log-run-* \
+      /tmp/tear-demo-model-events.log*
 
 echo "TEAR_OPTEE_QEMU_TEST start"
 TEAR_TRUSTD_PATH=/bin/tear-trustd-optee \
@@ -135,6 +385,18 @@ TEAR_TRUSTD_BACKEND=optee \
   --profile /etc/tear/demo.profile
 rc=$?
 echo "TEAR_OPTEE_QEMU_TEST exit=$rc"
+
+if [ "$rc" -ne 0 ]; then
+    echo "TEAR_OPTEE_QEMU_TEST failed"
+    poweroff -f
+    exit 1
+fi
+
+/bin/verify-tear-qemu-run.sh || {
+    echo "TEAR_OPTEE_QEMU_VERIFY failed"
+    poweroff -f
+    exit 1
+}
 
 poweroff -f
 EOS

@@ -2,12 +2,20 @@
 
 #pragma once
 
+#include <stdio.h>
+
 enum tear_log_level {
     TEAR_LOG_DEBUG,
     TEAR_LOG_INFO,
     TEAR_LOG_WARN,
     TEAR_LOG_ERROR,
 };
+
+void tear_log_init(FILE *fp);
+int tear_event_init(const char *path);
+int tear_metric_init(const char *path);
+void tear_event_shutdown(void);
+void tear_metric_shutdown(void);
 
 void tear_log(const char *component,
               const char *workload,

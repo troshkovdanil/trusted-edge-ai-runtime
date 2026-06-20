@@ -19,7 +19,14 @@
 
 #define TEAR_COMPONENT "runtime_manager"
 #define TEAR_METRICS_PATH_MAX 256
+#define TEAR_EVENT_PATH_MAX 256
 #define TEAR_RUN_ID_MAX 64
+
+#ifdef TEAR_HOST_BUILD
+#define DEFAULT_EVENT_PATH "build/host/tear-runtime-manager-events.log"
+#else
+#define DEFAULT_EVENT_PATH "/tmp/tear-runtime-manager-events.log"
+#endif
 
 struct tear_run_config {
     const char *name;
@@ -27,6 +34,7 @@ struct tear_run_config {
     const char *manifest;
     const char *profile;
     const char *args;
+    const char *event_log;
     int enable_optimizer;
 };
 
@@ -65,6 +73,7 @@ static struct tear_run_config parse_args(int argc, char **argv)
         .manifest = NULL,
         .profile = NULL,
         .args = "",
+        .event_log = DEFAULT_EVENT_PATH,
         .enable_optimizer = 0,
     };
 
@@ -79,6 +88,8 @@ static struct tear_run_config parse_args(int argc, char **argv)
             cfg.profile = argv[++i];
         } else if (strcmp(argv[i], "--args") == 0 && i + 1 < argc) {
             cfg.args = argv[++i];
+        } else if (strcmp(argv[i], "--event-log") == 0 && i + 1 < argc) {
+            cfg.event_log = argv[++i];
         } else if (strcmp(argv[i], "--enable-optimizer") == 0) {
             cfg.enable_optimizer = 1;
         }
@@ -89,6 +100,11 @@ static struct tear_run_config parse_args(int argc, char **argv)
 
 static int validate_config(const struct tear_run_config *cfg)
 {
+    if (!cfg->event_log || cfg->event_log[0] == '\0') {
+        fprintf(stderr, "TEAR: missing --event-log <path>\n");
+        return -1;
+    }
+
     if (!cfg->workload || !cfg->manifest || !cfg->profile) {
         fprintf(stderr,
                 "usage: tear-runtime-manager "
@@ -97,6 +113,7 @@ static int validate_config(const struct tear_run_config *cfg)
                 "--manifest <path> "
                 "--profile <path> "
                 "[--args <args>] "
+                "[--event-log <path>] "
                 "[--enable-optimizer]\n");
         return -1;
     }
@@ -122,6 +139,20 @@ static int build_metrics_path(const struct tear_profile *profile,
                      path_size,
                      "%s-%s",
                      profile->metrics_file_template,
+                     run_id);
+
+    return n >= 0 && (size_t)n < path_size ? 0 : -1;
+}
+
+static int build_workload_event_path(const char *event_log,
+                                     const char *run_id,
+                                     char *path,
+                                     size_t path_size)
+{
+    int n = snprintf(path,
+                     path_size,
+                     "%s-%s",
+                     event_log,
                      run_id);
 
     return n >= 0 && (size_t)n < path_size ? 0 : -1;
@@ -297,17 +328,19 @@ static void record_optimizer_decision(const char *workload,
 }
 
 static void run_workload_process(const struct tear_run_config *cfg,
-                                 const char *run_id)
+                                 const char *run_id,
+                                 const char *event_log)
 {
     char command[512];
 
     if (cfg->args && cfg->args[0] != '\0') {
         snprintf(command,
                  sizeof(command),
-                 "%s --profile %s --run-id %s %s",
+                 "%s --profile %s --run-id %s --event-log %s %s",
                  cfg->workload,
                  cfg->profile,
                  run_id,
+                 event_log,
                  cfg->args);
 
         execl("/bin/sh", "sh", "-c", command, NULL);
@@ -318,6 +351,8 @@ static void run_workload_process(const struct tear_run_config *cfg,
               cfg->profile,
               "--run-id",
               run_id,
+              "--event-log",
+              event_log,
               NULL);
     }
 
@@ -332,23 +367,28 @@ int tear_runtime_manager_main(int argc, char **argv)
     struct tear_profile profile;
     int use_optimizer = 0;
     char metrics_path[TEAR_METRICS_PATH_MAX];
+    char workload_event_path[TEAR_EVENT_PATH_MAX];
     char run_id[TEAR_RUN_ID_MAX];
+    int status = 0;
+    int ret = 1;
+
+    if (validate_config(&cfg) < 0)
+        return 1;
+
+    if (tear_event_init(cfg.event_log) < 0) {
+        fprintf(stderr, "TEAR: failed to initialize runtime manager events\n");
+        return 1;
+    }
 
     build_run_id(run_id, sizeof(run_id));
 
     runtime_event(cfg.name, NULL, "runtime_manager_start");
-
-    if (validate_config(&cfg) < 0) {
-        runtime_event(cfg.name, NULL, "runtime_manager_invalid_config");
-        return 1;
-    }
-
     runtime_event(cfg.name, NULL, "manifest_load_start");
 
     if (tear_manifest_load(cfg.manifest, &manifest) < 0) {
         fprintf(stderr, "TEAR: failed to load manifest\n");
         runtime_event(cfg.name, NULL, "manifest_load_failed");
-        return 1;
+        goto out;
     }
 
     runtime_event(cfg.name, manifest.artifact_id, "manifest_loaded");
@@ -360,7 +400,7 @@ int tear_runtime_manager_main(int argc, char **argv)
         runtime_event(cfg.name,
                       manifest.artifact_id,
                       "profile_load_failed");
-        return 1;
+        goto out;
     }
 
     runtime_event(cfg.name, manifest.artifact_id, "profile_loaded");
@@ -371,7 +411,7 @@ int tear_runtime_manager_main(int argc, char **argv)
         runtime_event(cfg.name,
                       manifest.artifact_id,
                       "profile_manifest_mismatch");
-        return 1;
+        goto out;
     }
 
     runtime_event(cfg.name, manifest.artifact_id, "profile_manifest_verified");
@@ -385,7 +425,18 @@ int tear_runtime_manager_main(int argc, char **argv)
         runtime_event(cfg.name,
                       manifest.artifact_id,
                       "metrics_path_too_long");
-        return 1;
+        goto out;
+    }
+
+    if (build_workload_event_path(cfg.event_log,
+                                  run_id,
+                                  workload_event_path,
+                                  sizeof(workload_event_path)) < 0) {
+        fprintf(stderr, "TEAR: workload event path too long\n");
+        runtime_event(cfg.name,
+                      manifest.artifact_id,
+                      "workload_event_path_too_long");
+        goto out;
     }
 
     if (tear_trust_verify(&manifest) < 0) {
@@ -393,7 +444,7 @@ int tear_runtime_manager_main(int argc, char **argv)
         runtime_event(cfg.name,
                       manifest.artifact_id,
                       "manifest_verify_failed");
-        return 1;
+        goto out;
     }
 
     runtime_event(cfg.name, manifest.artifact_id, "manifest_verified");
@@ -405,7 +456,7 @@ int tear_runtime_manager_main(int argc, char **argv)
         runtime_event(cfg.name,
                       manifest.artifact_id,
                       "optimizer_required_but_disabled");
-        return 1;
+        goto out;
     }
 
     use_optimizer = cfg.enable_optimizer && manifest.optimization_capable;
@@ -425,20 +476,18 @@ int tear_runtime_manager_main(int argc, char **argv)
         runtime_event(cfg.name,
                       manifest.artifact_id,
                       "runtime_manager_fork_failed");
-        return 1;
+        goto out;
     }
 
     if (pid == 0)
-        run_workload_process(&cfg, run_id);
-
-    int status = 0;
+        run_workload_process(&cfg, run_id, workload_event_path);
 
     if (waitpid(pid, &status, 0) < 0) {
         perror("waitpid");
         runtime_event(cfg.name,
                       manifest.artifact_id,
                       "runtime_manager_wait_failed");
-        return 1;
+        goto out;
     }
 
     if (WIFEXITED(status)) {
@@ -465,5 +514,9 @@ int tear_runtime_manager_main(int argc, char **argv)
                   manifest.artifact_id,
                   "runtime_manager_shutdown");
 
-    return WIFEXITED(status) && WEXITSTATUS(status) == 0 ? 0 : 1;
+    ret = WIFEXITED(status) && WEXITSTATUS(status) == 0 ? 0 : 1;
+
+out:
+    tear_event_shutdown();
+    return ret;
 }

@@ -10,6 +10,12 @@
 #include <sys/un.h>
 #include <unistd.h>
 
+#ifdef TEAR_HOST_BUILD
+#define DEFAULT_EVENT_PATH "build/host/tear-optd-events.log"
+#else
+#define DEFAULT_EVENT_PATH "/tmp/tear-optd-events.log"
+#endif
+
 static int create_socket(void)
 {
     int fd = socket(AF_UNIX, SOCK_STREAM, 0);
@@ -38,6 +44,28 @@ static int create_socket(void)
     }
 
     return fd;
+}
+
+static const char *parse_event_log(int argc, char **argv)
+{
+    const char *event_log = DEFAULT_EVENT_PATH;
+
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--event-log") == 0 && i + 1 < argc) {
+            event_log = argv[++i];
+        } else {
+            fprintf(stderr,
+                    "usage: tear-optd [--event-log <path>]\n");
+            return NULL;
+        }
+    }
+
+    if (!event_log || event_log[0] == '\0') {
+        fprintf(stderr, "TEAR optd: missing --event-log <path>\n");
+        return NULL;
+    }
+
+    return event_log;
 }
 
 static int parse_metric_line(const char *line,
@@ -124,12 +152,23 @@ static void handle_propose(int client, const char *buf)
     dprintf(client, "PROPOSAL %s %s\n", proposal.action, proposal.reason);
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
+    const char *event_log = parse_event_log(argc, argv);
+
+    if (!event_log)
+        return 1;
+
+    if (tear_event_init(event_log) < 0) {
+        fprintf(stderr, "TEAR optd: failed to initialize events\n");
+        return 1;
+    }
+
     int server = create_socket();
 
     if (server < 0) {
         perror("optd socket");
+        tear_event_shutdown();
         return 1;
     }
 

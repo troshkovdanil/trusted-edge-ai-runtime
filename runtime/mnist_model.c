@@ -14,6 +14,13 @@
 #define MNIST_INPUT_SIZE (1 * 1 * 28 * 28)
 #define MNIST_CLASSES 10
 #define TEAR_METRICS_PATH_MAX 256
+#define TEAR_EVENT_PATH_MAX 256
+
+#ifdef TEAR_HOST_BUILD
+#define DEFAULT_EVENT_PATH "build/host/tear-mnist-model-events.log"
+#else
+#define DEFAULT_EVENT_PATH "/tmp/tear-mnist-model-events.log"
+#endif
 
 static const char *MODEL_PATH = "models/mnist/mnist.onnx";
 
@@ -41,18 +48,29 @@ static const char *parse_arg_value(int argc, char **argv, const char *name)
     return NULL;
 }
 
+static int build_run_path(const char *base,
+                          const char *run_id,
+                          char *path,
+                          size_t path_size)
+{
+    int n = snprintf(path,
+                     path_size,
+                     "%s-%s",
+                     base,
+                     run_id);
+
+    return n >= 0 && (size_t)n < path_size ? 0 : -1;
+}
+
 static int build_metrics_path(const struct tear_profile *profile,
                               const char *run_id,
                               char *path,
                               size_t path_size)
 {
-    int n = snprintf(path,
-                     path_size,
-                     "%s-%s",
-                     profile->metrics_file_template,
-                     run_id);
-
-    return n >= 0 && (size_t)n < path_size ? 0 : -1;
+    return build_run_path(profile->metrics_file_template,
+                          run_id,
+                          path,
+                          path_size);
 }
 
 static const char *sample_name(enum mnist_sample_kind kind)
@@ -232,8 +250,10 @@ int main(int argc, char **argv)
 {
     const char *profile_path = parse_arg_value(argc, argv, "--profile");
     const char *run_id = parse_arg_value(argc, argv, "--run-id");
+    const char *event_log = parse_arg_value(argc, argv, "--event-log");
     struct tear_profile profile;
     char metrics_path[TEAR_METRICS_PATH_MAX];
+    char default_event_path[TEAR_EVENT_PATH_MAX];
     enum mnist_sample_kind sample_kind = parse_sample_kind(argc, argv);
     const OrtApi *api = OrtGetApiBase()->GetApi(ORT_API_VERSION);
 
@@ -274,7 +294,28 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    setenv("TEAR_TELEMETRY_FILE", metrics_path, 1);
+    if (!event_log) {
+        if (build_run_path(DEFAULT_EVENT_PATH,
+                           run_id,
+                           default_event_path,
+                           sizeof(default_event_path)) < 0) {
+            fprintf(stderr, "TEAR: MNIST event path too long\n");
+            return 1;
+        }
+
+        event_log = default_event_path;
+    }
+
+    if (tear_event_init(event_log) < 0) {
+        fprintf(stderr, "TEAR: MNIST failed to initialize events\n");
+        return 1;
+    }
+
+    if (tear_metric_init(metrics_path) < 0) {
+        fprintf(stderr, "TEAR model: failed to initialize metrics\n");
+        tear_event_shutdown();
+        return 1;
+    }
 
     fill_digit_sample(input, sample_kind);
     print_digit(input);
@@ -409,6 +450,9 @@ int main(int argc, char **argv)
     api->ReleaseSession(session);
     api->ReleaseSessionOptions(session_options);
     api->ReleaseEnv(env);
+
+    tear_metric_shutdown();
+    tear_event_shutdown();
 
     return 0;
 }

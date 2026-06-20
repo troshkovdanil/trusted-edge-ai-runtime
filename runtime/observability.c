@@ -4,10 +4,60 @@
 
 #include <stdarg.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <time.h>
 
-#define TEAR_TELEMETRY_FILE_ENV "TEAR_TELEMETRY_FILE"
+static FILE *log_fp = NULL;
+static FILE *event_fp = NULL;
+static FILE *metric_fp = NULL;
+
+void tear_log_init(FILE *fp)
+{
+    log_fp = fp ? fp : stdout;
+}
+
+int tear_event_init(const char *path)
+{
+    if (!path || path[0] == '\0')
+        return -1;
+
+    if (event_fp) {
+        fclose(event_fp);
+        event_fp = NULL;
+    }
+
+    event_fp = fopen(path, "a");
+    return event_fp ? 0 : -1;
+}
+
+void tear_event_shutdown(void)
+{
+    if (event_fp) {
+        fclose(event_fp);
+        event_fp = NULL;
+    }
+}
+
+int tear_metric_init(const char *path)
+{
+    if (!path || path[0] == '\0')
+        return -1;
+
+    if (metric_fp) {
+        fclose(metric_fp);
+        metric_fp = NULL;
+    }
+
+    metric_fp = fopen(path, "w");
+    return metric_fp ? 0 : -1;
+}
+
+void tear_metric_shutdown(void)
+{
+    if (metric_fp) {
+        fclose(metric_fp);
+        metric_fp = NULL;
+    }
+}
 
 static long monotonic_ms(void)
 {
@@ -19,25 +69,19 @@ static long monotonic_ms(void)
     return ts.tv_sec * 1000L + ts.tv_nsec / 1000000L;
 }
 
-static FILE *observability_stream(void)
+static FILE *log_stream(void)
 {
-    const char *path = getenv(TEAR_TELEMETRY_FILE_ENV);
-
-    if (!path || path[0] == '\0')
-        return stdout;
-
-    FILE *f = fopen(path, "a");
-
-    if (!f)
-        return stdout;
-
-    return f;
+    return log_fp ? log_fp : stdout;
 }
 
-static void observability_close(FILE *f)
+static FILE *event_stream(void)
 {
-    if (f && f != stdout)
-        fclose(f);
+    return event_fp ? event_fp : stdout;
+}
+
+static FILE *metric_stream(void)
+{
+    return metric_fp ? metric_fp : stdout;
 }
 
 static const char *log_level_name(enum tear_log_level level)
@@ -71,7 +115,7 @@ void tear_log(const char *component,
               const char *fmt,
               ...)
 {
-    FILE *out = observability_stream();
+    FILE *out = log_stream();
     va_list ap;
 
     fprintf(out,
@@ -91,7 +135,6 @@ void tear_log(const char *component,
     fprintf(out, "\"\n");
 
     fflush(out);
-    observability_close(out);
 }
 
 void tear_event_ex(const char *component,
@@ -99,7 +142,7 @@ void tear_event_ex(const char *component,
                    const char *artifact_id,
                    const char *event)
 {
-    FILE *out = observability_stream();
+    FILE *out = event_stream();
 
     fprintf(out,
             "TEAR_EVENT ts_ms=%ld component=%s",
@@ -112,7 +155,6 @@ void tear_event_ex(const char *component,
     fprintf(out, " event=%s\n", event);
 
     fflush(out);
-    observability_close(out);
 }
 
 void tear_event_ex_kv(const char *component,
@@ -122,7 +164,7 @@ void tear_event_ex_kv(const char *component,
                       const char *key,
                       long value)
 {
-    FILE *out = observability_stream();
+    FILE *out = event_stream();
 
     fprintf(out,
             "TEAR_EVENT ts_ms=%ld component=%s",
@@ -135,7 +177,6 @@ void tear_event_ex_kv(const char *component,
     fprintf(out, " event=%s %s=%ld\n", event, key, value);
 
     fflush(out);
-    observability_close(out);
 }
 
 void tear_metric_long(const char *component,
@@ -144,7 +185,7 @@ void tear_metric_long(const char *component,
                       const char *name,
                       long value)
 {
-    FILE *out = observability_stream();
+    FILE *out = metric_stream();
 
     fprintf(out,
             "TEAR_METRIC ts_ms=%ld component=%s",
@@ -157,7 +198,6 @@ void tear_metric_long(const char *component,
     fprintf(out, " name=%s value=%ld\n", name, value);
 
     fflush(out);
-    observability_close(out);
 }
 
 /* Compatibility wrappers. */

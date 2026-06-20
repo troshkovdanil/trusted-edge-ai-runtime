@@ -18,6 +18,12 @@
 #define TEAR_TRUSTED_STATE "/tmp/tear-trusted-state"
 #define TEAR_TRUSTED_DECISIONS "/tmp/tear-trusted-decisions"
 
+#ifdef TEAR_HOST_BUILD
+#define DEFAULT_EVENT_PATH "build/host/tear-trustd-events.log"
+#else
+#define DEFAULT_EVENT_PATH "/tmp/tear-trustd-events.log"
+#endif
+
 enum tear_trust_backend {
     TEAR_TRUST_BACKEND_FILE,
     TEAR_TRUST_BACKEND_OPTEE,
@@ -365,11 +371,13 @@ static void handle_report_decision(int client, enum tear_trust_backend backend)
 
 static int parse_backend(int argc, char **argv,
                          enum tear_trust_backend *backend,
+                         const char **event_log,
                          int *self_test,
                          int *self_test_enroll,
                          int *self_test_verify)
 {
     *backend = TEAR_TRUST_BACKEND_FILE;
+    *event_log = DEFAULT_EVENT_PATH;
     *self_test = 0;
     *self_test_enroll = 0;
     *self_test_verify = 0;
@@ -391,6 +399,8 @@ static int parse_backend(int argc, char **argv,
                 fprintf(stderr, "TEAR trustd: unknown backend: %s\n", argv[i]);
                 return -1;
             }
+        } else if (strcmp(argv[i], "--event-log") == 0 && i + 1 < argc) {
+            *event_log = argv[++i];
         } else if (strcmp(argv[i], "--self-test") == 0) {
             *self_test = 1;
         } else if (strcmp(argv[i], "--self-test-enroll") == 0) {
@@ -399,12 +409,18 @@ static int parse_backend(int argc, char **argv,
             *self_test_verify = 1;
         } else {
             fprintf(stderr,
-                    "usage: tear-trustd [--backend file|optee]"
+                    "usage: tear-trustd [--backend file|optee] "
+                    "[--event-log <path>] "
                     "[--self-test] "
                     "[--self-test-enroll] "
                     "[--self-test-verify]\n");
             return -1;
         }
+    }
+
+    if (!*event_log || (*event_log)[0] == '\0') {
+        fprintf(stderr, "TEAR trustd: missing --event-log <path>\n");
+        return -1;
     }
 
     return 0;
@@ -477,29 +493,47 @@ static int run_verify_self_test(enum tear_trust_backend backend)
 int main(int argc, char **argv)
 {
     enum tear_trust_backend backend;
+    const char *event_log;
     int self_test;
     int self_test_enroll;
     int self_test_verify;
 
-    if (parse_backend(argc, argv, &backend,
+    if (parse_backend(argc, argv,
+                      &backend,
+                      &event_log,
                       &self_test,
                       &self_test_enroll,
                       &self_test_verify) < 0)
         return 1;
 
-    if (self_test)
-        return run_self_test(backend);
+    if (tear_event_init(event_log) < 0) {
+        fprintf(stderr, "TEAR trustd: failed to initialize events\n");
+        return 1;
+    }
 
-    if (self_test_enroll)
-        return run_enroll_self_test(backend);
+    if (self_test) {
+        int ret = run_self_test(backend);
+        tear_event_shutdown();
+        return ret;
+    }
 
-    if (self_test_verify)
-        return run_verify_self_test(backend);
+    if (self_test_enroll) {
+        int ret = run_enroll_self_test(backend);
+        tear_event_shutdown();
+        return ret;
+    }
+
+    if (self_test_verify) {
+        int ret = run_verify_self_test(backend);
+        tear_event_shutdown();
+        return ret;
+    }
 
     int server = create_socket();
 
     if (server < 0) {
         perror("trustd socket");
+        tear_event_shutdown();
         return 1;
     }
 
