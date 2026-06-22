@@ -8,6 +8,17 @@
 #include "../ta/tear_ta/include/tear_ta.h"
 #include "tear_optee_client.h"
 
+static int tear_optee_result_to_errno(TEEC_Result res)
+{
+	if (res == TEEC_SUCCESS)
+		return 0;
+
+	if (res == TEEC_ERROR_SECURITY)
+		return -2;
+
+	return -1;
+}
+
 int tear_optee_ping(void)
 {
 	TEEC_Context ctx;
@@ -81,7 +92,7 @@ static int tear_optee_invoke_state_cmd(uint32_t cmd, const char *state)
 	TEEC_CloseSession(&sess);
 	TEEC_FinalizeContext(&ctx);
 
-	return res == TEEC_SUCCESS ? 0 : -1;
+	return tear_optee_result_to_errno(res);
 }
 
 int tear_optee_enroll(const char *state)

@@ -97,47 +97,38 @@ static int parse_manifest_message(const char *buf,
                   m->model_hash) == 4 ? 0 : -1;
 }
 
-static void handle_enroll(int client,
-                          const char *buf,
-                          enum tear_trust_backend backend)
+static int parse_decision_message(const char *buf,
+                                  char *run_id,
+                                  char *artifact_id,
+                                  char *proposal,
+                                  char *decision,
+                                  char *reason,
+                                  long *value)
 {
-    struct tear_model_manifest m;
-
-    if (parse_manifest_message(buf, "ENROLL", &m) < 0) {
-        trustd_event(NULL, "model_enroll_failed");
-        dprintf(client, "ERR\n");
-        return;
-    }
-
-    if (backend == TEAR_TRUST_BACKEND_OPTEE) {
-#ifdef TEAR_ENABLE_OPTEE
-        char state[256];
-
-        snprintf(state, sizeof(state), "%s %d %s %s",
-                 m.artifact_id, m.version, m.backend, m.model_hash);
-
-        if (tear_optee_enroll(state) == 0) {
-            trustd_event(m.artifact_id, "optee_model_enroll");
-            dprintf(client, "OK\n");
-        } else {
-            trustd_event(m.artifact_id, "optee_model_enroll_failed");
-            dprintf(client, "ERR\n");
-        }
-#else
-        trustd_event(m.artifact_id, "optee_model_enroll_failed");
-        dprintf(client, "ERR\n");
-#endif
-        return;
-    }
-
-    if (tear_trusted_state_store(TEAR_TRUSTED_STATE, &m) == 0) {
-        trustd_event(m.artifact_id, "model_enroll");
-        dprintf(client, "OK\n");
-    } else {
-        trustd_event(m.artifact_id, "model_enroll_failed");
-        dprintf(client, "ERR\n");
-    }
+    return sscanf(buf,
+                  "RECORD_DECISION %63s %63s %127s %63s %127s %ld",
+                  run_id,
+                  artifact_id,
+                  proposal,
+                  decision,
+                  reason,
+                  value) == 6 ? 0 : -1;
 }
+
+#ifdef TEAR_ENABLE_OPTEE
+static void manifest_to_state(const struct tear_model_manifest *m,
+                              char *state,
+                              size_t state_size)
+{
+    snprintf(state,
+             state_size,
+             "%s %d %s %s",
+             m->artifact_id,
+             m->version,
+             m->backend,
+             m->model_hash);
+}
+#endif
 
 static int model_update_allowed(const struct tear_model_manifest *old,
                                 const struct tear_model_manifest *new)
@@ -151,12 +142,275 @@ static int model_update_allowed(const struct tear_model_manifest *old,
     return new->version > old->version;
 }
 
+/* File backend. */
+
+static int file_enroll(const struct tear_model_manifest *m)
+{
+    return tear_trusted_state_store(TEAR_TRUSTED_STATE, m);
+}
+
+static int file_update(const struct tear_model_manifest *incoming)
+{
+    struct tear_model_manifest trusted;
+
+    if (tear_trusted_state_load(TEAR_TRUSTED_STATE, &trusted) < 0)
+        return -1;
+
+    if (!model_update_allowed(&trusted, incoming))
+        return -2;
+
+    return tear_trusted_state_store(TEAR_TRUSTED_STATE, incoming);
+}
+
+static int file_verify(const struct tear_model_manifest *incoming)
+{
+    struct tear_model_manifest trusted;
+
+    if (tear_trusted_state_load(TEAR_TRUSTED_STATE, &trusted) < 0)
+        return -1;
+
+    return same_manifest(incoming, &trusted) ? 0 : -1;
+}
+
+static int file_report(char *state, size_t state_size)
+{
+    struct tear_model_manifest m;
+    int n;
+
+    if (tear_trusted_state_load(TEAR_TRUSTED_STATE, &m) < 0)
+        return -1;
+
+    n = snprintf(state,
+                 state_size,
+                 "%s %d %s %s",
+                 m.artifact_id,
+                 m.version,
+                 m.backend,
+                 m.model_hash);
+
+    return n >= 0 && (size_t)n < state_size ? 0 : -1;
+}
+
+static int file_record_decision(const char *run_id,
+                                const char *artifact_id,
+                                const char *proposal,
+                                const char *decision,
+                                const char *reason,
+                                long value)
+{
+    return tear_trusted_state_append_decision(TEAR_TRUSTED_DECISIONS,
+                                              run_id,
+                                              artifact_id,
+                                              proposal,
+                                              decision,
+                                              reason,
+                                              value);
+}
+
+static int file_report_decision(char *decision, size_t decision_size)
+{
+    return tear_trusted_state_report_decision(TEAR_TRUSTED_DECISIONS,
+                                              decision,
+                                              decision_size);
+}
+
+/* OP-TEE backend. */
+
+static int optee_enroll(const struct tear_model_manifest *m)
+{
+#ifdef TEAR_ENABLE_OPTEE
+    char state[256];
+
+    manifest_to_state(m, state, sizeof(state));
+    return tear_optee_enroll(state);
+#else
+    (void)m;
+    return -1;
+#endif
+}
+
+static int optee_update(const struct tear_model_manifest *incoming)
+{
+#ifdef TEAR_ENABLE_OPTEE
+    char state[256];
+
+    manifest_to_state(incoming, state, sizeof(state));
+    return tear_optee_update(state);
+#else
+    (void)incoming;
+    return -1;
+#endif
+}
+
+static int optee_verify(const struct tear_model_manifest *incoming)
+{
+#ifdef TEAR_ENABLE_OPTEE
+    char state[256];
+
+    manifest_to_state(incoming, state, sizeof(state));
+    return tear_optee_verify(state);
+#else
+    (void)incoming;
+    return -1;
+#endif
+}
+
+static int optee_report(char *state, size_t state_size)
+{
+#ifdef TEAR_ENABLE_OPTEE
+    return tear_optee_report(state, state_size);
+#else
+    (void)state;
+    (void)state_size;
+    return -1;
+#endif
+}
+
+static int optee_record_decision(const char *run_id,
+                                 const char *artifact_id,
+                                 const char *proposal,
+                                 const char *decision,
+                                 const char *reason,
+                                 long value)
+{
+#ifdef TEAR_ENABLE_OPTEE
+    return tear_optee_record_decision(run_id,
+                                      artifact_id,
+                                      proposal,
+                                      decision,
+                                      reason,
+                                      value);
+#else
+    (void)run_id;
+    (void)artifact_id;
+    (void)proposal;
+    (void)decision;
+    (void)reason;
+    (void)value;
+    return -1;
+#endif
+}
+
+static int optee_report_decision(char *decision, size_t decision_size)
+{
+#ifdef TEAR_ENABLE_OPTEE
+    return tear_optee_report_decision(decision, decision_size);
+#else
+    (void)decision;
+    (void)decision_size;
+    return -1;
+#endif
+}
+
+/* Backend dispatch. */
+
+static int trust_backend_enroll(enum tear_trust_backend backend,
+                                const struct tear_model_manifest *m)
+{
+    if (backend == TEAR_TRUST_BACKEND_OPTEE)
+        return optee_enroll(m);
+
+    return file_enroll(m);
+}
+
+static int trust_backend_update(enum tear_trust_backend backend,
+                                const struct tear_model_manifest *incoming)
+{
+    if (backend == TEAR_TRUST_BACKEND_OPTEE)
+        return optee_update(incoming);
+
+    return file_update(incoming);
+}
+
+static int trust_backend_verify(enum tear_trust_backend backend,
+                                const struct tear_model_manifest *incoming)
+{
+    if (backend == TEAR_TRUST_BACKEND_OPTEE)
+        return optee_verify(incoming);
+
+    return file_verify(incoming);
+}
+
+static int trust_backend_report(enum tear_trust_backend backend,
+                                char *state,
+                                size_t state_size)
+{
+    if (backend == TEAR_TRUST_BACKEND_OPTEE)
+        return optee_report(state, state_size);
+
+    return file_report(state, state_size);
+}
+
+static int trust_backend_record_decision(enum tear_trust_backend backend,
+                                         const char *run_id,
+                                         const char *artifact_id,
+                                         const char *proposal,
+                                         const char *decision,
+                                         const char *reason,
+                                         long value)
+{
+    if (backend == TEAR_TRUST_BACKEND_OPTEE)
+        return optee_record_decision(run_id,
+                                     artifact_id,
+                                     proposal,
+                                     decision,
+                                     reason,
+                                     value);
+
+    return file_record_decision(run_id,
+                                artifact_id,
+                                proposal,
+                                decision,
+                                reason,
+                                value);
+}
+
+static int trust_backend_report_decision(enum tear_trust_backend backend,
+                                         char *decision,
+                                         size_t decision_size)
+{
+    if (backend == TEAR_TRUST_BACKEND_OPTEE)
+        return optee_report_decision(decision, decision_size);
+
+    return file_report_decision(decision, decision_size);
+}
+
+/* Protocol handlers. */
+
+static void handle_enroll(int client,
+                          const char *buf,
+                          enum tear_trust_backend backend)
+{
+    struct tear_model_manifest m;
+
+    if (parse_manifest_message(buf, "ENROLL", &m) < 0) {
+        trustd_event(NULL, "model_enroll_failed");
+        dprintf(client, "ERR\n");
+        return;
+    }
+
+    if (trust_backend_enroll(backend, &m) == 0) {
+        trustd_event(m.artifact_id,
+                     backend == TEAR_TRUST_BACKEND_OPTEE ?
+                     "optee_model_enroll" :
+                     "model_enroll");
+        dprintf(client, "OK\n");
+        return;
+    }
+
+    trustd_event(m.artifact_id,
+                 backend == TEAR_TRUST_BACKEND_OPTEE ?
+                 "optee_model_enroll_failed" :
+                 "model_enroll_failed");
+    dprintf(client, "ERR\n");
+}
+
 static void handle_update(int client,
                           const char *buf,
                           enum tear_trust_backend backend)
 {
     struct tear_model_manifest incoming;
-    struct tear_model_manifest trusted;
+    int ret;
 
     if (parse_manifest_message(buf, "UPDATE", &incoming) < 0) {
         trustd_event(NULL, "model_update_failed");
@@ -164,50 +418,30 @@ static void handle_update(int client,
         return;
     }
 
-    if (backend == TEAR_TRUST_BACKEND_OPTEE) {
-#ifdef TEAR_ENABLE_OPTEE
-        char state[256];
+    ret = trust_backend_update(backend, &incoming);
 
-        snprintf(state, sizeof(state), "%s %d %s %s",
-                 incoming.artifact_id,
-                 incoming.version,
-                 incoming.backend,
-                 incoming.model_hash);
-
-        if (tear_optee_update(state) == 0) {
-            trustd_event(incoming.artifact_id, "optee_model_update_ok");
-            dprintf(client, "OK\n");
-        } else {
-            trustd_event(incoming.artifact_id, "optee_model_update_rejected");
-            dprintf(client, "ERR\n");
-        }
-#else
-        trustd_event(incoming.artifact_id, "optee_model_update_rejected");
-        dprintf(client, "ERR\n");
-#endif
+    if (ret == 0) {
+        trustd_event(incoming.artifact_id,
+                     backend == TEAR_TRUST_BACKEND_OPTEE ?
+                     "optee_model_update_ok" :
+                     "model_update_ok");
+        dprintf(client, "OK\n");
         return;
     }
 
-    if (tear_trusted_state_load(TEAR_TRUSTED_STATE, &trusted) < 0) {
-        trustd_event(incoming.artifact_id, "model_update_no_trusted_state");
-        dprintf(client, "ERR\n");
-        return;
+    if (ret == -2) {
+        trustd_event(incoming.artifact_id,
+                     backend == TEAR_TRUST_BACKEND_OPTEE ?
+                     "optee_model_rollback_rejected" :
+                     "model_rollback_rejected");
+    } else {
+        trustd_event(incoming.artifact_id,
+                     backend == TEAR_TRUST_BACKEND_OPTEE ?
+                     "optee_model_update_failed" :
+                     "model_update_failed");
     }
 
-    if (!model_update_allowed(&trusted, &incoming)) {
-        trustd_event(incoming.artifact_id, "model_rollback_rejected");
-        dprintf(client, "ERR\n");
-        return;
-    }
-
-    if (tear_trusted_state_store(TEAR_TRUSTED_STATE, &incoming) < 0) {
-        trustd_event(incoming.artifact_id, "model_update_failed");
-        dprintf(client, "ERR\n");
-        return;
-    }
-
-    trustd_event(incoming.artifact_id, "model_update_ok");
-    dprintf(client, "OK\n");
+    dprintf(client, "ERR\n");
 }
 
 static void handle_verify(int client,
@@ -215,7 +449,6 @@ static void handle_verify(int client,
                           enum tear_trust_backend backend)
 {
     struct tear_model_manifest incoming;
-    struct tear_model_manifest trusted;
 
     if (parse_manifest_message(buf, "VERIFY", &incoming) < 0) {
         trustd_event(NULL, "model_verify_failed");
@@ -223,68 +456,30 @@ static void handle_verify(int client,
         return;
     }
 
-    if (backend == TEAR_TRUST_BACKEND_OPTEE) {
-#ifdef TEAR_ENABLE_OPTEE
-        char state[256];
-
-        snprintf(state, sizeof(state), "%s %d %s %s",
-                 incoming.artifact_id,
-                 incoming.version,
-                 incoming.backend,
-                 incoming.model_hash);
-
-        if (tear_optee_verify(state) == 0) {
-            trustd_event(incoming.artifact_id, "optee_model_verify_ok");
-            dprintf(client, "OK\n");
-        } else {
-            trustd_event(incoming.artifact_id, "optee_model_verify_failed");
-            dprintf(client, "ERR\n");
-        }
-#else
-        trustd_event(incoming.artifact_id, "optee_model_verify_failed");
-        dprintf(client, "ERR\n");
-#endif
+    if (trust_backend_verify(backend, &incoming) == 0) {
+        trustd_event(incoming.artifact_id,
+                     backend == TEAR_TRUST_BACKEND_OPTEE ?
+                     "optee_model_verify_ok" :
+                     "model_verify_ok");
+        dprintf(client, "OK\n");
         return;
     }
 
-    if (tear_trusted_state_load(TEAR_TRUSTED_STATE, &trusted) == 0 &&
-        same_manifest(&incoming, &trusted)) {
-        trustd_event(incoming.artifact_id, "model_verify_ok");
-        dprintf(client, "OK\n");
-    } else {
-        trustd_event(incoming.artifact_id, "model_verify_failed");
-        dprintf(client, "ERR\n");
-    }
+    trustd_event(incoming.artifact_id,
+                 backend == TEAR_TRUST_BACKEND_OPTEE ?
+                 "optee_model_verify_failed" :
+                 "model_verify_failed");
+    dprintf(client, "ERR\n");
 }
 
 static void handle_report(int client, enum tear_trust_backend backend)
 {
-    struct tear_model_manifest m;
+    char state[256];
 
-    if (backend == TEAR_TRUST_BACKEND_OPTEE) {
-#ifdef TEAR_ENABLE_OPTEE
-        char state[256];
-
-        if (tear_optee_report(state, sizeof(state)) == 0)
-            dprintf(client, "STATE %s\n", state);
-        else
-            dprintf(client, "ERR\n");
-#else
+    if (trust_backend_report(backend, state, sizeof(state)) == 0)
+        dprintf(client, "STATE %s\n", state);
+    else
         dprintf(client, "ERR\n");
-#endif
-        return;
-    }
-
-    if (tear_trusted_state_load(TEAR_TRUSTED_STATE, &m) == 0) {
-        dprintf(client,
-                "STATE %s %d %s %s\n",
-                m.artifact_id,
-                m.version,
-                m.backend,
-                m.model_hash);
-    } else {
-        dprintf(client, "ERR\n");
-    }
 }
 
 static void handle_record_decision(int client,
@@ -298,53 +493,32 @@ static void handle_record_decision(int client,
     char reason[128];
     long value;
 
-    if (sscanf(buf,
-               "RECORD_DECISION %63s %63s %127s %63s %127s %ld",
-               run_id,
-               artifact_id,
-               proposal,
-               decision,
-               reason,
-               &value) != 6) {
+    if (parse_decision_message(buf,
+                               run_id,
+                               artifact_id,
+                               proposal,
+                               decision,
+                               reason,
+                               &value) < 0) {
         trustd_event(NULL, "optimization_decision_record_failed");
         dprintf(client, "ERR\n");
         return;
     }
 
-    if (backend == TEAR_TRUST_BACKEND_OPTEE) {
-#ifdef TEAR_ENABLE_OPTEE
-        if (tear_optee_record_decision(run_id,
-                                       artifact_id,
-                                       proposal,
-                                       decision,
-                                       reason,
-                                       value) < 0) {
-            trustd_event(artifact_id, "optimization_decision_record_failed");
-            dprintf(client, "ERR\n");
-            return;
-        }
+    if (trust_backend_record_decision(backend,
+                                      run_id,
+                                      artifact_id,
+                                      proposal,
+                                      decision,
+                                      reason,
+                                      value) < 0) {
+        trustd_event(artifact_id, "optimization_decision_record_failed");
+        dprintf(client, "ERR\n");
+        return;
+    }
 
+    if (backend == TEAR_TRUST_BACKEND_OPTEE)
         trustd_event(artifact_id, "optee_record_decision_ok");
-        trustd_event(artifact_id, "optimization_decision_recorded");
-        dprintf(client, "OK\n");
-#else
-        trustd_event(artifact_id, "optimization_decision_record_failed");
-        dprintf(client, "ERR\n");
-#endif
-        return;
-    }
-
-    if (tear_trusted_state_append_decision(TEAR_TRUSTED_DECISIONS,
-                                           run_id,
-                                           artifact_id,
-                                           proposal,
-                                           decision,
-                                           reason,
-                                           value) < 0) {
-        trustd_event(artifact_id, "optimization_decision_record_failed");
-        dprintf(client, "ERR\n");
-        return;
-    }
 
     trustd_event(artifact_id, "optimization_decision_recorded");
     dprintf(client, "OK\n");
@@ -352,21 +526,14 @@ static void handle_record_decision(int client,
 
 static void handle_report_decision(int client, enum tear_trust_backend backend)
 {
-    if (backend == TEAR_TRUST_BACKEND_OPTEE) {
-#ifdef TEAR_ENABLE_OPTEE
-        char decision[512];
+    char decision[512];
 
-        if (tear_optee_report_decision(decision, sizeof(decision)) == 0)
-            dprintf(client, "DECISION %s\n", decision);
-        else
-            dprintf(client, "ERR\n");
-#else
+    if (trust_backend_report_decision(backend,
+                                      decision,
+                                      sizeof(decision)) == 0)
+        dprintf(client, "DECISION %s\n", decision);
+    else
         dprintf(client, "ERR\n");
-#endif
-        return;
-    }
-
-    dprintf(client, "ERR\n");
 }
 
 static int parse_backend(int argc, char **argv,

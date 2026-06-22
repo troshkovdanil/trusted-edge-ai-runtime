@@ -104,7 +104,7 @@ check_file_contains "$TRUSTD_EVENTS" "event=trustd_start"
 check_file_contains "$TRUSTD_EVENTS" "event=optee_model_enroll"
 check_file_contains "$TRUSTD_EVENTS" "event=optee_model_verify_ok"
 check_file_contains "$TRUSTD_EVENTS" "event=optee_model_update_ok"
-check_file_contains "$TRUSTD_EVENTS" "event=optee_model_update_rejected"
+check_file_contains "$TRUSTD_EVENTS" "event=optee_model_rollback_rejected"
 
 check_file_contains "$SUPERVISOR_EVENTS" "event=supervisor_start"
 check_file_contains "$SUPERVISOR_EVENTS" "event=provisioning_start"
@@ -188,6 +188,7 @@ TRUSTD_EVENTS="/tmp/tear-trustd-events.log"
 OPTD_EVENTS="/tmp/tear-optd-events.log"
 RUNTIME_MANAGER_EVENTS="/tmp/tear-runtime-manager-events.log"
 WORKLOAD_EVENTS="/tmp/tear-runtime-manager-events.log-run-*"
+REPORTED_DECISION="/tmp/tear-reported-decision.log"
 
 echo "TEAR_QEMU_MNIST_ADAPTIVE_GUEST_VERIFY start"
 
@@ -229,8 +230,7 @@ check_glob_contains "$WORKLOAD_EVENTS" "event=mnist_inference_metrics"
 check_glob_contains "/tmp/tear-metric-mnist-onnx-v1-mnist-default-*" "TEAR_METRIC .*name=confidence_margin_x1000"
 check_glob_contains "/tmp/tear-metric-mnist-onnx-v1-mnist-default-*" "TEAR_METRIC .*name=input_density_x1000"
 
-# TODO proper fix with tearictl
-#check_file_contains "/tmp/tear-trusted-decisions" "run_id=run-[0-9]+-[0-9]+ artifact_id=mnist-onnx-v1 proposal=request_high_accuracy_profile decision=rejected reason=profile_unavailable"
+check_file_contains "$REPORTED_DECISION" "DECISION run_id=run-[0-9]+-[0-9]+ artifact_id=mnist-onnx-v1 proposal=request_high_accuracy_profile decision=rejected reason=profile_unavailable value=0"
 
 echo "TEAR_QEMU_MNIST_ADAPTIVE_GUEST_VERIFY_OK"
 EOS
@@ -246,6 +246,7 @@ echo "TEAR_OPTEE_MNIST_ADAPTIVE_TEST start"
 rm -f /tmp/tear-trustd.sock \
       /tmp/tear-optd.sock \
       /tmp/tear-supervisor.sock \
+      /tmp/tear-reported-decision.log \
       /tmp/tear-metric-mnist-onnx-v1-mnist-default-* \
       /tmp/tear-*-events.log*
 
@@ -261,6 +262,20 @@ TEAR_TRUSTD_BACKEND=optee \
     poweroff -f
     exit 1
 }
+
+rm -f /tmp/tear-trustd.sock
+/bin/tear-trustd-optee --backend optee &
+trustd_pid=$!
+sleep 1
+
+/bin/tearictl report-decision > /tmp/tear-reported-decision.log 2>&1 || {
+    kill "$trustd_pid"
+    echo "TEAR_OPTEE_MNIST_ADAPTIVE_REPORT_DECISION failed"
+    poweroff -f
+    exit 1
+}
+
+kill "$trustd_pid"
 
 /bin/verify-tear-qemu-mnist-adaptive-run.sh || {
     echo "TEAR_OPTEE_MNIST_ADAPTIVE_VERIFY failed"

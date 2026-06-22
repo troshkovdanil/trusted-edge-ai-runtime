@@ -26,6 +26,38 @@ int tear_trusted_state_append_decision(const char *path,
     return 0;
 }
 
+int tear_trusted_state_report_decision(const char *path,
+                                       char *decision,
+                                       size_t decision_size)
+{
+    FILE *f;
+    char line[512];
+    char last[512] = "";
+
+    if (!decision || decision_size == 0)
+        return -1;
+
+    f = fopen(path, "r");
+    if (!f)
+        return -1;
+
+    while (fgets(line, sizeof(line), f))
+        snprintf(last, sizeof(last), "%s", line);
+
+    fclose(f);
+
+    if (last[0] == '\0')
+        return -1;
+
+    last[strcspn(last, "\n")] = '\0';
+
+    if (snprintf(decision, decision_size, "%s", last) >=
+        (int)decision_size)
+        return -1;
+
+    return 0;
+}
+
 int tear_trusted_state_store(
     const char *path,
     const struct tear_model_manifest *manifest)
