@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -7,6 +8,15 @@
 
 #include "../ta/tear_ta/include/tear_ta.h"
 #include "tear_optee_client.h"
+
+static void optee_client_error(const char *fmt, ...)
+{
+	va_list ap;
+
+	va_start(ap, fmt);
+	vfprintf(stderr, fmt, ap);
+	va_end(ap);
+}
 
 static int tear_optee_result_to_errno(TEEC_Result res)
 {
@@ -29,14 +39,14 @@ int tear_optee_ping(void)
 
 	res = TEEC_InitializeContext(NULL, &ctx);
 	if (res != TEEC_SUCCESS) {
-		fprintf(stderr, "TEAR_OPTEE_ERROR initialize_context res=0x%x\n", res);
+		optee_client_error("TEAR_OPTEE_ERROR initialize_context res=0x%x\n", res);
 		return -1;
 	}
 
 	res = TEEC_OpenSession(&ctx, &sess, &uuid,
 			       TEEC_LOGIN_PUBLIC, NULL, NULL, &err_origin);
 	if (res != TEEC_SUCCESS) {
-		fprintf(stderr,
+		optee_client_error(
 			"TEAR_OPTEE_ERROR open_session res=0x%x origin=0x%x\n",
 			res, err_origin);
 		TEEC_FinalizeContext(&ctx);
@@ -45,7 +55,7 @@ int tear_optee_ping(void)
 
 	res = TEEC_InvokeCommand(&sess, TEAR_TA_CMD_PING, NULL, &err_origin);
 	if (res != TEEC_SUCCESS) {
-		fprintf(stderr,
+		optee_client_error(
 			"TEAR_OPTEE_ERROR ping res=0x%x origin=0x%x\n",
 			res, err_origin);
 		TEEC_CloseSession(&sess);

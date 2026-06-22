@@ -5,6 +5,56 @@
 #include <stdio.h>
 #include <string.h>
 
+static int trusted_state_write_decision(FILE *f,
+                                        const char *run_id,
+                                        const char *artifact_id,
+                                        const char *proposal,
+                                        const char *decision,
+                                        const char *reason,
+                                        long value)
+{
+    return fprintf(f,
+                   "run_id=%s artifact_id=%s proposal=%s decision=%s reason=%s value=%ld\n",
+                   run_id,
+                   artifact_id,
+                   proposal,
+                   decision,
+                   reason,
+                   value) < 0 ? -1 : 0;
+}
+
+static int trusted_state_write_manifest(FILE *f,
+                                        const struct tear_model_manifest *m)
+{
+    if (fprintf(f, "%s\n", m->artifact_id) < 0)
+        return -1;
+
+    if (fprintf(f, "%d\n", m->version) < 0)
+        return -1;
+
+    if (fprintf(f, "%s\n", m->backend) < 0)
+        return -1;
+
+    if (fprintf(f, "%s\n", m->model_hash) < 0)
+        return -1;
+
+    return 0;
+}
+
+static int trusted_state_copy_line(char *dst,
+                                   size_t dst_size,
+                                   const char *src)
+{
+    int n;
+
+    if (!dst || dst_size == 0 || !src)
+        return -1;
+
+    n = snprintf(dst, dst_size, "%s", src);
+
+    return n >= 0 && (size_t)n < dst_size ? 0 : -1;
+}
+
 int tear_trusted_state_append_decision(const char *path,
                                        const char *run_id,
                                        const char *artifact_id,
@@ -13,17 +63,24 @@ int tear_trusted_state_append_decision(const char *path,
                                        const char *reason,
                                        long value)
 {
-    FILE *f = fopen(path, "a");
+    FILE *f;
+    int ret;
 
+    f = fopen(path, "a");
     if (!f)
         return -1;
 
-    fprintf(f,
-            "run_id=%s artifact_id=%s proposal=%s decision=%s reason=%s value=%ld\n",
-            run_id, artifact_id, proposal, decision, reason, value);
+    ret = trusted_state_write_decision(f,
+                                       run_id,
+                                       artifact_id,
+                                       proposal,
+                                       decision,
+                                       reason,
+                                       value);
 
     fclose(f);
-    return 0;
+
+    return ret;
 }
 
 int tear_trusted_state_report_decision(const char *path,
@@ -41,8 +98,12 @@ int tear_trusted_state_report_decision(const char *path,
     if (!f)
         return -1;
 
-    while (fgets(line, sizeof(line), f))
-        snprintf(last, sizeof(last), "%s", line);
+    while (fgets(line, sizeof(line), f)) {
+        if (trusted_state_copy_line(last, sizeof(last), line) < 0) {
+            fclose(f);
+            return -1;
+        }
+    }
 
     fclose(f);
 
@@ -51,32 +112,25 @@ int tear_trusted_state_report_decision(const char *path,
 
     last[strcspn(last, "\n")] = '\0';
 
-    if (snprintf(decision, decision_size, "%s", last) >=
-        (int)decision_size)
-        return -1;
-
-    return 0;
+    return trusted_state_copy_line(decision, decision_size, last);
 }
 
 int tear_trusted_state_store(
     const char *path,
     const struct tear_model_manifest *manifest)
 {
-    FILE *f = fopen(path, "w");
+    FILE *f;
+    int ret;
 
-    if (!f) {
-        perror("fopen");
+    f = fopen(path, "w");
+    if (!f)
         return -1;
-    }
 
-    fprintf(f, "%s\n", manifest->artifact_id);
-    fprintf(f, "%d\n", manifest->version);
-    fprintf(f, "%s\n", manifest->backend);
-    fprintf(f, "%s\n", manifest->model_hash);
+    ret = trusted_state_write_manifest(f, manifest);
 
     fclose(f);
 
-    return 0;
+    return ret;
 }
 
 int tear_trusted_state_load(
@@ -85,9 +139,8 @@ int tear_trusted_state_load(
 {
     FILE *f = fopen(path, "r");
 
-    if (!f) {
+    if (!f)
         return -1;
-    }
 
     memset(manifest, 0, sizeof(*manifest));
 

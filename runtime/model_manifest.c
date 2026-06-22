@@ -2,9 +2,33 @@
 
 #include "model_manifest.h"
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+static void manifest_error(const char *fmt, ...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+}
+
+static void manifest_print(const char *fmt, ...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    vprintf(fmt, ap);
+    va_end(ap);
+}
+
+static void manifest_perror(const char *msg)
+{
+    perror(msg);
+}
 
 static int extract_string(
     const char *buf,
@@ -117,7 +141,7 @@ int tear_manifest_load(
 
     f = fopen(path, "r");
     if (!f) {
-        perror("fopen");
+        manifest_perror("fopen");
         return -1;
     }
 
@@ -171,6 +195,7 @@ int tear_manifest_load(
     return 0;
 
 fail:
+    manifest_error("TEAR manifest: invalid manifest: %s\n", path);
     free(buf);
     return -1;
 }
@@ -178,11 +203,11 @@ fail:
 void tear_manifest_print(
     const struct tear_model_manifest *manifest)
 {
-    printf("TEAR manifest:\n");
-    printf("  artifact_id=%s\n", manifest->artifact_id);
-    printf("  version=%d\n", manifest->version);
-    printf("  backend=%s\n", manifest->backend);
-    printf("  model_hash=%s\n", manifest->model_hash);
-    printf("  optimization_capable=%s\n",
-           manifest->optimization_capable ? "true" : "false");
+    manifest_print("TEAR manifest:\n");
+    manifest_print("  artifact_id=%s\n", manifest->artifact_id);
+    manifest_print("  version=%d\n", manifest->version);
+    manifest_print("  backend=%s\n", manifest->backend);
+    manifest_print("  model_hash=%s\n", manifest->model_hash);
+    manifest_print("  optimization_capable=%s\n",
+                   manifest->optimization_capable ? "true" : "false");
 }

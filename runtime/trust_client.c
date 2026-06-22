@@ -3,6 +3,7 @@
 #include "trust_client.h"
 #include "runtime_paths.h"
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -34,10 +35,18 @@ static int connect_socket(void)
     return fd;
 }
 
-static int expect_ok(int fd)
+static void trust_client_send(int fd, const char *fmt, ...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    vdprintf(fd, fmt, ap);
+    va_end(ap);
+}
+
+static int trust_client_expect_ok(int fd)
 {
     char buf[32];
-
     ssize_t n = read(fd, buf, sizeof(buf) - 1);
 
     if (n <= 0)
@@ -48,22 +57,40 @@ static int expect_ok(int fd)
     return strncmp(buf, "OK", 2) == 0 ? 0 : -1;
 }
 
+static int trust_client_read(int fd, char *buf, size_t buf_size)
+{
+    ssize_t n;
+
+    if (!buf || buf_size == 0)
+        return -1;
+
+    n = read(fd, buf, buf_size - 1);
+
+    if (n <= 0)
+        return -1;
+
+    buf[n] = '\0';
+
+    return 0;
+}
+
 int tear_trust_enroll(
     const struct tear_model_manifest *manifest)
 {
     int fd = connect_socket();
+    int ret;
 
     if (fd < 0)
         return -1;
 
-    dprintf(fd,
-            "ENROLL %s %d %s %s\n",
-            manifest->artifact_id,
-            manifest->version,
-            manifest->backend,
-            manifest->model_hash);
+    trust_client_send(fd,
+                      "ENROLL %s %d %s %s\n",
+                      manifest->artifact_id,
+                      manifest->version,
+                      manifest->backend,
+                      manifest->model_hash);
 
-    int ret = expect_ok(fd);
+    ret = trust_client_expect_ok(fd);
 
     close(fd);
 
@@ -73,18 +100,19 @@ int tear_trust_enroll(
 int tear_trust_update_model(const struct tear_model_manifest *manifest)
 {
     int fd = connect_socket();
+    int ret;
 
     if (fd < 0)
         return -1;
 
-    dprintf(fd,
-            "UPDATE %s %d %s %s\n",
-            manifest->artifact_id,
-            manifest->version,
-            manifest->backend,
-            manifest->model_hash);
+    trust_client_send(fd,
+                      "UPDATE %s %d %s %s\n",
+                      manifest->artifact_id,
+                      manifest->version,
+                      manifest->backend,
+                      manifest->model_hash);
 
-    int ret = expect_ok(fd);
+    ret = trust_client_expect_ok(fd);
 
     close(fd);
 
@@ -95,18 +123,19 @@ int tear_trust_verify(
     const struct tear_model_manifest *manifest)
 {
     int fd = connect_socket();
+    int ret;
 
     if (fd < 0)
         return -1;
 
-    dprintf(fd,
-            "VERIFY %s %d %s %s\n",
-            manifest->artifact_id,
-            manifest->version,
-            manifest->backend,
-            manifest->model_hash);
+    trust_client_send(fd,
+                      "VERIFY %s %d %s %s\n",
+                      manifest->artifact_id,
+                      manifest->version,
+                      manifest->backend,
+                      manifest->model_hash);
 
-    int ret = expect_ok(fd);
+    ret = trust_client_expect_ok(fd);
 
     close(fd);
 
@@ -116,22 +145,18 @@ int tear_trust_verify(
 int tear_trust_report(void)
 {
     int fd = connect_socket();
+    char buf[256];
 
     if (fd < 0)
         return -1;
 
-    dprintf(fd, "REPORT\n");
+    trust_client_send(fd, "REPORT\n");
 
-    char buf[256];
-
-    ssize_t n = read(fd, buf, sizeof(buf) - 1);
-
-    if (n <= 0) {
+    if (trust_client_read(fd, buf, sizeof(buf)) < 0) {
         close(fd);
         return -1;
     }
 
-    buf[n] = '\0';
     printf("%s", buf);
 
     close(fd);
@@ -147,20 +172,21 @@ int tear_trust_record_decision(const char *run_id,
                                long value)
 {
     int fd = connect_socket();
+    int ret;
 
     if (fd < 0)
         return -1;
 
-    dprintf(fd,
-            "RECORD_DECISION %s %s %s %s %s %ld\n",
-            run_id,
-            artifact_id,
-            proposal,
-            decision,
-            reason,
-            value);
+    trust_client_send(fd,
+                      "RECORD_DECISION %s %s %s %s %s %ld\n",
+                      run_id,
+                      artifact_id,
+                      proposal,
+                      decision,
+                      reason,
+                      value);
 
-    int ret = expect_ok(fd);
+    ret = trust_client_expect_ok(fd);
 
     close(fd);
 
@@ -172,7 +198,6 @@ int tear_trust_report_decision(char *decision, size_t decision_size)
     int fd = connect_socket();
     char buf[512];
     char reported[512];
-    ssize_t n;
 
     if (!decision || decision_size == 0)
         return -1;
@@ -180,19 +205,21 @@ int tear_trust_report_decision(char *decision, size_t decision_size)
     if (fd < 0)
         return -1;
 
-    dprintf(fd, "REPORT_DECISION\n");
+    trust_client_send(fd, "REPORT_DECISION\n");
 
-    n = read(fd, buf, sizeof(buf) - 1);
-    close(fd);
-
-    if (n <= 0)
+    if (trust_client_read(fd, buf, sizeof(buf)) < 0) {
+        close(fd);
         return -1;
+    }
 
-    buf[n] = '\0';
+    close(fd);
 
     if (sscanf(buf, "DECISION %511[^\n]", reported) != 1)
         return -1;
 
-    snprintf(decision, decision_size, "%s", reported);
+    if (snprintf(decision, decision_size, "%s", reported) >=
+        (int)decision_size)
+        return -1;
+
     return 0;
 }

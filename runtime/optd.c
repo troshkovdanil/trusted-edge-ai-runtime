@@ -4,6 +4,7 @@
 #include "observability.h"
 #include "runtime_paths.h"
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -15,6 +16,40 @@
 #else
 #define DEFAULT_EVENT_PATH "/tmp/tear-optd-events.log"
 #endif
+
+static void optd_error(const char *fmt, ...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+}
+
+static void optd_perror(const char *msg)
+{
+    perror(msg);
+}
+
+static void client_reply(int client, const char *fmt, ...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    vdprintf(client, fmt, ap);
+    va_end(ap);
+}
+
+static void client_reply_no_proposal(int client)
+{
+    client_reply(client, "NO_PROPOSAL metrics_unavailable\n");
+}
+
+static void client_reply_proposal(int client,
+                                  const struct tear_optimizer_proposal *p)
+{
+    client_reply(client, "PROPOSAL %s %s\n", p->action, p->reason);
+}
 
 static int create_socket(void)
 {
@@ -54,14 +89,13 @@ static const char *parse_event_log(int argc, char **argv)
         if (strcmp(argv[i], "--event-log") == 0 && i + 1 < argc) {
             event_log = argv[++i];
         } else {
-            fprintf(stderr,
-                    "usage: tear-optd [--event-log <path>]\n");
+            optd_error("usage: tear-optd [--event-log <path>]\n");
             return NULL;
         }
     }
 
     if (!event_log || event_log[0] == '\0') {
-        fprintf(stderr, "TEAR optd: missing --event-log <path>\n");
+        optd_error("TEAR optd: missing --event-log <path>\n");
         return NULL;
     }
 
@@ -136,20 +170,20 @@ static void handle_propose(int client, const char *buf)
 
     if (sscanf(buf, "PROPOSE %255s", path) != 1) {
         tear_event("optd_no_proposal");
-        dprintf(client, "NO_PROPOSAL metrics_unavailable\n");
+        client_reply_no_proposal(client);
         return;
     }
 
     if (load_metrics(path, &metrics) < 0) {
         tear_event("optd_no_proposal");
-        dprintf(client, "NO_PROPOSAL metrics_unavailable\n");
+        client_reply_no_proposal(client);
         return;
     }
 
     tear_optimizer_propose(&metrics, &proposal);
 
     tear_event("optd_proposal");
-    dprintf(client, "PROPOSAL %s %s\n", proposal.action, proposal.reason);
+    client_reply_proposal(client, &proposal);
 }
 
 int main(int argc, char **argv)
@@ -160,14 +194,14 @@ int main(int argc, char **argv)
         return 1;
 
     if (tear_event_init(event_log) < 0) {
-        fprintf(stderr, "TEAR optd: failed to initialize events\n");
+        optd_error("TEAR optd: failed to initialize events\n");
         return 1;
     }
 
     int server = create_socket();
 
     if (server < 0) {
-        perror("optd socket");
+        optd_perror("optd socket");
         tear_event_shutdown();
         return 1;
     }
@@ -193,7 +227,7 @@ int main(int argc, char **argv)
         if (strncmp(buf, "PROPOSE", 7) == 0)
             handle_propose(client, buf);
         else
-            dprintf(client, "NO_PROPOSAL metrics_unavailable\n");
+            client_reply_no_proposal(client);
 
         close(client);
     }

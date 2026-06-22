@@ -2,9 +2,19 @@
 
 #include "profile.h"
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+static void profile_print(const char *fmt, ...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    vprintf(fmt, ap);
+    va_end(ap);
+}
 
 static void trim_newline(char *s)
 {
@@ -178,19 +188,21 @@ int tear_profile_load(const char *path,
 
 void tear_profile_print(const struct tear_profile *profile)
 {
-    printf("TEAR profile:\n");
-    printf("  profile_id: %s\n", profile->profile_id);
-    printf("  artifact_id: %s\n", profile->artifact_id);
-    printf("  backend: %s\n", profile->backend);
-    printf("  metrics_file_template: %s\n",
-           profile->metrics_file_template);
+    profile_print("TEAR profile:\n");
+    profile_print("  profile_id: %s\n", profile->profile_id);
+    profile_print("  artifact_id: %s\n", profile->artifact_id);
+    profile_print("  backend: %s\n", profile->backend);
+    profile_print("  metrics_file_template: %s\n",
+                  profile->metrics_file_template);
 
-    printf("  adaptation.keep_current_profile: %s\n",
-           profile->allow_keep_current_profile ? "allowed" : "disabled");
+    profile_print("  adaptation.keep_current_profile: %s\n",
+                  profile->allow_keep_current_profile ?
+                  "allowed" : "disabled");
 
-    printf("  adaptation.request_high_accuracy_profile: %s\n",
-           profile->allow_request_high_accuracy_profile ? "allowed" : "disabled");
+    profile_print("  adaptation.request_high_accuracy_profile: %s\n",
+                  profile->allow_request_high_accuracy_profile ?
+                  "allowed" : "disabled");
 
-    printf("  adaptation.reject_input: %s\n",
-           profile->allow_reject_input ? "allowed" : "disabled");
+    profile_print("  adaptation.reject_input: %s\n",
+                  profile->allow_reject_input ? "allowed" : "disabled");
 }

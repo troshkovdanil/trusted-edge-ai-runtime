@@ -5,6 +5,7 @@
 
 #include <errno.h>
 #include <signal.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -57,6 +58,7 @@ static enum supervisor_state supervisor_state = SUPERVISOR_STATE_INIT;
 static volatile sig_atomic_t supervisor_running = 1;
 static int run_workload_once(const struct tear_run_config *cfg);
 static int run_plan_file(const char *path);
+static const char *state_name(enum supervisor_state state);
 
 static void supervisor_event(const char *event)
 {
@@ -82,6 +84,52 @@ static void supervisor_workload_event_kv(const char *workload,
                                          long value)
 {
     tear_event_ex_kv(TEAR_COMPONENT, workload, NULL, event, key, value);
+}
+
+static void supervisor_error(const char *fmt, ...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+}
+
+static void supervisor_perror(const char *msg)
+{
+    perror(msg);
+}
+
+static void client_reply(int client, const char *fmt, ...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    vdprintf(client, fmt, ap);
+    va_end(ap);
+}
+
+static void client_reply_ok(int client)
+{
+    client_reply(client, "OK\n");
+}
+
+static void client_reply_err(int client, const char *reason)
+{
+    if (reason)
+        client_reply(client, "ERR %s\n", reason);
+    else
+        client_reply(client, "ERR\n");
+}
+
+static void client_reply_pong(int client)
+{
+    client_reply(client, "PONG\n");
+}
+
+static void client_reply_status(int client)
+{
+    client_reply(client, "STATUS %s\n", state_name(supervisor_state));
 }
 
 static void handle_signal(int signo)
@@ -290,7 +338,7 @@ static int run_plan_file(const char *path)
 
     fp = fopen(path, "r");
     if (!fp) {
-        perror("open plan");
+        supervisor_perror("open plan");
         supervisor_event("run_plan_open_failed");
         return -1;
     }
@@ -334,42 +382,40 @@ static void handle_supervisor_client(int client)
     buf[n] = '\0';
 
     if (strncmp(buf, "PING", 4) == 0) {
-        dprintf(client, "PONG\n");
+        client_reply_pong(client);
     } else if (strncmp(buf, "STATUS", 6) == 0) {
-        dprintf(client,
-                "STATUS %s\n",
-                state_name(supervisor_state));
+        client_reply_status(client);
     } else if (strncmp(buf, "RUN_PLAN ", 9) == 0) {
         char path[256];
         int ret;
 
         if (supervisor_state == SUPERVISOR_STATE_RUNNING) {
-            dprintf(client, "ERR busy\n");
+            client_reply_err(client, "busy");
             return;
         }
 
         if (sscanf(buf, "RUN_PLAN %255s", path) != 1) {
-            dprintf(client, "ERR invalid_run_plan_command\n");
+            client_reply_err(client, "invalid_run_plan_command");
             return;
         }
 
         ret = run_plan_file(path);
 
         if (ret == 0)
-            dprintf(client, "OK\n");
+            client_reply_ok(client);
         else
-            dprintf(client, "ERR run_plan_failed\n");
+            client_reply_err(client, "run_plan_failed");
     } else if (strncmp(buf, "RUN ", 4) == 0) {
         struct tear_run_config run_cfg;
         int ret;
 
         if (supervisor_state == SUPERVISOR_STATE_RUNNING) {
-            dprintf(client, "ERR busy\n");
+            client_reply_err(client, "busy");
             return;
         }
 
         if (parse_run_command(buf, &run_cfg) < 0) {
-            dprintf(client, "ERR invalid_run_command\n");
+            client_reply_err(client, "invalid_run_command");
             return;
         }
 
@@ -378,11 +424,11 @@ static void handle_supervisor_client(int client)
         free_run_config(&run_cfg);
 
         if (ret == 0)
-            dprintf(client, "OK\n");
+            client_reply_ok(client);
         else
-            dprintf(client, "ERR run_failed\n");
+            client_reply_err(client, "run_failed");
     } else {
-        dprintf(client, "ERR unknown_command\n");
+        client_reply_err(client, "unknown_command");
     }
 }
 
@@ -423,7 +469,7 @@ static struct tear_run_config parse_args(int argc, char **argv)
 static int validate_config(const struct tear_run_config *cfg)
 {
     if (!cfg->event_log || cfg->event_log[0] == '\0') {
-        fprintf(stderr, "TEAR supervisor: missing --event-log <path>\n");
+        supervisor_error("TEAR supervisor: missing --event-log <path>\n");
         return -1;
     }
 
@@ -431,18 +477,16 @@ static int validate_config(const struct tear_run_config *cfg)
         return 0;
 
     if (!cfg->workload || !cfg->manifest || !cfg->profile) {
-        fprintf(stderr,
-                "usage: tear-supervisor "
-                "--workload <path> "
-                "--manifest <path> "
-                "--profile <path> "
-                "[--args <args>] "
-                "[--event-log <path>] "
-                "[--enable-optimizer]\n");
-        fprintf(stderr,
-                "       tear-supervisor --daemon "
-                "[--event-log <path>] "
-                "[--enable-optimizer]\n");
+        supervisor_error("usage: tear-supervisor "
+                         "--workload <path> "
+                         "--manifest <path> "
+                         "--profile <path> "
+                         "[--args <args>] "
+                         "[--event-log <path>] "
+                         "[--enable-optimizer]\n");
+        supervisor_error("       tear-supervisor --daemon "
+                         "[--event-log <path>] "
+                         "[--enable-optimizer]\n");
         return -1;
     }
 
@@ -459,7 +503,7 @@ static pid_t start_trustd(void)
         trustd_path = TRUSTD_PATH;
 
     if (pid < 0) {
-        perror("fork trustd");
+        supervisor_perror("fork trustd");
         return -1;
     }
 
@@ -480,7 +524,7 @@ static pid_t start_trustd(void)
                   NULL);
         }
 
-        perror("execl trustd");
+        supervisor_perror("execl trustd");
         _exit(127);
     }
 
@@ -494,7 +538,7 @@ static pid_t start_optd(void)
     pid_t pid = fork();
 
     if (pid < 0) {
-        perror("fork optd");
+        supervisor_perror("fork optd");
         return -1;
     }
 
@@ -505,7 +549,7 @@ static pid_t start_optd(void)
               OPTD_EVENT_PATH,
               NULL);
 
-        perror("execl optd");
+        supervisor_perror("execl optd");
         _exit(127);
     }
 
@@ -528,7 +572,7 @@ static int run_tearictl(const char *command, const char *arg)
     pid_t pid = fork();
 
     if (pid < 0) {
-        perror("fork tearictl");
+        supervisor_perror("fork tearictl");
         return -1;
     }
 
@@ -539,7 +583,7 @@ static int run_tearictl(const char *command, const char *arg)
             execl(TEARICTL_PATH, TEARICTL_PATH, command, NULL);
         }
 
-        perror("execl tearictl");
+        supervisor_perror("execl tearictl");
         _exit(127);
     }
 
@@ -623,7 +667,7 @@ static int run_workload_once(const struct tear_run_config *cfg)
     pid_t pid = fork();
 
     if (pid < 0) {
-        perror("fork");
+        supervisor_perror("fork");
         supervisor_workload_event_kv(cfg->name,
                                      "supervisor_error",
                                      "errno",
@@ -635,14 +679,14 @@ static int run_workload_once(const struct tear_run_config *cfg)
     if (pid == 0) {
         run_runtime_manager(cfg);
 
-        perror("execl runtime manager");
+        supervisor_perror("execl runtime manager");
         _exit(127);
     }
 
     int status = 0;
 
     if (waitpid(pid, &status, 0) < 0) {
-        perror("waitpid");
+        supervisor_perror("waitpid");
         supervisor_workload_event_kv(cfg->name,
                                      "supervisor_error",
                                      "errno",
@@ -675,7 +719,7 @@ static int run_supervisor_daemon(pid_t trustd_pid, pid_t optd_pid)
     int server = create_supervisor_socket();
 
     if (server < 0) {
-        perror("supervisor socket");
+        supervisor_perror("supervisor socket");
         supervisor_event("supervisor_socket_failed");
         return 1;
     }
@@ -692,7 +736,7 @@ static int run_supervisor_daemon(pid_t trustd_pid, pid_t optd_pid)
             if (errno == EINTR)
                 break;
 
-            perror("accept supervisor");
+            supervisor_perror("accept supervisor");
             continue;
         }
 
@@ -723,8 +767,7 @@ int main(int argc, char **argv)
         return 1;
 
     if (tear_event_init(cfg.event_log) < 0) {
-        fprintf(stderr,
-                "TEAR supervisor: failed to initialize events\n");
+        supervisor_error("TEAR supervisor: failed to initialize events\n");
         return 1;
     }
 

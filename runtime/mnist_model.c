@@ -5,6 +5,7 @@
 
 #include <onnxruntime_c_api.h>
 
+#include <stdarg.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -37,6 +38,29 @@ struct mnist_confidence {
     float top2_score;
     float margin;
 };
+
+static void mnist_print(const char *fmt, ...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    vprintf(fmt, ap);
+    va_end(ap);
+}
+
+static void mnist_error(const char *fmt, ...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+}
+
+static void mnist_putchar(char c)
+{
+    putchar(c);
+}
 
 static const char *parse_arg_value(int argc, char **argv, const char *name)
 {
@@ -221,16 +245,16 @@ static char pixel(float v)
 
 static void print_digit(const float input[MNIST_INPUT_SIZE])
 {
-    printf("\n");
+    mnist_print("\n");
 
     for (int y = 0; y < 28; y++) {
         for (int x = 0; x < 28; x++)
-            putchar(pixel(input[y * 28 + x]));
+            mnist_putchar(pixel(input[y * 28 + x]));
 
-        putchar('\n');
+        mnist_putchar('\n');
     }
 
-    printf("\n");
+    mnist_print("\n");
 }
 
 static void check_status(const OrtApi *api, OrtStatus *status,
@@ -239,8 +263,8 @@ static void check_status(const OrtApi *api, OrtStatus *status,
     if (status == NULL)
         return;
 
-    fprintf(stderr, "ONNX Runtime error during %s: %s\n",
-            what, api->GetErrorMessage(status));
+    mnist_error("ONNX Runtime error during %s: %s\n",
+                what, api->GetErrorMessage(status));
 
     api->ReleaseStatus(status);
     exit(1);
@@ -271,18 +295,18 @@ int main(int argc, char **argv)
     const char *output_names[] = {"Plus214_Output_0"};
 
     if (!profile_path) {
-        fprintf(stderr, "TEAR: MNIST missing --profile <path>\n");
+        mnist_error("TEAR: MNIST missing --profile <path>\n");
         return 1;
     }
 
     if (!run_id) {
-        fprintf(stderr, "TEAR: MNIST missing --run-id <id>\n");
+        mnist_error("TEAR: MNIST missing --run-id <id>\n");
         return 1;
     }
 
     if (tear_profile_load(profile_path, &profile) < 0) {
-        fprintf(stderr, "TEAR: MNIST failed to load profile %s\n",
-                profile_path);
+        mnist_error("TEAR: MNIST failed to load profile %s\n",
+                    profile_path);
         return 1;
     }
 
@@ -290,7 +314,7 @@ int main(int argc, char **argv)
                            run_id,
                            metrics_path,
                            sizeof(metrics_path)) < 0) {
-        fprintf(stderr, "TEAR: MNIST metrics path too long\n");
+        mnist_error("TEAR: MNIST metrics path too long\n");
         return 1;
     }
 
@@ -299,7 +323,7 @@ int main(int argc, char **argv)
                            run_id,
                            default_event_path,
                            sizeof(default_event_path)) < 0) {
-            fprintf(stderr, "TEAR: MNIST event path too long\n");
+            mnist_error("TEAR: MNIST event path too long\n");
             return 1;
         }
 
@@ -307,12 +331,12 @@ int main(int argc, char **argv)
     }
 
     if (tear_event_init(event_log) < 0) {
-        fprintf(stderr, "TEAR: MNIST failed to initialize events\n");
+        mnist_error("TEAR: MNIST failed to initialize events\n");
         return 1;
     }
 
     if (tear_metric_init(metrics_path) < 0) {
-        fprintf(stderr, "TEAR model: failed to initialize metrics\n");
+        mnist_error("TEAR model: failed to initialize metrics\n");
         tear_event_shutdown();
         return 1;
     }
@@ -320,13 +344,13 @@ int main(int argc, char **argv)
     fill_digit_sample(input, sample_kind);
     print_digit(input);
 
-    printf("TEAR: MNIST workload start\n");
-    printf("TEAR: profile_id=%s artifact_id=%s backend=%s sample=%s\n",
-           profile.profile_id,
-           profile.artifact_id,
-           profile.backend,
-           sample_name(sample_kind));
-    printf("TEAR: run_id=%s\n", run_id);
+    mnist_print("TEAR: MNIST workload start\n");
+    mnist_print("TEAR: profile_id=%s artifact_id=%s backend=%s sample=%s\n",
+                profile.profile_id,
+                profile.artifact_id,
+                profile.backend,
+                sample_name(sample_kind));
+    mnist_print("TEAR: run_id=%s\n", run_id);
 
     check_status(api, api->CreateEnv(ORT_LOGGING_LEVEL_WARNING,
                                      "tear-mnist", &env),
@@ -391,15 +415,15 @@ int main(int argc, char **argv)
     long top2_score_x1000 = (long)(confidence.top2_score * 1000.0f);
     long confidence_margin_x1000 = (long)(confidence.margin * 1000.0f);
 
-    printf("TEAR: metric predicted_digit=%d\n", predicted_digit);
-    printf("TEAR: metric top1_score=%.6f top2_score=%.6f "
-           "confidence_margin=%.6f\n",
-           confidence.top1_score,
-           confidence.top2_score,
-           confidence.margin);
-    printf("TEAR: metric input_density_x1000=%ld\n", density_x1000);
-    printf("TEAR: predicted_digit=%d latency_us=%lld\n",
-           predicted_digit, (long long)latency_us);
+    mnist_print("TEAR: metric predicted_digit=%d\n", predicted_digit);
+    mnist_print("TEAR: metric top1_score=%.6f top2_score=%.6f "
+                "confidence_margin=%.6f\n",
+                confidence.top1_score,
+                confidence.top2_score,
+                confidence.margin);
+    mnist_print("TEAR: metric input_density_x1000=%ld\n", density_x1000);
+    mnist_print("TEAR: predicted_digit=%d latency_us=%lld\n",
+                predicted_digit, (long long)latency_us);
 
     tear_event_ex("mnist_model",
                   profile.profile_id,
@@ -442,7 +466,7 @@ int main(int argc, char **argv)
                      "latency_us",
                      (long)latency_us);
 
-    printf("TEAR: MNIST workload finished\n");
+    mnist_print("TEAR: MNIST workload finished\n");
 
     api->ReleaseValue(output_tensor);
     api->ReleaseValue(input_tensor);

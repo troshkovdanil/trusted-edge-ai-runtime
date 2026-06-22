@@ -8,6 +8,7 @@
 #endif
 #include "runtime_paths.h"
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
@@ -32,6 +33,35 @@ enum tear_trust_backend {
 static void trustd_event(const char *artifact_id, const char *event)
 {
     tear_event_ex(TEAR_COMPONENT, NULL, artifact_id, event);
+}
+
+static void client_reply(int client, const char *fmt, ...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    vdprintf(client, fmt, ap);
+    va_end(ap);
+}
+
+static void client_reply_ok(int client)
+{
+    client_reply(client, "OK\n");
+}
+
+static void client_reply_err(int client)
+{
+    client_reply(client, "ERR\n");
+}
+
+static void client_reply_state(int client, const char *state)
+{
+    client_reply(client, "STATE %s\n", state);
+}
+
+static void client_reply_decision(int client, const char *decision)
+{
+    client_reply(client, "DECISION %s\n", decision);
 }
 
 static int create_socket(void)
@@ -385,7 +415,7 @@ static void handle_enroll(int client,
 
     if (parse_manifest_message(buf, "ENROLL", &m) < 0) {
         trustd_event(NULL, "model_enroll_failed");
-        dprintf(client, "ERR\n");
+        client_reply_err(client);
         return;
     }
 
@@ -394,7 +424,7 @@ static void handle_enroll(int client,
                      backend == TEAR_TRUST_BACKEND_OPTEE ?
                      "optee_model_enroll" :
                      "model_enroll");
-        dprintf(client, "OK\n");
+        client_reply_ok(client);
         return;
     }
 
@@ -402,7 +432,7 @@ static void handle_enroll(int client,
                  backend == TEAR_TRUST_BACKEND_OPTEE ?
                  "optee_model_enroll_failed" :
                  "model_enroll_failed");
-    dprintf(client, "ERR\n");
+    client_reply_err(client);
 }
 
 static void handle_update(int client,
@@ -414,7 +444,7 @@ static void handle_update(int client,
 
     if (parse_manifest_message(buf, "UPDATE", &incoming) < 0) {
         trustd_event(NULL, "model_update_failed");
-        dprintf(client, "ERR\n");
+        client_reply_err(client);
         return;
     }
 
@@ -425,7 +455,7 @@ static void handle_update(int client,
                      backend == TEAR_TRUST_BACKEND_OPTEE ?
                      "optee_model_update_ok" :
                      "model_update_ok");
-        dprintf(client, "OK\n");
+        client_reply_ok(client);
         return;
     }
 
@@ -441,7 +471,7 @@ static void handle_update(int client,
                      "model_update_failed");
     }
 
-    dprintf(client, "ERR\n");
+    client_reply_err(client);
 }
 
 static void handle_verify(int client,
@@ -452,7 +482,7 @@ static void handle_verify(int client,
 
     if (parse_manifest_message(buf, "VERIFY", &incoming) < 0) {
         trustd_event(NULL, "model_verify_failed");
-        dprintf(client, "ERR\n");
+        client_reply_err(client);
         return;
     }
 
@@ -461,7 +491,7 @@ static void handle_verify(int client,
                      backend == TEAR_TRUST_BACKEND_OPTEE ?
                      "optee_model_verify_ok" :
                      "model_verify_ok");
-        dprintf(client, "OK\n");
+        client_reply_ok(client);
         return;
     }
 
@@ -469,7 +499,7 @@ static void handle_verify(int client,
                  backend == TEAR_TRUST_BACKEND_OPTEE ?
                  "optee_model_verify_failed" :
                  "model_verify_failed");
-    dprintf(client, "ERR\n");
+    client_reply_err(client);
 }
 
 static void handle_report(int client, enum tear_trust_backend backend)
@@ -477,9 +507,9 @@ static void handle_report(int client, enum tear_trust_backend backend)
     char state[256];
 
     if (trust_backend_report(backend, state, sizeof(state)) == 0)
-        dprintf(client, "STATE %s\n", state);
+        client_reply_state(client, state);
     else
-        dprintf(client, "ERR\n");
+        client_reply_err(client);
 }
 
 static void handle_record_decision(int client,
@@ -501,7 +531,7 @@ static void handle_record_decision(int client,
                                reason,
                                &value) < 0) {
         trustd_event(NULL, "optimization_decision_record_failed");
-        dprintf(client, "ERR\n");
+        client_reply_err(client);
         return;
     }
 
@@ -513,7 +543,7 @@ static void handle_record_decision(int client,
                                       reason,
                                       value) < 0) {
         trustd_event(artifact_id, "optimization_decision_record_failed");
-        dprintf(client, "ERR\n");
+        client_reply_err(client);
         return;
     }
 
@@ -521,7 +551,7 @@ static void handle_record_decision(int client,
         trustd_event(artifact_id, "optee_record_decision_ok");
 
     trustd_event(artifact_id, "optimization_decision_recorded");
-    dprintf(client, "OK\n");
+    client_reply_ok(client);
 }
 
 static void handle_report_decision(int client, enum tear_trust_backend backend)
@@ -531,9 +561,9 @@ static void handle_report_decision(int client, enum tear_trust_backend backend)
     if (trust_backend_report_decision(backend,
                                       decision,
                                       sizeof(decision)) == 0)
-        dprintf(client, "DECISION %s\n", decision);
+        client_reply_decision(client, decision);
     else
-        dprintf(client, "ERR\n");
+        client_reply_err(client);
 }
 
 static int parse_backend(int argc, char **argv,
@@ -744,7 +774,7 @@ int main(int argc, char **argv)
             handle_record_decision(client, buf, backend);
 
         } else {
-            dprintf(client, "ERR\n");
+            client_reply_err(client);
         }
 
         close(client);

@@ -3,6 +3,7 @@
 #include "observability.h"
 #include "profile.h"
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -16,6 +17,24 @@
 #else
 #define DEFAULT_EVENT_PATH "/tmp/tear-demo-model-events.log"
 #endif
+
+static void demo_print(const char *fmt, ...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    vprintf(fmt, ap);
+    va_end(ap);
+}
+
+static void demo_error(const char *fmt, ...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+}
 
 static const char *parse_arg_value(int argc, char **argv, const char *name)
 {
@@ -62,18 +81,18 @@ int main(int argc, char **argv)
     char default_event_path[TEAR_EVENT_PATH_MAX];
 
     if (!profile_path) {
-        fprintf(stderr, "TEAR model: missing --profile <path>\n");
+        demo_error("TEAR model: missing --profile <path>\n");
         return 1;
     }
 
     if (!run_id) {
-        fprintf(stderr, "TEAR model: missing --run-id <id>\n");
+        demo_error("TEAR model: missing --run-id <id>\n");
         return 1;
     }
 
     if (tear_profile_load(profile_path, &profile) < 0) {
-        fprintf(stderr, "TEAR model: failed to load profile %s\n",
-                profile_path);
+        demo_error("TEAR model: failed to load profile %s\n",
+                   profile_path);
         return 1;
     }
 
@@ -81,7 +100,7 @@ int main(int argc, char **argv)
                            run_id,
                            metrics_path,
                            sizeof(metrics_path)) < 0) {
-        fprintf(stderr, "TEAR model: metrics path too long\n");
+        demo_error("TEAR model: metrics path too long\n");
         return 1;
     }
 
@@ -90,7 +109,7 @@ int main(int argc, char **argv)
                            run_id,
                            default_event_path,
                            sizeof(default_event_path)) < 0) {
-            fprintf(stderr, "TEAR model: event path too long\n");
+            demo_error("TEAR model: event path too long\n");
             return 1;
         }
 
@@ -98,12 +117,12 @@ int main(int argc, char **argv)
     }
 
     if (tear_event_init(event_log) < 0) {
-        fprintf(stderr, "TEAR model: failed to initialize events\n");
+        demo_error("TEAR model: failed to initialize events\n");
         return 1;
     }
 
     if (tear_metric_init(metrics_path) < 0) {
-        fprintf(stderr, "TEAR model: failed to initialize metrics\n");
+        demo_error("TEAR model: failed to initialize metrics\n");
         tear_event_shutdown();
         return 1;
     }
@@ -113,11 +132,11 @@ int main(int argc, char **argv)
                   profile.artifact_id,
                   "model_init");
 
-    printf("TEAR model: loading model metadata\n");
-    printf("TEAR model: profile_id=%s\n", profile.profile_id);
-    printf("TEAR model: artifact_id=%s\n", profile.artifact_id);
-    printf("TEAR model: backend=%s\n", profile.backend);
-    printf("TEAR model: run_id=%s\n", run_id);
+    demo_print("TEAR model: loading model metadata\n");
+    demo_print("TEAR model: profile_id=%s\n", profile.profile_id);
+    demo_print("TEAR model: artifact_id=%s\n", profile.artifact_id);
+    demo_print("TEAR model: backend=%s\n", profile.backend);
+    demo_print("TEAR model: run_id=%s\n", run_id);
 
     sleep(1);
 
@@ -126,11 +145,11 @@ int main(int argc, char **argv)
                   profile.artifact_id,
                   "inference_start");
 
-    printf("TEAR model: input=synthetic-frame\n");
+    demo_print("TEAR model: input=synthetic-frame\n");
 
     sleep(1);
 
-    printf("TEAR model: running inference\n");
+    demo_print("TEAR model: running inference\n");
 
     sleep(1);
 
@@ -145,7 +164,7 @@ int main(int argc, char **argv)
                   profile.artifact_id,
                   "inference_done");
 
-    printf("TEAR model: result=object:box confidence=0.87\n");
+    demo_print("TEAR model: result=object:box confidence=0.87\n");
 
     tear_event_ex(TEAR_COMPONENT,
                   profile.profile_id,
