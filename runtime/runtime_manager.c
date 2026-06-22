@@ -158,6 +158,35 @@ static int build_workload_event_path(const char *event_log,
     return n >= 0 && (size_t)n < path_size ? 0 : -1;
 }
 
+static int profile_matches_manifest(const struct tear_profile *profile,
+                                    const struct tear_model_manifest *manifest,
+                                    const char *workload)
+{
+    if (strcmp(profile->artifact_id, manifest->artifact_id) != 0) {
+        fprintf(stderr,
+                "TEAR: profile artifact_id %s does not match manifest %s\n",
+                profile->artifact_id,
+                manifest->artifact_id);
+        runtime_event(workload,
+                      manifest->artifact_id,
+                      "profile_manifest_artifact_mismatch");
+        return 0;
+    }
+
+    if (strcmp(profile->backend, manifest->backend) != 0) {
+        fprintf(stderr,
+                "TEAR: profile backend %s does not match manifest %s\n",
+                profile->backend,
+                manifest->backend);
+        runtime_event(workload,
+                      manifest->artifact_id,
+                      "profile_manifest_backend_mismatch");
+        return 0;
+    }
+
+    return 1;
+}
+
 static int ask_optd(const char *metrics_path,
                     struct opt_proposal *proposal)
 {
@@ -405,14 +434,8 @@ int tear_runtime_manager_main(int argc, char **argv)
 
     runtime_event(cfg.name, manifest.artifact_id, "profile_loaded");
 
-    if (strcmp(profile.artifact_id, manifest.artifact_id) != 0 ||
-        strcmp(profile.backend, manifest.backend) != 0) {
-        fprintf(stderr, "TEAR: profile does not match manifest\n");
-        runtime_event(cfg.name,
-                      manifest.artifact_id,
-                      "profile_manifest_mismatch");
+    if (!profile_matches_manifest(&profile, &manifest, cfg.name))
         goto out;
-    }
 
     runtime_event(cfg.name, manifest.artifact_id, "profile_manifest_verified");
     runtime_event(cfg.name, manifest.artifact_id, run_id);
