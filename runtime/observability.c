@@ -4,6 +4,7 @@
 
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <time.h>
 
 static FILE *log_fp = NULL;
@@ -13,6 +14,12 @@ static FILE *metric_fp = NULL;
 void tear_log_init(FILE *fp)
 {
     log_fp = fp ? fp : stdout;
+}
+
+static void tear_observability_panic(const char *msg)
+{
+    fprintf(stderr, "TEAR observability error: %s\n", msg);
+    abort();
 }
 
 int tear_event_init(const char *path)
@@ -186,18 +193,29 @@ void tear_metric_long(const char *component,
 {
     FILE *out = metric_stream();
 
-    if (!profile || profile->profile_id[0] == '\0' ||
-        profile->artifact_id[0] == '\0') {
-        return;
-    }
+    if (!component)
+        tear_observability_panic("metric component is NULL");
+
+    if (component[0] == '\0')
+        tear_observability_panic("metric component is empty");
+
+    if (!profile)
+        tear_observability_panic("metric profile is NULL");
+
+    if (profile->profile_id[0] == '\0')
+        tear_observability_panic("metric profile_id is empty");
+
+    if (profile->artifact_id[0] == '\0')
+        tear_observability_panic("metric artifact_id is empty");
+
+    if (!name || name[0] == '\0')
+        tear_observability_panic("metric name is empty");
 
     fprintf(out,
-            "TEAR_METRIC ts_ms=%ld component=%s",
-            monotonic_ms(),
-            component ? component : "unknown");
-
-    fprintf(out,
+            "TEAR_METRIC ts_ms=%ld component=%s"
             " profile_id=%s artifact_id=%s",
+            monotonic_ms(),
+            component,
             profile->profile_id,
             profile->artifact_id);
 
