@@ -30,9 +30,29 @@ enum tear_trust_backend {
     TEAR_TRUST_BACKEND_OPTEE,
 };
 
-static void trustd_event(const char *artifact_id, const char *event)
+static void trustd_event(const char *event)
 {
-    tear_event_ex(TEAR_COMPONENT, NULL, artifact_id, event);
+    tear_event_ex(TEAR_COMPONENT, event);
+}
+
+static void trustd_manifest_event(const struct tear_model_manifest *manifest,
+                                  const char *event)
+{
+    tear_event_manifest_ex(TEAR_COMPONENT, manifest, event);
+}
+
+static void trustd_error(const char *fmt, ...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    vfprintf(stderr, fmt, ap);
+    va_end(ap);
+}
+
+static void trustd_perror(const char *msg)
+{
+    perror(msg);
 }
 
 static void client_reply(int client, const char *fmt, ...)
@@ -66,6 +86,7 @@ static void client_reply_decision(int client, const char *decision)
 
 static int create_socket(void)
 {
+    const char *socket_path = tear_trustd_socket_path();
     int fd = socket(AF_UNIX, SOCK_STREAM, 0);
 
     if (fd < 0)
@@ -75,17 +96,10 @@ static int create_socket(void)
         .sun_family = AF_UNIX,
     };
 
-    const char *socket_path = tear_trustd_socket_path();
-
-    strncpy(addr.sun_path,
-            socket_path,
-            sizeof(addr.sun_path) - 1);
-
+    strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
     unlink(socket_path);
 
-    if (bind(fd,
-             (struct sockaddr *)&addr,
-             sizeof(addr)) < 0) {
+    if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
         close(fd);
         return -1;
     }
@@ -414,24 +428,24 @@ static void handle_enroll(int client,
     struct tear_model_manifest m;
 
     if (parse_manifest_message(buf, "ENROLL", &m) < 0) {
-        trustd_event(NULL, "model_enroll_failed");
+        trustd_event("model_enroll_failed");
         client_reply_err(client);
         return;
     }
 
     if (trust_backend_enroll(backend, &m) == 0) {
-        trustd_event(m.artifact_id,
-                     backend == TEAR_TRUST_BACKEND_OPTEE ?
-                     "optee_model_enroll" :
-                     "model_enroll");
+        trustd_manifest_event(&m,
+                              backend == TEAR_TRUST_BACKEND_OPTEE ?
+                              "optee_model_enroll" :
+                              "model_enroll");
         client_reply_ok(client);
         return;
     }
 
-    trustd_event(m.artifact_id,
-                 backend == TEAR_TRUST_BACKEND_OPTEE ?
-                 "optee_model_enroll_failed" :
-                 "model_enroll_failed");
+    trustd_manifest_event(&m,
+                          backend == TEAR_TRUST_BACKEND_OPTEE ?
+                          "optee_model_enroll_failed" :
+                          "model_enroll_failed");
     client_reply_err(client);
 }
 
@@ -443,7 +457,7 @@ static void handle_update(int client,
     int ret;
 
     if (parse_manifest_message(buf, "UPDATE", &incoming) < 0) {
-        trustd_event(NULL, "model_update_failed");
+        trustd_event("model_update_failed");
         client_reply_err(client);
         return;
     }
@@ -451,24 +465,24 @@ static void handle_update(int client,
     ret = trust_backend_update(backend, &incoming);
 
     if (ret == 0) {
-        trustd_event(incoming.artifact_id,
-                     backend == TEAR_TRUST_BACKEND_OPTEE ?
-                     "optee_model_update_ok" :
-                     "model_update_ok");
+        trustd_manifest_event(&incoming,
+                              backend == TEAR_TRUST_BACKEND_OPTEE ?
+                              "optee_model_update_ok" :
+                              "model_update_ok");
         client_reply_ok(client);
         return;
     }
 
     if (ret == -2) {
-        trustd_event(incoming.artifact_id,
-                     backend == TEAR_TRUST_BACKEND_OPTEE ?
-                     "optee_model_rollback_rejected" :
-                     "model_rollback_rejected");
+        trustd_manifest_event(&incoming,
+                              backend == TEAR_TRUST_BACKEND_OPTEE ?
+                              "optee_model_rollback_rejected" :
+                              "model_rollback_rejected");
     } else {
-        trustd_event(incoming.artifact_id,
-                     backend == TEAR_TRUST_BACKEND_OPTEE ?
-                     "optee_model_update_failed" :
-                     "model_update_failed");
+        trustd_manifest_event(&incoming,
+                              backend == TEAR_TRUST_BACKEND_OPTEE ?
+                              "optee_model_update_failed" :
+                              "model_update_failed");
     }
 
     client_reply_err(client);
@@ -481,24 +495,24 @@ static void handle_verify(int client,
     struct tear_model_manifest incoming;
 
     if (parse_manifest_message(buf, "VERIFY", &incoming) < 0) {
-        trustd_event(NULL, "model_verify_failed");
+        trustd_event("model_verify_failed");
         client_reply_err(client);
         return;
     }
 
     if (trust_backend_verify(backend, &incoming) == 0) {
-        trustd_event(incoming.artifact_id,
-                     backend == TEAR_TRUST_BACKEND_OPTEE ?
-                     "optee_model_verify_ok" :
-                     "model_verify_ok");
+        trustd_manifest_event(&incoming,
+                              backend == TEAR_TRUST_BACKEND_OPTEE ?
+                              "optee_model_verify_ok" :
+                              "model_verify_ok");
         client_reply_ok(client);
         return;
     }
 
-    trustd_event(incoming.artifact_id,
-                 backend == TEAR_TRUST_BACKEND_OPTEE ?
-                 "optee_model_verify_failed" :
-                 "model_verify_failed");
+    trustd_manifest_event(&incoming,
+                          backend == TEAR_TRUST_BACKEND_OPTEE ?
+                          "optee_model_verify_failed" :
+                          "model_verify_failed");
     client_reply_err(client);
 }
 
@@ -530,7 +544,7 @@ static void handle_record_decision(int client,
                                decision,
                                reason,
                                &value) < 0) {
-        trustd_event(NULL, "optimization_decision_record_failed");
+        trustd_event("optimization_decision_record_failed");
         client_reply_err(client);
         return;
     }
@@ -542,15 +556,15 @@ static void handle_record_decision(int client,
                                       decision,
                                       reason,
                                       value) < 0) {
-        trustd_event(artifact_id, "optimization_decision_record_failed");
+        trustd_event("optimization_decision_record_failed");
         client_reply_err(client);
         return;
     }
 
     if (backend == TEAR_TRUST_BACKEND_OPTEE)
-        trustd_event(artifact_id, "optee_record_decision_ok");
+        trustd_event("optee_record_decision_ok");
 
-    trustd_event(artifact_id, "optimization_decision_recorded");
+    trustd_event("optimization_decision_recorded");
     client_reply_ok(client);
 }
 
@@ -589,11 +603,11 @@ static int parse_backend(int argc, char **argv,
 #ifdef TEAR_ENABLE_OPTEE
                 *backend = TEAR_TRUST_BACKEND_OPTEE;
 #else
-                fprintf(stderr, "TEAR trustd: OP-TEE backend not built\n");
+                trustd_error("TEAR trustd: OP-TEE backend not built\n");
                 return -1;
 #endif
             } else {
-                fprintf(stderr, "TEAR trustd: unknown backend: %s\n", argv[i]);
+                trustd_error("TEAR trustd: unknown backend: %s\n", argv[i]);
                 return -1;
             }
         } else if (strcmp(argv[i], "--event-log") == 0 && i + 1 < argc) {
@@ -605,18 +619,17 @@ static int parse_backend(int argc, char **argv,
         } else if (strcmp(argv[i], "--self-test-verify") == 0) {
             *self_test_verify = 1;
         } else {
-            fprintf(stderr,
-                    "usage: tear-trustd [--backend file|optee] "
-                    "[--event-log <path>] "
-                    "[--self-test] "
-                    "[--self-test-enroll] "
-                    "[--self-test-verify]\n");
+            trustd_error("usage: tear-trustd [--backend file|optee] "
+                         "[--event-log <path>] "
+                         "[--self-test] "
+                         "[--self-test-enroll] "
+                         "[--self-test-verify]\n");
             return -1;
         }
     }
 
     if (!*event_log || (*event_log)[0] == '\0') {
-        fprintf(stderr, "TEAR trustd: missing --event-log <path>\n");
+        trustd_error("TEAR trustd: missing --event-log <path>\n");
         return -1;
     }
 
@@ -626,18 +639,18 @@ static int parse_backend(int argc, char **argv,
 static int run_self_test(enum tear_trust_backend backend)
 {
     if (backend == TEAR_TRUST_BACKEND_FILE) {
-        trustd_event(NULL, "trustd_file_backend_self_test_ok");
+        trustd_event("trustd_file_backend_self_test_ok");
         return 0;
     }
 
 #ifdef TEAR_ENABLE_OPTEE
     if (backend == TEAR_TRUST_BACKEND_OPTEE) {
         if (tear_optee_ping() == 0) {
-            trustd_event(NULL, "trustd_optee_backend_ping_ok");
+            trustd_event("trustd_optee_backend_ping_ok");
             return 0;
         }
 
-        trustd_event(NULL, "trustd_optee_backend_ping_failed");
+        trustd_event("trustd_optee_backend_ping_failed");
         return 1;
     }
 #endif
@@ -652,11 +665,11 @@ static int run_enroll_self_test(enum tear_trust_backend backend)
 
 #ifdef TEAR_ENABLE_OPTEE
     if (tear_optee_enroll("demo-model 1 mock sha256-demo-model-v1") == 0) {
-        trustd_event("demo-model", "trustd_optee_backend_enroll_ok");
+        trustd_event("trustd_optee_backend_enroll_ok");
         return 0;
     }
 
-    trustd_event("demo-model", "trustd_optee_backend_enroll_failed");
+    trustd_event("trustd_optee_backend_enroll_failed");
 #endif
 
     return 1;
@@ -669,19 +682,18 @@ static int run_verify_self_test(enum tear_trust_backend backend)
 
 #ifdef TEAR_ENABLE_OPTEE
     if (tear_optee_enroll("demo-model 1 mock sha256-demo-model-v1")) {
-        trustd_event("demo-model", "trustd_optee_backend_verify_failed");
+        trustd_event("trustd_optee_backend_verify_failed");
         return 1;
     }
 
-    trustd_event("demo-model",
-                 "trustd_optee_backend_enroll_before_verify_ok");
+    trustd_event("trustd_optee_backend_enroll_before_verify_ok");
 
     if (tear_optee_verify("demo-model 1 mock sha256-demo-model-v1")) {
-        trustd_event("demo-model", "trustd_optee_backend_verify_failed");
+        trustd_event("trustd_optee_backend_verify_failed");
         return 1;
     }
 
-    trustd_event("demo-model", "trustd_optee_backend_verify_ok");
+    trustd_event("trustd_optee_backend_verify_ok");
 #endif
 
     return 0;
@@ -694,6 +706,7 @@ int main(int argc, char **argv)
     int self_test;
     int self_test_enroll;
     int self_test_verify;
+    int server;
 
     if (parse_backend(argc, argv,
                       &backend,
@@ -704,7 +717,7 @@ int main(int argc, char **argv)
         return 1;
 
     if (tear_event_init(event_log) < 0) {
-        fprintf(stderr, "TEAR trustd: failed to initialize events\n");
+        trustd_error("TEAR trustd: failed to initialize events\n");
         return 1;
     }
 
@@ -726,25 +739,25 @@ int main(int argc, char **argv)
         return ret;
     }
 
-    int server = create_socket();
+    server = create_socket();
 
     if (server < 0) {
-        perror("trustd socket");
+        trustd_perror("trustd socket");
         tear_event_shutdown();
         return 1;
     }
 
-    trustd_event(NULL, "trustd_start");
+    trustd_event("trustd_start");
 
     while (1) {
         int client = accept(server, NULL, NULL);
+        char buf[512];
+        ssize_t n;
 
         if (client < 0)
             continue;
 
-        char buf[512];
-
-        ssize_t n = read(client, buf, sizeof(buf) - 1);
+        n = read(client, buf, sizeof(buf) - 1);
 
         if (n <= 0) {
             close(client);
@@ -755,24 +768,16 @@ int main(int argc, char **argv)
 
         if (strncmp(buf, "ENROLL", 6) == 0) {
             handle_enroll(client, buf, backend);
-
         } else if (strncmp(buf, "VERIFY", 6) == 0) {
             handle_verify(client, buf, backend);
-
-        /*
-         * Keep longer protocol commands before shorter prefixes.
-         */
         } else if (strncmp(buf, "REPORT_DECISION", 15) == 0) {
             handle_report_decision(client, backend);
         } else if (strncmp(buf, "REPORT", 6) == 0) {
             handle_report(client, backend);
-
         } else if (strncmp(buf, "UPDATE", 6) == 0) {
             handle_update(client, buf, backend);
-
         } else if (strncmp(buf, "RECORD_DECISION", 15) == 0) {
             handle_record_decision(client, buf, backend);
-
         } else {
             client_reply_err(client);
         }

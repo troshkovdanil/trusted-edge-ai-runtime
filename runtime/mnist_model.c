@@ -425,10 +425,9 @@ int main(int argc, char **argv)
     mnist_print("TEAR: predicted_digit=%d latency_us=%lld\n",
                 predicted_digit, (long long)latency_us);
 
-    tear_event_ex("mnist_model",
-                  profile.profile_id,
-                  profile.artifact_id,
-                  "mnist_inference_metrics");
+    tear_event_profile_ex("mnist_model",
+                          &profile,
+                          "mnist_inference_metrics");
 
     tear_metric_long("mnist_model",
                      &profile,

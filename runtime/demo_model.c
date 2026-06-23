@@ -127,10 +127,9 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    tear_event_ex(TEAR_COMPONENT,
-                  profile.profile_id,
-                  profile.artifact_id,
-                  "model_init");
+    tear_event_profile_ex(TEAR_COMPONENT,
+                          &profile,
+                          "model_init");
 
     demo_print("TEAR model: loading model metadata\n");
     demo_print("TEAR model: profile_id=%s\n", profile.profile_id);
@@ -140,10 +139,9 @@ int main(int argc, char **argv)
 
     sleep(1);
 
-    tear_event_ex(TEAR_COMPONENT,
-                  profile.profile_id,
-                  profile.artifact_id,
-                  "inference_start");
+    tear_event_profile_ex(TEAR_COMPONENT,
+                          &profile,
+                          "inference_start");
 
     demo_print("TEAR model: input=synthetic-frame\n");
 
@@ -158,17 +156,15 @@ int main(int argc, char **argv)
                      "confidence_x100",
                      87);
 
-    tear_event_ex(TEAR_COMPONENT,
-                  profile.profile_id,
-                  profile.artifact_id,
-                  "inference_done");
+    tear_event_profile_ex(TEAR_COMPONENT,
+                          &profile,
+                          "inference_done");
 
     demo_print("TEAR model: result=object:box confidence=0.87\n");
 
-    tear_event_ex(TEAR_COMPONENT,
-                  profile.profile_id,
-                  profile.artifact_id,
-                  "model_shutdown");
+    tear_event_profile_ex(TEAR_COMPONENT,
+                          &profile,
+                          "model_shutdown");
 
     tear_metric_shutdown();
     tear_event_shutdown();

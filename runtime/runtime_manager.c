@@ -45,25 +45,28 @@ struct opt_proposal {
     int available;
 };
 
-static void runtime_event(const char *workload,
-                          const char *artifact_id,
-                          const char *event)
+static void runtime_event(const char *event)
 {
-    tear_event_ex(TEAR_COMPONENT, workload, artifact_id, event);
+    tear_event_ex(TEAR_COMPONENT, event);
 }
 
-static void runtime_event_kv(const char *workload,
-                             const char *artifact_id,
-                             const char *event,
+static void runtime_profile_event(const struct tear_profile *profile,
+                                  const char *event)
+{
+    tear_event_profile_ex(TEAR_COMPONENT, profile, event);
+}
+
+static void runtime_manifest_event(const struct tear_model_manifest *manifest,
+                                   const char *event)
+{
+    tear_event_manifest_ex(TEAR_COMPONENT, manifest, event);
+}
+
+static void runtime_event_kv(const char *event,
                              const char *key,
                              long value)
 {
-    tear_event_ex_kv(TEAR_COMPONENT,
-                     workload,
-                     artifact_id,
-                     event,
-                     key,
-                     value);
+    tear_event_ex_kv(TEAR_COMPONENT, event, key, value);
 }
 
 static void runtime_error(const char *fmt, ...)
@@ -191,16 +194,14 @@ static int build_workload_event_path(const char *event_log,
 }
 
 static int profile_matches_manifest(const struct tear_profile *profile,
-                                    const struct tear_model_manifest *manifest,
-                                    const char *workload)
+                                    const struct tear_model_manifest *manifest)
 {
     if (strcmp(profile->artifact_id, manifest->artifact_id) != 0) {
         runtime_error("TEAR: profile artifact_id %s does not match manifest %s\n",
                       profile->artifact_id,
                       manifest->artifact_id);
-        runtime_event(workload,
-                      manifest->artifact_id,
-                      "profile_manifest_artifact_mismatch");
+        runtime_manifest_event(manifest,
+                               "profile_manifest_artifact_mismatch");
         return 0;
     }
 
@@ -208,9 +209,8 @@ static int profile_matches_manifest(const struct tear_profile *profile,
         runtime_error("TEAR: profile backend %s does not match manifest %s\n",
                       profile->backend,
                       manifest->backend);
-        runtime_event(workload,
-                      manifest->artifact_id,
-                      "profile_manifest_backend_mismatch");
+        runtime_manifest_event(manifest,
+                               "profile_manifest_backend_mismatch");
         return 0;
     }
 
@@ -306,48 +306,43 @@ static void approve_or_reject_proposal(const struct opt_proposal *proposal,
     *reason = "unknown_proposal";
 }
 
-static void record_and_report_optimizer_decision(const char *workload,
-                                                 const char *artifact_id,
-                                                 const char *run_id,
-                                                 const char *proposal,
-                                                 const char *decision,
-                                                 const char *reason)
+static void record_and_report_optimizer_decision(
+    const struct tear_profile *profile,
+    const char *run_id,
+    const char *proposal,
+    const char *decision,
+    const char *reason)
 {
     char reported_decision[512];
 
     if (tear_trust_record_decision(run_id,
-                                   artifact_id,
+                                   profile->artifact_id,
                                    proposal,
                                    decision,
                                    reason,
                                    0) < 0) {
-        runtime_event(workload,
-                      artifact_id,
-                      "optimization_decision_record_failed");
+        runtime_profile_event(profile,
+                              "optimization_decision_record_failed");
         return;
     }
 
-    runtime_event(workload,
-                  artifact_id,
-                  "optimization_decision_recorded_by_runtime_manager");
+    runtime_profile_event(profile,
+                          "optimization_decision_recorded_by_runtime_manager");
 
     if (tear_trust_report_decision(reported_decision,
                                    sizeof(reported_decision)) < 0) {
-        runtime_event(workload,
-                      artifact_id,
-                      "optimization_decision_report_failed");
+        runtime_profile_event(profile,
+                              "optimization_decision_report_failed");
         return;
     }
 
     runtime_print("TEAR: reported_decision %s\n", reported_decision);
 
-    runtime_event(workload,
-                  artifact_id,
-                  "optimization_decision_reported_by_runtime_manager");
+    runtime_profile_event(profile,
+                          "optimization_decision_reported_by_runtime_manager");
 }
 
-static void record_optimizer_decision(const char *workload,
-                                      const char *artifact_id,
+static void record_optimizer_decision(const struct tear_profile *profile,
                                       const char *run_id,
                                       const char *metrics_path)
 {
@@ -356,10 +351,9 @@ static void record_optimizer_decision(const char *workload,
     const char *decision_reason;
 
     if (ask_optd(metrics_path, &proposal) < 0) {
-        runtime_event(workload, artifact_id, "optimizer_proposal_failed");
+        runtime_profile_event(profile, "optimizer_proposal_failed");
 
-        record_and_report_optimizer_decision(workload,
-                                             artifact_id,
+        record_and_report_optimizer_decision(profile,
                                              run_id,
                                              "none",
                                              "rejected",
@@ -368,18 +362,17 @@ static void record_optimizer_decision(const char *workload,
     }
 
     if (!proposal.available)
-        runtime_event(workload, artifact_id, "optimizer_no_proposal");
+        runtime_profile_event(profile, "optimizer_no_proposal");
     else
-        runtime_event(workload, artifact_id, "optimizer_proposal_received");
+        runtime_profile_event(profile, "optimizer_proposal_received");
 
     approve_or_reject_proposal(&proposal, &decision, &decision_reason);
 
-    runtime_event(workload, artifact_id, proposal.action);
-    runtime_event(workload, artifact_id, decision);
-    runtime_event(workload, artifact_id, decision_reason);
+    runtime_profile_event(profile, proposal.action);
+    runtime_profile_event(profile, decision);
+    runtime_profile_event(profile, decision_reason);
 
-    record_and_report_optimizer_decision(workload,
-                                         artifact_id,
+    record_and_report_optimizer_decision(profile,
                                          run_id,
                                          proposal.action,
                                          decision,
@@ -441,43 +434,39 @@ int tear_runtime_manager_main(int argc, char **argv)
 
     build_run_id(run_id, sizeof(run_id));
 
-    runtime_event(cfg.name, NULL, "runtime_manager_start");
-    runtime_event(cfg.name, NULL, "manifest_load_start");
+    runtime_event("runtime_manager_start");
+    runtime_event("manifest_load_start");
 
     if (tear_manifest_load(cfg.manifest, &manifest) < 0) {
         runtime_error("TEAR: failed to load manifest\n");
-        runtime_event(cfg.name, NULL, "manifest_load_failed");
+        runtime_event("manifest_load_failed");
         goto out;
     }
 
-    runtime_event(cfg.name, manifest.artifact_id, "manifest_loaded");
+    runtime_manifest_event(&manifest, "manifest_loaded");
 
     tear_manifest_print(&manifest);
 
     if (tear_profile_load(cfg.profile, &profile) < 0) {
         runtime_error("TEAR: failed to load profile\n");
-        runtime_event(cfg.name,
-                      manifest.artifact_id,
-                      "profile_load_failed");
+        runtime_manifest_event(&manifest, "profile_load_failed");
         goto out;
     }
 
-    runtime_event(cfg.name, manifest.artifact_id, "profile_loaded");
+    runtime_profile_event(&profile, "profile_loaded");
 
-    if (!profile_matches_manifest(&profile, &manifest, cfg.name))
+    if (!profile_matches_manifest(&profile, &manifest))
         goto out;
 
-    runtime_event(cfg.name, manifest.artifact_id, "profile_manifest_verified");
-    runtime_event(cfg.name, manifest.artifact_id, run_id);
+    runtime_profile_event(&profile, "profile_manifest_verified");
+    runtime_profile_event(&profile, run_id);
 
     if (build_metrics_path(&profile,
                            run_id,
                            metrics_path,
                            sizeof(metrics_path)) < 0) {
         runtime_error("TEAR: metrics path too long\n");
-        runtime_event(cfg.name,
-                      manifest.artifact_id,
-                      "metrics_path_too_long");
+        runtime_profile_event(&profile, "metrics_path_too_long");
         goto out;
     }
 
@@ -486,37 +475,30 @@ int tear_runtime_manager_main(int argc, char **argv)
                                   workload_event_path,
                                   sizeof(workload_event_path)) < 0) {
         runtime_error("TEAR: workload event path too long\n");
-        runtime_event(cfg.name,
-                      manifest.artifact_id,
-                      "workload_event_path_too_long");
+        runtime_profile_event(&profile, "workload_event_path_too_long");
         goto out;
     }
 
     if (tear_trust_verify(&manifest) < 0) {
         runtime_error("TEAR: manifest verification failed\n");
-        runtime_event(cfg.name,
-                      manifest.artifact_id,
-                      "manifest_verify_failed");
+        runtime_manifest_event(&manifest, "manifest_verify_failed");
         goto out;
     }
 
-    runtime_event(cfg.name, manifest.artifact_id, "manifest_verified");
+    runtime_manifest_event(&manifest, "manifest_verified");
 
     if (manifest.optimization_capable && !cfg.enable_optimizer) {
         runtime_error("TEAR: workload is optimization-capable "
                       "but optimizer is disabled\n");
-        runtime_event(cfg.name,
-                      manifest.artifact_id,
-                      "optimizer_required_but_disabled");
+        runtime_profile_event(&profile, "optimizer_required_but_disabled");
         goto out;
     }
 
     use_optimizer = cfg.enable_optimizer && manifest.optimization_capable;
 
     if (cfg.enable_optimizer && !manifest.optimization_capable)
-        runtime_event(cfg.name,
-                      manifest.artifact_id,
-                      "optimizer_skipped_manifest_not_capable");
+        runtime_profile_event(&profile,
+                              "optimizer_skipped_manifest_not_capable");
 
     if (use_optimizer)
         unlink(metrics_path);
@@ -525,9 +507,7 @@ int tear_runtime_manager_main(int argc, char **argv)
 
     if (pid < 0) {
         runtime_perror("fork");
-        runtime_event(cfg.name,
-                      manifest.artifact_id,
-                      "runtime_manager_fork_failed");
+        runtime_profile_event(&profile, "runtime_manager_fork_failed");
         goto out;
     }
 
@@ -536,35 +516,24 @@ int tear_runtime_manager_main(int argc, char **argv)
 
     if (waitpid(pid, &status, 0) < 0) {
         runtime_perror("waitpid");
-        runtime_event(cfg.name,
-                      manifest.artifact_id,
-                      "runtime_manager_wait_failed");
+        runtime_profile_event(&profile, "runtime_manager_wait_failed");
         goto out;
     }
 
     if (WIFEXITED(status)) {
-        runtime_event_kv(cfg.name,
-                         manifest.artifact_id,
-                         "runtime_workload_exit",
+        runtime_event_kv("runtime_workload_exit",
                          "status",
                          WEXITSTATUS(status));
     } else if (WIFSIGNALED(status)) {
-        runtime_event_kv(cfg.name,
-                         manifest.artifact_id,
-                         "runtime_workload_signal",
+        runtime_event_kv("runtime_workload_signal",
                          "signal",
                          WTERMSIG(status));
     }
 
     if (use_optimizer)
-        record_optimizer_decision(cfg.name,
-                                  manifest.artifact_id,
-                                  run_id,
-                                  metrics_path);
+        record_optimizer_decision(&profile, run_id, metrics_path);
 
-    runtime_event(cfg.name,
-                  manifest.artifact_id,
-                  "runtime_manager_shutdown");
+    runtime_profile_event(&profile, "runtime_manager_shutdown");
 
     ret = WIFEXITED(status) && WEXITSTATUS(status) == 0 ? 0 : 1;
 

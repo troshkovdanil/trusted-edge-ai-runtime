@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "model_manifest.h"
 #include "profile.h"
 
 #include <stdio.h>
@@ -27,13 +28,17 @@ void tear_log(const char *component,
               ...);
 
 void tear_event_ex(const char *component,
-                   const char *workload,
-                   const char *artifact_id,
                    const char *event);
 
+void tear_event_profile_ex(const char *component,
+                           const struct tear_profile *profile,
+                           const char *event);
+
+void tear_event_manifest_ex(const char *component,
+                            const struct tear_model_manifest *manifest,
+                            const char *event);
+
 void tear_event_ex_kv(const char *component,
-                      const char *workload,
-                      const char *artifact_id,
                       const char *event,
                       const char *key,
                       long value);

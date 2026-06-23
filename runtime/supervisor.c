@@ -44,7 +44,6 @@ enum supervisor_state {
 };
 
 struct tear_run_config {
-    const char *name;
     const char *workload;
     const char *manifest;
     const char *profile;
@@ -56,34 +55,21 @@ struct tear_run_config {
 
 static enum supervisor_state supervisor_state = SUPERVISOR_STATE_INIT;
 static volatile sig_atomic_t supervisor_running = 1;
+
 static int run_workload_once(const struct tear_run_config *cfg);
 static int run_plan_file(const char *path);
 static const char *state_name(enum supervisor_state state);
 
 static void supervisor_event(const char *event)
 {
-    tear_event_ex(TEAR_COMPONENT, NULL, NULL, event);
+    tear_event_ex(TEAR_COMPONENT, event);
 }
 
 static void supervisor_event_kv(const char *event,
                                 const char *key,
                                 long value)
 {
-    tear_event_ex_kv(TEAR_COMPONENT, NULL, NULL, event, key, value);
-}
-
-static void supervisor_workload_event(const char *workload,
-                                      const char *event)
-{
-    tear_event_ex(TEAR_COMPONENT, workload, NULL, event);
-}
-
-static void supervisor_workload_event_kv(const char *workload,
-                                         const char *event,
-                                         const char *key,
-                                         long value)
-{
-    tear_event_ex_kv(TEAR_COMPONENT, workload, NULL, event, key, value);
+    tear_event_ex_kv(TEAR_COMPONENT, event, key, value);
 }
 
 static void supervisor_error(const char *fmt, ...)
@@ -238,7 +224,6 @@ static int parse_run_command(const char *buf,
     char local[512];
     char *cursor;
     char *command;
-    char *name;
     char *workload;
     char *manifest;
     char *profile;
@@ -257,12 +242,11 @@ static int parse_run_command(const char *buf,
     if (!command || strcmp(command, "RUN") != 0)
         return -1;
 
-    name = next_token(&cursor);
     workload = next_token(&cursor);
     manifest = next_token(&cursor);
     profile = next_token(&cursor);
 
-    if (!name || !workload || !manifest || !profile)
+    if (!workload || !manifest || !profile)
         return -1;
 
     while ((token = next_token(&cursor)) != NULL) {
@@ -278,18 +262,12 @@ static int parse_run_command(const char *buf,
         }
     }
 
-    run_cfg->name = strdup(name);
     run_cfg->workload = strdup(workload);
     run_cfg->manifest = strdup(manifest);
     run_cfg->profile = strdup(profile);
+    run_cfg->args = args && args[0] != '\0' ? strdup(args) : strdup("");
 
-    if (args && args[0] != '\0')
-        run_cfg->args = strdup(args);
-    else
-        run_cfg->args = strdup("");
-
-    if (!run_cfg->name ||
-        !run_cfg->workload ||
+    if (!run_cfg->workload ||
         !run_cfg->manifest ||
         !run_cfg->profile ||
         !run_cfg->args)
@@ -300,7 +278,6 @@ static int parse_run_command(const char *buf,
 
 static void free_run_config(struct tear_run_config *cfg)
 {
-    free((void *)cfg->name);
     free((void *)cfg->workload);
     free((void *)cfg->manifest);
     free((void *)cfg->profile);
@@ -316,7 +293,6 @@ static int run_command_line(const char *line)
         return -1;
 
     ret = run_workload_once(&run_cfg);
-
     free_run_config(&run_cfg);
 
     return ret;
@@ -365,7 +341,6 @@ static int run_plan_file(const char *path)
     }
 
     fclose(fp);
-
     supervisor_event("run_plan_done");
 
     return 0;
@@ -420,7 +395,6 @@ static void handle_supervisor_client(int client)
         }
 
         ret = run_workload_once(&run_cfg);
-
         free_run_config(&run_cfg);
 
         if (ret == 0)
@@ -435,7 +409,6 @@ static void handle_supervisor_client(int client)
 static struct tear_run_config parse_args(int argc, char **argv)
 {
     struct tear_run_config cfg = {
-        .name = "cli-workload",
         .workload = NULL,
         .manifest = NULL,
         .profile = NULL,
@@ -529,7 +502,6 @@ static pid_t start_trustd(void)
     }
 
     sleep(1);
-
     return pid;
 }
 
@@ -554,7 +526,6 @@ static pid_t start_optd(void)
     }
 
     sleep(1);
-
     return pid;
 }
 
@@ -570,6 +541,7 @@ static void stop_child(pid_t pid)
 static int run_tearictl(const char *command, const char *arg)
 {
     pid_t pid = fork();
+    int status = 0;
 
     if (pid < 0) {
         supervisor_perror("fork tearictl");
@@ -577,17 +549,14 @@ static int run_tearictl(const char *command, const char *arg)
     }
 
     if (pid == 0) {
-        if (arg) {
+        if (arg)
             execl(TEARICTL_PATH, TEARICTL_PATH, command, arg, NULL);
-        } else {
+        else
             execl(TEARICTL_PATH, TEARICTL_PATH, command, NULL);
-        }
 
         supervisor_perror("execl tearictl");
         _exit(127);
     }
-
-    int status = 0;
 
     if (waitpid(pid, &status, 0) < 0)
         return -1;
@@ -597,21 +566,21 @@ static int run_tearictl(const char *command, const char *arg)
 
 static int provision_selected_manifest(const struct tear_run_config *cfg)
 {
-    supervisor_workload_event(cfg->name, "provisioning_start");
+    supervisor_event("provisioning_start");
 
     if (run_tearictl("enroll", cfg->manifest) < 0) {
-        supervisor_workload_event(cfg->name, "provisioning_failed");
+        supervisor_event("provisioning_failed");
         return -1;
     }
 
-    supervisor_workload_event(cfg->name, "provisioning_done");
+    supervisor_event("provisioning_done");
 
     if (run_tearictl("report", NULL) < 0) {
-        supervisor_workload_event(cfg->name, "provisioning_report_failed");
+        supervisor_event("provisioning_report_failed");
         return -1;
     }
 
-    supervisor_workload_event(cfg->name, "provisioning_report_done");
+    supervisor_event("provisioning_report_done");
 
     return 0;
 }
@@ -621,8 +590,6 @@ static void run_runtime_manager(const struct tear_run_config *cfg)
     if (cfg->enable_optimizer) {
         execl(RUNTIME_MANAGER_PATH,
               RUNTIME_MANAGER_PATH,
-              "--name",
-              cfg->name,
               "--workload",
               cfg->workload,
               "--manifest",
@@ -638,8 +605,6 @@ static void run_runtime_manager(const struct tear_run_config *cfg)
     } else {
         execl(RUNTIME_MANAGER_PATH,
               RUNTIME_MANAGER_PATH,
-              "--name",
-              cfg->name,
               "--workload",
               cfg->workload,
               "--manifest",
@@ -656,57 +621,49 @@ static void run_runtime_manager(const struct tear_run_config *cfg)
 
 static int run_workload_once(const struct tear_run_config *cfg)
 {
-    supervisor_workload_event(cfg->name, "workload_selected");
+    pid_t pid;
+    int status = 0;
+
+    supervisor_event("workload_selected");
 
     if (provision_selected_manifest(cfg) < 0)
         return 1;
 
     supervisor_state = SUPERVISOR_STATE_RUNNING;
-    supervisor_workload_event(cfg->name, "workload_start");
+    supervisor_event("workload_start");
 
-    pid_t pid = fork();
+    pid = fork();
 
     if (pid < 0) {
         supervisor_perror("fork");
-        supervisor_workload_event_kv(cfg->name,
-                                     "supervisor_error",
-                                     "errno",
-                                     errno);
+        supervisor_event_kv("supervisor_error", "errno", errno);
         supervisor_state = SUPERVISOR_STATE_READY;
         return 1;
     }
 
     if (pid == 0) {
         run_runtime_manager(cfg);
-
         supervisor_perror("execl runtime manager");
         _exit(127);
     }
 
-    int status = 0;
-
     if (waitpid(pid, &status, 0) < 0) {
         supervisor_perror("waitpid");
-        supervisor_workload_event_kv(cfg->name,
-                                     "supervisor_error",
-                                     "errno",
-                                     errno);
+        supervisor_event_kv("supervisor_error", "errno", errno);
         supervisor_state = SUPERVISOR_STATE_READY;
         return 1;
     }
 
     if (WIFEXITED(status)) {
-        supervisor_workload_event_kv(cfg->name,
-                                     "workload_exit",
-                                     "status",
-                                     WEXITSTATUS(status));
+        supervisor_event_kv("workload_exit",
+                            "status",
+                            WEXITSTATUS(status));
     } else if (WIFSIGNALED(status)) {
-        supervisor_workload_event_kv(cfg->name,
-                                     "workload_signal",
-                                     "signal",
-                                     WTERMSIG(status));
+        supervisor_event_kv("workload_signal",
+                            "signal",
+                            WTERMSIG(status));
     } else {
-        supervisor_workload_event(cfg->name, "workload_unknown_exit");
+        supervisor_event("workload_unknown_exit");
     }
 
     supervisor_state = SUPERVISOR_STATE_READY;

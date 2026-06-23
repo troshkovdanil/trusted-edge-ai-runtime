@@ -233,7 +233,8 @@ check_glob_contains "/tmp/tear-metric-mnist-onnx-v1-mnist-default-*" \
 check_glob_contains "/tmp/tear-metric-mnist-onnx-v1-mnist-default-*" \
     "TEAR_METRIC .*profile_id=mnist-default .*artifact_id=mnist-onnx-v1 .*name=input_density_x1000"
 
-check_file_contains "$REPORTED_DECISION" "DECISION run_id=run-[0-9]+-[0-9]+ artifact_id=mnist-onnx-v1 proposal=request_high_accuracy_profile decision=rejected reason=profile_unavailable value=0"
+check_file_contains "$REPORTED_DECISION" \
+    "DECISION run_id=run-[0-9]+-[0-9]+ artifact_id=mnist-onnx-v1 proposal=request_high_accuracy_profile decision=rejected reason=profile_unavailable value=0"
 
 echo "TEAR_QEMU_MNIST_ADAPTIVE_GUEST_VERIFY_OK"
 EOS

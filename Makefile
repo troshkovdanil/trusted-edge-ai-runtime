@@ -228,18 +228,21 @@ host-adaptive-supervisor-test: host-build
 
 host-plan-test: host-build
 	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-supervisor.sock /tmp/tear-trusted-decisions /tmp/tear-metric-* $(HOST_BUILD)/tear-*-events.log*
+	printf '%s\n' \
+	    'RUN $(abspath $(HOST_DEMO_MODEL)) examples/model-v2.json profiles/demo.profile' \
+	    'RUN $(abspath $(HOST_MNIST_MODEL)) examples/mnist-model.json profiles/mnist.profile optimizer -- --sample clean7' \
+	    'RUN $(abspath $(HOST_MNIST_MODEL)) examples/mnist-model.json profiles/mnist.profile optimizer -- --sample weak7' \
+	    'RUN $(abspath $(HOST_MNIST_MODEL)) examples/mnist-model.json profiles/mnist.profile optimizer -- --sample noise' \
+	    > $(HOST_BUILD)/host-demo.plan
 	./$(HOST_SUPERVISOR) --daemon --enable-optimizer > $(HOST_BUILD)/plan.log 2>&1 & \
 	    supervisor_pid=$$!; \
 	    sleep 2; \
-	    python3 -c 'import socket; s=socket.socket(socket.AF_UNIX, socket.SOCK_STREAM); s.connect("/tmp/tear-supervisor.sock"); s.sendall(b"RUN_PLAN plans/host-demo.plan\n"); print(s.recv(4096).decode(), end=""); s.close()' > $(HOST_BUILD)/plan-client.log; \
+	    python3 -c 'import socket; s=socket.socket(socket.AF_UNIX, socket.SOCK_STREAM); s.connect("/tmp/tear-supervisor.sock"); s.sendall(b"RUN_PLAN build/host/host-demo.plan\n"); print(s.recv(4096).decode(), end=""); s.close()' > $(HOST_BUILD)/plan-client.log; \
 	    kill -INT $$supervisor_pid; \
 	    wait $$supervisor_pid || true
 	grep -q "OK" $(HOST_BUILD)/plan-client.log
 	grep -q "component=supervisor event=run_plan_start" $(HOST_BUILD)/tear-supervisor-events.log
-	grep -q "component=supervisor workload=demo event=workload_selected" $(HOST_BUILD)/tear-supervisor-events.log
-	grep -q "component=supervisor workload=mnist-clean7 event=workload_selected" $(HOST_BUILD)/tear-supervisor-events.log
-	grep -q "component=supervisor workload=mnist-weak7 event=workload_selected" $(HOST_BUILD)/tear-supervisor-events.log
-	grep -q "component=supervisor workload=mnist-noise event=workload_selected" $(HOST_BUILD)/tear-supervisor-events.log
+	grep -q "component=supervisor event=workload_selected" $(HOST_BUILD)/tear-supervisor-events.log
 	grep -q "component=supervisor event=run_plan_done" $(HOST_BUILD)/tear-supervisor-events.log
 	grep -q "TEAR_METRIC .*profile_id=mnist-default .*artifact_id=mnist-onnx-v1 .*name=confidence_margin_x1000" /tmp/tear-metric-mnist-onnx-v1-mnist-default-*
 	grep -Eq "run_id=run-[0-9]+-[0-9]+ artifact_id=mnist-onnx-v1 proposal=keep_current_profile decision=approved reason=policy_allows" /tmp/tear-trusted-decisions

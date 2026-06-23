@@ -22,6 +22,60 @@ static void tear_observability_panic(const char *msg)
     abort();
 }
 
+static void require_component(const char *component)
+{
+    if (!component)
+        tear_observability_panic("component is NULL");
+
+    if (component[0] == '\0')
+        tear_observability_panic("component is empty");
+}
+
+static void require_event(const char *event)
+{
+    if (!event)
+        tear_observability_panic("event is NULL");
+
+    if (event[0] == '\0')
+        tear_observability_panic("event is empty");
+}
+
+static void require_metric_name(const char *name)
+{
+    if (!name)
+        tear_observability_panic("metric name is NULL");
+
+    if (name[0] == '\0')
+        tear_observability_panic("metric name is empty");
+}
+
+static void require_profile(const struct tear_profile *profile)
+{
+    if (!profile)
+        tear_observability_panic("profile is NULL");
+
+    if (profile->profile_id[0] == '\0')
+        tear_observability_panic("profile_id is empty");
+
+    if (profile->artifact_id[0] == '\0')
+        tear_observability_panic("profile artifact_id is empty");
+}
+
+static void require_manifest(const struct tear_model_manifest *manifest)
+{
+    if (!manifest)
+        tear_observability_panic("manifest is NULL");
+
+    if (manifest->artifact_id[0] == '\0')
+        tear_observability_panic("manifest artifact_id is empty");
+
+    if (manifest->version <= 0)
+        tear_observability_panic("manifest version is invalid");
+
+    if (manifest->backend[0] == '\0')
+        tear_observability_panic("manifest backend is empty");
+}
+
 int tear_event_init(const char *path)
 {
     if (!path || path[0] == '\0')
@@ -115,6 +169,37 @@ static void write_optional_field(FILE *out,
         fprintf(out, " %s=%s", key, value);
 }
 
+static void write_profile_fields(FILE *out,
+                                 const struct tear_profile *profile)
+{
+    fprintf(out,
+            " profile_id=%s artifact_id=%s",
+            profile->profile_id,
+            profile->artifact_id);
+
+    write_optional_field(out, "backend", profile->backend);
+}
+
+static void write_manifest_fields(FILE *out,
+                                  const struct tear_model_manifest *manifest)
+{
+    fprintf(out,
+            " artifact_id=%s version=%d backend=%s",
+            manifest->artifact_id,
+            manifest->version,
+            manifest->backend);
+
+    write_optional_field(out, "model_hash", manifest->model_hash);
+}
+
+static void write_event_prefix(FILE *out, const char *component)
+{
+    fprintf(out,
+            "TEAR_EVENT ts_ms=%ld component=%s",
+            monotonic_ms(),
+            component);
+}
+
 void tear_log(const char *component,
               const char *workload,
               const char *artifact_id,
@@ -125,10 +210,12 @@ void tear_log(const char *component,
     FILE *out = log_stream();
     va_list ap;
 
+    require_component(component);
+
     fprintf(out,
             "TEAR_LOG ts_ms=%ld component=%s",
             monotonic_ms(),
-            component ? component : "unknown");
+            component);
 
     write_optional_field(out, "workload", workload);
     write_optional_field(out, "artifact_id", artifact_id);
@@ -144,43 +231,67 @@ void tear_log(const char *component,
     fflush(out);
 }
 
-void tear_event_ex(const char *component,
-                   const char *workload,
-                   const char *artifact_id,
-                   const char *event)
+void tear_event_ex(const char *component, const char *event)
 {
     FILE *out = event_stream();
 
-    fprintf(out,
-            "TEAR_EVENT ts_ms=%ld component=%s",
-            monotonic_ms(),
-            component ? component : "unknown");
+    require_component(component);
+    require_event(event);
 
-    write_optional_field(out, "workload", workload);
-    write_optional_field(out, "artifact_id", artifact_id);
+    write_event_prefix(out, component);
+    fprintf(out, " event=%s\n", event);
 
+    fflush(out);
+}
+
+void tear_event_profile_ex(const char *component,
+                           const struct tear_profile *profile,
+                           const char *event)
+{
+    FILE *out = event_stream();
+
+    require_component(component);
+    require_profile(profile);
+    require_event(event);
+
+    write_event_prefix(out, component);
+    write_profile_fields(out, profile);
+    fprintf(out, " event=%s\n", event);
+
+    fflush(out);
+}
+
+void tear_event_manifest_ex(const char *component,
+                            const struct tear_model_manifest *manifest,
+                            const char *event)
+{
+    FILE *out = event_stream();
+
+    require_component(component);
+    require_manifest(manifest);
+    require_event(event);
+
+    write_event_prefix(out, component);
+    write_manifest_fields(out, manifest);
     fprintf(out, " event=%s\n", event);
 
     fflush(out);
 }
 
 void tear_event_ex_kv(const char *component,
-                      const char *workload,
-                      const char *artifact_id,
                       const char *event,
                       const char *key,
                       long value)
 {
     FILE *out = event_stream();
 
-    fprintf(out,
-            "TEAR_EVENT ts_ms=%ld component=%s",
-            monotonic_ms(),
-            component ? component : "unknown");
+    require_component(component);
+    require_event(event);
 
-    write_optional_field(out, "workload", workload);
-    write_optional_field(out, "artifact_id", artifact_id);
+    if (!key || key[0] == '\0')
+        tear_observability_panic("event key is empty");
 
+    write_event_prefix(out, component);
     fprintf(out, " event=%s %s=%ld\n", event, key, value);
 
     fflush(out);
@@ -193,33 +304,16 @@ void tear_metric_long(const char *component,
 {
     FILE *out = metric_stream();
 
-    if (!component)
-        tear_observability_panic("metric component is NULL");
-
-    if (component[0] == '\0')
-        tear_observability_panic("metric component is empty");
-
-    if (!profile)
-        tear_observability_panic("metric profile is NULL");
-
-    if (profile->profile_id[0] == '\0')
-        tear_observability_panic("metric profile_id is empty");
-
-    if (profile->artifact_id[0] == '\0')
-        tear_observability_panic("metric artifact_id is empty");
-
-    if (!name || name[0] == '\0')
-        tear_observability_panic("metric name is empty");
+    require_component(component);
+    require_profile(profile);
+    require_metric_name(name);
 
     fprintf(out,
-            "TEAR_METRIC ts_ms=%ld component=%s"
-            " profile_id=%s artifact_id=%s",
+            "TEAR_METRIC ts_ms=%ld component=%s",
             monotonic_ms(),
-            component,
-            profile->profile_id,
-            profile->artifact_id);
+            component);
 
-    write_optional_field(out, "backend", profile->backend);
+    write_profile_fields(out, profile);
 
     fprintf(out, " name=%s value=%ld\n", name, value);
 
@@ -229,10 +323,10 @@ void tear_metric_long(const char *component,
 /* Compatibility wrappers. */
 void tear_event(const char *event)
 {
-    tear_event_ex("legacy", NULL, NULL, event);
+    tear_event_ex("legacy", event);
 }
 
 void tear_event_kv(const char *event, const char *key, long value)
 {
-    tear_event_ex_kv("legacy", NULL, NULL, event, key, value);
+    tear_event_ex_kv("legacy", event, key, value);
 }
