@@ -180,20 +180,28 @@ void tear_event_ex_kv(const char *component,
 }
 
 void tear_metric_long(const char *component,
-                      const char *workload,
-                      const char *artifact_id,
+                      const struct tear_profile *profile,
                       const char *name,
                       long value)
 {
     FILE *out = metric_stream();
+
+    if (!profile || profile->profile_id[0] == '\0' ||
+        profile->artifact_id[0] == '\0') {
+        return;
+    }
 
     fprintf(out,
             "TEAR_METRIC ts_ms=%ld component=%s",
             monotonic_ms(),
             component ? component : "unknown");
 
-    write_optional_field(out, "workload", workload);
-    write_optional_field(out, "artifact_id", artifact_id);
+    fprintf(out,
+            " profile_id=%s artifact_id=%s",
+            profile->profile_id,
+            profile->artifact_id);
+
+    write_optional_field(out, "backend", profile->backend);
 
     fprintf(out, " name=%s value=%ld\n", name, value);
 

@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include "profile.h"
+
 #include <stdio.h>
 
 enum tear_log_level {
@@ -37,8 +39,7 @@ void tear_event_ex_kv(const char *component,
                       long value);
 
 void tear_metric_long(const char *component,
-                      const char *workload,
-                      const char *artifact_id,
+                      const struct tear_profile *profile,
                       const char *name,
                       long value);
 

@@ -129,7 +129,8 @@ check_glob_contains "$WORKLOAD_EVENTS" "event=inference_start"
 check_glob_contains "$WORKLOAD_EVENTS" "event=inference_done"
 check_glob_contains "$WORKLOAD_EVENTS" "event=model_shutdown"
 
-check_glob_contains "/tmp/tear-metric-demo-model-demo-default-*" "TEAR_METRIC .*name=confidence_x100"
+check_glob_contains "/tmp/tear-metric-demo-model-demo-default-*" \
+    "TEAR_METRIC .*profile_id=demo-default .*artifact_id=demo-model .*name=confidence_x100"
 
 echo "TEAR_QEMU_GUEST_VERIFY_OK"
 EOS
@@ -227,8 +228,10 @@ check_file_contains "$RUNTIME_MANAGER_EVENTS" "event=runtime_manager_shutdown"
 
 check_glob_contains "$WORKLOAD_EVENTS" "event=mnist_inference_metrics"
 
-check_glob_contains "/tmp/tear-metric-mnist-onnx-v1-mnist-default-*" "TEAR_METRIC .*name=confidence_margin_x1000"
-check_glob_contains "/tmp/tear-metric-mnist-onnx-v1-mnist-default-*" "TEAR_METRIC .*name=input_density_x1000"
+check_glob_contains "/tmp/tear-metric-mnist-onnx-v1-mnist-default-*" \
+    "TEAR_METRIC .*profile_id=mnist-default .*artifact_id=mnist-onnx-v1 .*name=confidence_margin_x1000"
+check_glob_contains "/tmp/tear-metric-mnist-onnx-v1-mnist-default-*" \
+    "TEAR_METRIC .*profile_id=mnist-default .*artifact_id=mnist-onnx-v1 .*name=input_density_x1000"
 
 check_file_contains "$REPORTED_DECISION" "DECISION run_id=run-[0-9]+-[0-9]+ artifact_id=mnist-onnx-v1 proposal=request_high_accuracy_profile decision=rejected reason=profile_unavailable value=0"
 

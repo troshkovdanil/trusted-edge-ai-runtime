@@ -154,8 +154,7 @@ int main(int argc, char **argv)
     sleep(1);
 
     tear_metric_long(TEAR_COMPONENT,
-                     profile.profile_id,
-                     profile.artifact_id,
+                     &profile,
                      "confidence_x100",
                      87);
 

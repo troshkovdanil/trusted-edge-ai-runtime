@@ -431,38 +431,31 @@ int main(int argc, char **argv)
                   "mnist_inference_metrics");
 
     tear_metric_long("mnist_model",
-                     profile.profile_id,
-                     profile.artifact_id,
+                     &profile,
                      "sample_kind",
                      sample_kind);
     tear_metric_long("mnist_model",
-                     profile.profile_id,
-                     profile.artifact_id,
+                     &profile,
                      "predicted_digit",
                      predicted_digit);
     tear_metric_long("mnist_model",
-                     profile.profile_id,
-                     profile.artifact_id,
+                     &profile,
                      "top1_score_x1000",
                      top1_score_x1000);
     tear_metric_long("mnist_model",
-                     profile.profile_id,
-                     profile.artifact_id,
+                     &profile,
                      "top2_score_x1000",
                      top2_score_x1000);
     tear_metric_long("mnist_model",
-                     profile.profile_id,
-                     profile.artifact_id,
+                     &profile,
                      "confidence_margin_x1000",
                      confidence_margin_x1000);
     tear_metric_long("mnist_model",
-                     profile.profile_id,
-                     profile.artifact_id,
+                     &profile,
                      "input_density_x1000",
                      density_x1000);
     tear_metric_long("mnist_model",
-                     profile.profile_id,
-                     profile.artifact_id,
+                     &profile,
                      "latency_us",
                      (long)latency_us);
 
