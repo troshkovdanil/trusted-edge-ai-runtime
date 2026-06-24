@@ -127,7 +127,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    tear_event_profile_ex(TEAR_COMPONENT,
+    tear_event_profile(TEAR_COMPONENT,
                           &profile,
                           "model_init");
 
@@ -139,7 +139,7 @@ int main(int argc, char **argv)
 
     sleep(1);
 
-    tear_event_profile_ex(TEAR_COMPONENT,
+    tear_event_profile(TEAR_COMPONENT,
                           &profile,
                           "inference_start");
 
@@ -156,13 +156,13 @@ int main(int argc, char **argv)
                      "confidence_x100",
                      87);
 
-    tear_event_profile_ex(TEAR_COMPONENT,
+    tear_event_profile(TEAR_COMPONENT,
                           &profile,
                           "inference_done");
 
     demo_print("TEAR model: result=object:box confidence=0.87\n");
 
-    tear_event_profile_ex(TEAR_COMPONENT,
+    tear_event_profile(TEAR_COMPONENT,
                           &profile,
                           "model_shutdown");
 

@@ -12,13 +12,13 @@
 
 static void tearictl_event(const char *event)
 {
-    tear_event_ex(TEAR_COMPONENT, event);
+    tear_event(TEAR_COMPONENT, event);
 }
 
 static void tearictl_manifest_event(const struct tear_model_manifest *manifest,
                                     const char *event)
 {
-    tear_event_manifest_ex(TEAR_COMPONENT, manifest, event);
+    tear_event_manifest(TEAR_COMPONENT, manifest, event);
 }
 
 static void cli_error(const char *fmt, ...)

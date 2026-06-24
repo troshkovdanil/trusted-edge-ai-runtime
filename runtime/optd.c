@@ -21,7 +21,7 @@
 
 static void optd_event(const char *event)
 {
-    tear_event_ex(TEAR_COMPONENT, event);
+    tear_event(TEAR_COMPONENT, event);
 }
 
 static void optd_error(const char *fmt, ...)

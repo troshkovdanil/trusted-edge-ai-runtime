@@ -62,14 +62,14 @@ static const char *state_name(enum supervisor_state state);
 
 static void supervisor_event(const char *event)
 {
-    tear_event_ex(TEAR_COMPONENT, event);
+    tear_event(TEAR_COMPONENT, event);
 }
 
 static void supervisor_event_kv(const char *event,
                                 const char *key,
                                 long value)
 {
-    tear_event_ex_kv(TEAR_COMPONENT, event, key, value);
+    tear_event_kv(TEAR_COMPONENT, event, key, value);
 }
 
 static void supervisor_error(const char *fmt, ...)

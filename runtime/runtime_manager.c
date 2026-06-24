@@ -47,26 +47,26 @@ struct opt_proposal {
 
 static void runtime_event(const char *event)
 {
-    tear_event_ex(TEAR_COMPONENT, event);
+    tear_event(TEAR_COMPONENT, event);
 }
 
 static void runtime_profile_event(const struct tear_profile *profile,
                                   const char *event)
 {
-    tear_event_profile_ex(TEAR_COMPONENT, profile, event);
+    tear_event_profile(TEAR_COMPONENT, profile, event);
 }
 
 static void runtime_manifest_event(const struct tear_model_manifest *manifest,
                                    const char *event)
 {
-    tear_event_manifest_ex(TEAR_COMPONENT, manifest, event);
+    tear_event_manifest(TEAR_COMPONENT, manifest, event);
 }
 
 static void runtime_event_kv(const char *event,
                              const char *key,
                              long value)
 {
-    tear_event_ex_kv(TEAR_COMPONENT, event, key, value);
+    tear_event_kv(TEAR_COMPONENT, event, key, value);
 }
 
 static void runtime_error(const char *fmt, ...)
