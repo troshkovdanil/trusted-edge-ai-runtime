@@ -455,6 +455,8 @@ int tear_runtime_manager_main(int argc, char **argv)
 
     runtime_profile_event(&profile, "profile_loaded");
 
+    tear_profile_print(&profile);
+
     if (!profile_matches_manifest(&profile, &manifest))
         goto out;
 
