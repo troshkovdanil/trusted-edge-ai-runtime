@@ -319,14 +319,3 @@ void tear_metric_long(const char *component,
 
     fflush(out);
 }
-
-/* Compatibility wrappers. */
-void tear_event(const char *event)
-{
-    tear_event_ex("legacy", event);
-}
-
-void tear_event_kv(const char *event, const char *key, long value)
-{
-    tear_event_ex_kv("legacy", event, key, value);
-}

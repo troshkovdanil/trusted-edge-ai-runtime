@@ -8,6 +8,19 @@
 #include <stdio.h>
 #include <string.h>
 
+#define TEAR_COMPONENT "tearictl"
+
+static void tearictl_event(const char *event)
+{
+    tear_event_ex(TEAR_COMPONENT, event);
+}
+
+static void tearictl_manifest_event(const struct tear_model_manifest *manifest,
+                                    const char *event)
+{
+    tear_event_manifest_ex(TEAR_COMPONENT, manifest, event);
+}
+
 static void cli_error(const char *fmt, ...)
 {
     va_list ap;
@@ -52,11 +65,11 @@ static int cmd_enroll(const char *path)
 
     if (tear_trust_enroll(&manifest) < 0) {
         cli_error("TEAR: enroll failed\n");
-        tear_event("tearictl_enroll_failed");
+        tearictl_manifest_event(&manifest, "tearictl_enroll_failed");
         return 1;
     }
 
-    tear_event("tearictl_enroll_done");
+    tearictl_manifest_event(&manifest, "tearictl_enroll_done");
 
     return 0;
 }
@@ -72,11 +85,11 @@ static int cmd_verify(const char *path)
 
     if (tear_trust_verify(&manifest) < 0) {
         cli_error("TEAR: verify failed\n");
-        tear_event("tearictl_verify_failed");
+        tearictl_manifest_event(&manifest, "tearictl_verify_failed");
         return 1;
     }
 
-    tear_event("tearictl_verify_done");
+    tearictl_manifest_event(&manifest, "tearictl_verify_done");
 
     return 0;
 }
@@ -85,11 +98,11 @@ static int cmd_report(void)
 {
     if (tear_trust_report() < 0) {
         cli_error("TEAR: report failed\n");
-        tear_event("tearictl_report_failed");
+        tearictl_event("tearictl_report_failed");
         return 1;
     }
 
-    tear_event("tearictl_report_done");
+    tearictl_event("tearictl_report_done");
 
     return 0;
 }
@@ -100,12 +113,12 @@ static int cmd_report_decision(void)
 
     if (tear_trust_report_decision(decision, sizeof(decision)) < 0) {
         cli_error("TEAR: report decision failed\n");
-        tear_event("tearictl_report_decision_failed");
+        tearictl_event("tearictl_report_decision_failed");
         return 1;
     }
 
     cli_print("DECISION %s\n", decision);
-    tear_event("tearictl_report_decision_done");
+    tearictl_event("tearictl_report_decision_done");
 
     return 0;
 }
@@ -121,11 +134,11 @@ static int cmd_update_model(const char *path)
 
     if (tear_trust_update_model(&manifest) < 0) {
         cli_error("TEAR: model update rejected\n");
-        tear_event("tearictl_update_model_failed");
+        tearictl_manifest_event(&manifest, "tearictl_update_model_failed");
         return 1;
     }
 
-    tear_event("tearictl_update_model_done");
+    tearictl_manifest_event(&manifest, "tearictl_update_model_done");
 
     return 0;
 }

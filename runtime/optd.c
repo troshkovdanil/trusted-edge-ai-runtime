@@ -17,6 +17,13 @@
 #define DEFAULT_EVENT_PATH "/tmp/tear-optd-events.log"
 #endif
 
+#define TEAR_COMPONENT "optd"
+
+static void optd_event(const char *event)
+{
+    tear_event_ex(TEAR_COMPONENT, event);
+}
+
 static void optd_error(const char *fmt, ...)
 {
     va_list ap;
@@ -53,6 +60,7 @@ static void client_reply_proposal(int client,
 
 static int create_socket(void)
 {
+    const char *socket_path = tear_optd_socket_path();
     int fd = socket(AF_UNIX, SOCK_STREAM, 0);
 
     if (fd < 0)
@@ -62,10 +70,7 @@ static int create_socket(void)
         .sun_family = AF_UNIX,
     };
 
-    const char *socket_path = tear_optd_socket_path();
-
     strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
-
     unlink(socket_path);
 
     if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
@@ -169,26 +174,27 @@ static void handle_propose(int client, const char *buf)
     struct tear_optimizer_proposal proposal;
 
     if (sscanf(buf, "PROPOSE %255s", path) != 1) {
-        tear_event("optd_no_proposal");
+        optd_event("optd_no_proposal");
         client_reply_no_proposal(client);
         return;
     }
 
     if (load_metrics(path, &metrics) < 0) {
-        tear_event("optd_no_proposal");
+        optd_event("optd_no_proposal");
         client_reply_no_proposal(client);
         return;
     }
 
     tear_optimizer_propose(&metrics, &proposal);
 
-    tear_event("optd_proposal");
+    optd_event("optd_proposal");
     client_reply_proposal(client, &proposal);
 }
 
 int main(int argc, char **argv)
 {
     const char *event_log = parse_event_log(argc, argv);
+    int server;
 
     if (!event_log)
         return 1;
@@ -198,7 +204,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    int server = create_socket();
+    server = create_socket();
 
     if (server < 0) {
         optd_perror("optd socket");
@@ -206,16 +212,17 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    tear_event("optd_start");
+    optd_event("optd_start");
 
     while (1) {
         int client = accept(server, NULL, NULL);
+        char buf[512];
+        ssize_t n;
 
         if (client < 0)
             continue;
 
-        char buf[512];
-        ssize_t n = read(client, buf, sizeof(buf) - 1);
+        n = read(client, buf, sizeof(buf) - 1);
 
         if (n <= 0) {
             close(client);
