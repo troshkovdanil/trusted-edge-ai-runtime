@@ -4,6 +4,7 @@
 #include "observability.h"
 #include "runtime_paths.h"
 
+#include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -22,20 +23,6 @@
 static void optd_event(const char *event)
 {
     tear_event(TEAR_COMPONENT, event);
-}
-
-static void optd_error(const char *fmt, ...)
-{
-    va_list ap;
-
-    va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
-    va_end(ap);
-}
-
-static void optd_perror(const char *msg)
-{
-    perror(msg);
 }
 
 static void client_reply(int client, const char *fmt, ...)
@@ -94,13 +81,17 @@ static const char *parse_event_log(int argc, char **argv)
         if (strcmp(argv[i], "--event-log") == 0 && i + 1 < argc) {
             event_log = argv[++i];
         } else {
-            optd_error("usage: tear-optd [--event-log <path>]\n");
+            tear_log(TEAR_COMPONENT,
+                     TEAR_LOG_ERROR,
+                     "usage: tear-optd [--event-log <path>]");
             return NULL;
         }
     }
 
     if (!event_log || event_log[0] == '\0') {
-        optd_error("TEAR optd: missing --event-log <path>\n");
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "missing --event-log <path>");
         return NULL;
     }
 
@@ -200,14 +191,19 @@ int main(int argc, char **argv)
         return 1;
 
     if (tear_event_init(event_log) < 0) {
-        optd_error("TEAR optd: failed to initialize events\n");
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "failed to initialize events");
         return 1;
     }
 
     server = create_socket();
 
     if (server < 0) {
-        optd_perror("optd socket");
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "optd socket failed: %s",
+                 strerror(errno));
         tear_event_shutdown();
         return 1;
     }

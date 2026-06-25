@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "trust_client.h"
+
+#include "observability.h"
 #include "runtime_paths.h"
 
+#include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -10,24 +13,33 @@
 #include <sys/un.h>
 #include <unistd.h>
 
+#define TEAR_COMPONENT "trust_client"
+
 static int connect_socket(void)
 {
+    const char *socket_path = tear_trustd_socket_path();
     int fd = socket(AF_UNIX, SOCK_STREAM, 0);
 
-    if (fd < 0)
+    if (fd < 0) {
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "failed to create trustd socket: %s",
+                 strerror(errno));
         return -1;
+    }
 
     struct sockaddr_un addr = {
         .sun_family = AF_UNIX,
     };
 
-    strncpy(addr.sun_path,
-            tear_trustd_socket_path(),
-            sizeof(addr.sun_path) - 1);
+    strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
 
-    if (connect(fd,
-                (struct sockaddr *)&addr,
-                sizeof(addr)) < 0) {
+    if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "failed to connect trustd socket %s: %s",
+                 socket_path,
+                 strerror(errno));
         close(fd);
         return -1;
     }
@@ -49,12 +61,24 @@ static int trust_client_expect_ok(int fd)
     char buf[32];
     ssize_t n = read(fd, buf, sizeof(buf) - 1);
 
-    if (n <= 0)
+    if (n <= 0) {
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "failed to read trustd reply");
         return -1;
+    }
 
     buf[n] = '\0';
 
-    return strncmp(buf, "OK", 2) == 0 ? 0 : -1;
+    if (strncmp(buf, "OK", 2) != 0) {
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "trustd rejected request: %s",
+                 buf);
+        return -1;
+    }
+
+    return 0;
 }
 
 static int trust_client_read(int fd, char *buf, size_t buf_size)
@@ -66,16 +90,19 @@ static int trust_client_read(int fd, char *buf, size_t buf_size)
 
     n = read(fd, buf, buf_size - 1);
 
-    if (n <= 0)
+    if (n <= 0) {
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "failed to read trustd response");
         return -1;
+    }
 
     buf[n] = '\0';
 
     return 0;
 }
 
-int tear_trust_enroll(
-    const struct tear_model_manifest *manifest)
+int tear_trust_enroll(const struct tear_model_manifest *manifest)
 {
     int fd = connect_socket();
     int ret;
@@ -119,8 +146,7 @@ int tear_trust_update_model(const struct tear_model_manifest *manifest)
     return ret;
 }
 
-int tear_trust_verify(
-    const struct tear_model_manifest *manifest)
+int tear_trust_verify(const struct tear_model_manifest *manifest)
 {
     int fd = connect_socket();
     int ret;
@@ -157,7 +183,7 @@ int tear_trust_report(void)
         return -1;
     }
 
-    printf("%s", buf);
+    tear_log(TEAR_COMPONENT, TEAR_LOG_INFO, "%s", buf);
 
     close(fd);
 
@@ -214,12 +240,21 @@ int tear_trust_report_decision(char *decision, size_t decision_size)
 
     close(fd);
 
-    if (sscanf(buf, "DECISION %511[^\n]", reported) != 1)
+    if (sscanf(buf, "DECISION %511[^\n]", reported) != 1) {
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "invalid trustd decision response: %s",
+                 buf);
         return -1;
+    }
 
     if (snprintf(decision, decision_size, "%s", reported) >=
-        (int)decision_size)
+        (int)decision_size) {
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "reported decision is too long");
         return -1;
+    }
 
     return 0;
 }

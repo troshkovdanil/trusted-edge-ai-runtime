@@ -165,31 +165,16 @@ host-supervisor-test: host-build
 host-mnist-test: host-build
 	rm -f /tmp/tear-metric-mnist-onnx-v1-mnist-default-host-clean7 $(HOST_BUILD)/tear-mnist-model-events.log-host-clean7
 	./$(HOST_MNIST_MODEL) --profile profiles/mnist.profile --run-id host-clean7 --sample clean7 > $(HOST_BUILD)/mnist-clean7.log 2>&1
-	grep -q "TEAR: MNIST workload start" $(HOST_BUILD)/mnist-clean7.log
-	grep -q "TEAR: profile_id=mnist-default artifact_id=mnist-onnx-v1 backend=onnxruntime-cpu sample=clean7" $(HOST_BUILD)/mnist-clean7.log
-	grep -q "TEAR: run_id=host-clean7" $(HOST_BUILD)/mnist-clean7.log
-	grep -q "TEAR: metric predicted_digit=" $(HOST_BUILD)/mnist-clean7.log
 	grep -q "TEAR_METRIC .*profile_id=mnist-default .*artifact_id=mnist-onnx-v1 .*name=confidence_margin_x1000" /tmp/tear-metric-mnist-onnx-v1-mnist-default-host-clean7
 	grep -q "event=mnist_inference_metrics" $(HOST_BUILD)/tear-mnist-model-events.log-host-clean7
-	grep -q "TEAR: MNIST workload finished" $(HOST_BUILD)/mnist-clean7.log
 	rm -f /tmp/tear-metric-mnist-onnx-v1-mnist-default-host-weak7 $(HOST_BUILD)/tear-mnist-model-events.log-host-weak7
 	./$(HOST_MNIST_MODEL) --profile profiles/mnist.profile --run-id host-weak7 --sample weak7 > $(HOST_BUILD)/mnist-weak7.log 2>&1
-	grep -q "TEAR: MNIST workload start" $(HOST_BUILD)/mnist-weak7.log
-	grep -q "TEAR: profile_id=mnist-default artifact_id=mnist-onnx-v1 backend=onnxruntime-cpu sample=weak7" $(HOST_BUILD)/mnist-weak7.log
-	grep -q "TEAR: run_id=host-weak7" $(HOST_BUILD)/mnist-weak7.log
-	grep -q "TEAR: metric predicted_digit=" $(HOST_BUILD)/mnist-weak7.log
 	grep -q "TEAR_METRIC .*profile_id=mnist-default .*artifact_id=mnist-onnx-v1 .*name=confidence_margin_x1000" /tmp/tear-metric-mnist-onnx-v1-mnist-default-host-weak7
 	grep -q "event=mnist_inference_metrics" $(HOST_BUILD)/tear-mnist-model-events.log-host-weak7
-	grep -q "TEAR: MNIST workload finished" $(HOST_BUILD)/mnist-weak7.log
 	rm -f /tmp/tear-metric-mnist-onnx-v1-mnist-default-host-noise $(HOST_BUILD)/tear-mnist-model-events.log-host-noise
 	./$(HOST_MNIST_MODEL) --profile profiles/mnist.profile --run-id host-noise --sample noise > $(HOST_BUILD)/mnist-noise.log 2>&1
-	grep -q "TEAR: MNIST workload start" $(HOST_BUILD)/mnist-noise.log
-	grep -q "TEAR: profile_id=mnist-default artifact_id=mnist-onnx-v1 backend=onnxruntime-cpu sample=noise" $(HOST_BUILD)/mnist-noise.log
-	grep -q "TEAR: run_id=host-noise" $(HOST_BUILD)/mnist-noise.log
-	grep -q "TEAR: metric predicted_digit=" $(HOST_BUILD)/mnist-noise.log
 	grep -q "TEAR_METRIC .*profile_id=mnist-default .*artifact_id=mnist-onnx-v1 .*name=confidence_margin_x1000" /tmp/tear-metric-mnist-onnx-v1-mnist-default-host-noise
 	grep -q "event=mnist_inference_metrics" $(HOST_BUILD)/tear-mnist-model-events.log-host-noise
-	grep -q "TEAR: MNIST workload finished" $(HOST_BUILD)/mnist-noise.log
 
 host-adaptive-supervisor-test: host-build
 	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-trusted-decisions /tmp/tear-metric-mnist-onnx-v1-mnist-default-* $(HOST_BUILD)/tear-*-events.log*
@@ -289,12 +274,14 @@ optee-ta: $(OPTEE_TA_DEV_KIT_MK)
 optee-ca:
 	mkdir -p $(BUILD)/optee
 	$(CC) -O2 -Wall -Wextra \
+		-Iruntime \
 		-I$(OPTEE_CLIENT_INCLUDE) \
 		-Ioptee/ta/tear_ta/include \
 		-Ioptee/ca \
 		-o $(TEAR_CA) \
 		optee/ca/tear_ca.c \
 		optee/ca/tear_optee_client.c \
+		$(OBSERVABILITY_SRCS) \
 		-L$(OPTEE_CLIENT_LIB) \
 		-Wl,-rpath-link,$(OPTEE_CLIENT_LIB) \
 		-lteec

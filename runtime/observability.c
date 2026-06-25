@@ -13,7 +13,7 @@ static FILE *metric_fp = NULL;
 
 void tear_log_init(FILE *fp)
 {
-    log_fp = fp ? fp : stdout;
+    log_fp = fp;
 }
 
 static void tear_observability_panic(const char *msg)
@@ -76,6 +76,19 @@ static void require_manifest(const struct tear_model_manifest *manifest)
         tear_observability_panic("manifest backend is empty");
 }
 
+static void require_log_level(enum tear_log_level level)
+{
+    switch (level) {
+    case TEAR_LOG_DEBUG:
+    case TEAR_LOG_INFO:
+    case TEAR_LOG_WARN:
+    case TEAR_LOG_ERROR:
+        return;
+    }
+
+    tear_observability_panic("log level is invalid");
+}
+
 int tear_event_init(const char *path)
 {
     if (!path || path[0] == '\0')
@@ -130,9 +143,12 @@ static long monotonic_ms(void)
     return ts.tv_sec * 1000L + ts.tv_nsec / 1000000L;
 }
 
-static FILE *log_stream(void)
+static FILE *log_stream(enum tear_log_level level)
 {
-    return log_fp ? log_fp : stdout;
+    if (log_fp)
+        return log_fp;
+
+    return level == TEAR_LOG_ERROR ? stderr : stdout;
 }
 
 static FILE *event_stream(void)
@@ -156,9 +172,9 @@ static const char *log_level_name(enum tear_log_level level)
         return "warn";
     case TEAR_LOG_ERROR:
         return "error";
-    default:
-        return "unknown";
     }
+
+    return "unknown";
 }
 
 static void write_optional_field(FILE *out,
@@ -201,33 +217,32 @@ static void write_event_prefix(FILE *out, const char *component)
 }
 
 void tear_log(const char *component,
-              const char *workload,
-              const char *artifact_id,
               enum tear_log_level level,
               const char *fmt,
               ...)
 {
-    FILE *out = log_stream();
+    FILE *out;
     va_list ap;
 
     require_component(component);
+    require_log_level(level);
+
+    if (!fmt || fmt[0] == '\0')
+        tear_observability_panic("log message is empty");
+
+    out = log_stream(level);
 
     fprintf(out,
-            "TEAR_LOG ts_ms=%ld component=%s",
+            "TEAR_LOG ts_ms=%ld component=%s level=%s msg=\"",
             monotonic_ms(),
-            component);
-
-    write_optional_field(out, "workload", workload);
-    write_optional_field(out, "artifact_id", artifact_id);
-
-    fprintf(out, " level=%s msg=\"", log_level_name(level));
+            component,
+            log_level_name(level));
 
     va_start(ap, fmt);
     vfprintf(out, fmt, ap);
     va_end(ap);
 
     fprintf(out, "\"\n");
-
     fflush(out);
 }
 
@@ -245,8 +260,8 @@ void tear_event(const char *component, const char *event)
 }
 
 void tear_event_profile(const char *component,
-                           const struct tear_profile *profile,
-                           const char *event)
+                        const struct tear_profile *profile,
+                        const char *event)
 {
     FILE *out = event_stream();
 
@@ -262,8 +277,8 @@ void tear_event_profile(const char *component,
 }
 
 void tear_event_manifest(const char *component,
-                            const struct tear_model_manifest *manifest,
-                            const char *event)
+                         const struct tear_model_manifest *manifest,
+                         const char *event)
 {
     FILE *out = event_stream();
 
@@ -279,9 +294,9 @@ void tear_event_manifest(const char *component,
 }
 
 void tear_event_kv(const char *component,
-                      const char *event,
-                      const char *key,
-                      long value)
+                   const char *event,
+                   const char *key,
+                   long value)
 {
     FILE *out = event_stream();
 

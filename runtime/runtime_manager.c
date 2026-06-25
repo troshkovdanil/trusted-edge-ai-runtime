@@ -8,6 +8,7 @@
 #include "profile.h"
 #include "trust_client.h"
 
+#include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -30,7 +31,6 @@
 #endif
 
 struct tear_run_config {
-    const char *name;
     const char *workload;
     const char *manifest;
     const char *profile;
@@ -69,27 +69,13 @@ static void runtime_event_kv(const char *event,
     tear_event_kv(TEAR_COMPONENT, event, key, value);
 }
 
-static void runtime_error(const char *fmt, ...)
-{
-    va_list ap;
-
-    va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
-    va_end(ap);
-}
-
-static void runtime_print(const char *fmt, ...)
-{
-    va_list ap;
-
-    va_start(ap, fmt);
-    vprintf(fmt, ap);
-    va_end(ap);
-}
-
 static void runtime_perror(const char *msg)
 {
-    perror(msg);
+    tear_log(TEAR_COMPONENT,
+             TEAR_LOG_ERROR,
+             "%s: %s",
+             msg,
+             strerror(errno));
 }
 
 static void optd_send(int fd, const char *fmt, ...)
@@ -104,7 +90,6 @@ static void optd_send(int fd, const char *fmt, ...)
 static struct tear_run_config parse_args(int argc, char **argv)
 {
     struct tear_run_config cfg = {
-        .name = "runtime-workload",
         .workload = NULL,
         .manifest = NULL,
         .profile = NULL,
@@ -114,9 +99,7 @@ static struct tear_run_config parse_args(int argc, char **argv)
     };
 
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--name") == 0 && i + 1 < argc) {
-            cfg.name = argv[++i];
-        } else if (strcmp(argv[i], "--workload") == 0 && i + 1 < argc) {
+        if (strcmp(argv[i], "--workload") == 0 && i + 1 < argc) {
             cfg.workload = argv[++i];
         } else if (strcmp(argv[i], "--manifest") == 0 && i + 1 < argc) {
             cfg.manifest = argv[++i];
@@ -137,19 +120,18 @@ static struct tear_run_config parse_args(int argc, char **argv)
 static int validate_config(const struct tear_run_config *cfg)
 {
     if (!cfg->event_log || cfg->event_log[0] == '\0') {
-        runtime_error("TEAR: missing --event-log <path>\n");
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "missing --event-log <path>");
         return -1;
     }
 
     if (!cfg->workload || !cfg->manifest || !cfg->profile) {
-        runtime_error("usage: tear-runtime-manager "
-                      "[--name <name>] "
-                      "--workload <path> "
-                      "--manifest <path> "
-                      "--profile <path> "
-                      "[--args <args>] "
-                      "[--event-log <path>] "
-                      "[--enable-optimizer]\n");
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "usage: tear-runtime-manager --workload <path> "
+                 "--manifest <path> --profile <path> [--args <args>] "
+                 "[--event-log <path>] [--enable-optimizer]");
         return -1;
     }
 
@@ -197,18 +179,22 @@ static int profile_matches_manifest(const struct tear_profile *profile,
                                     const struct tear_model_manifest *manifest)
 {
     if (strcmp(profile->artifact_id, manifest->artifact_id) != 0) {
-        runtime_error("TEAR: profile artifact_id %s does not match manifest %s\n",
-                      profile->artifact_id,
-                      manifest->artifact_id);
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "profile artifact_id %s does not match manifest %s",
+                 profile->artifact_id,
+                 manifest->artifact_id);
         runtime_manifest_event(manifest,
                                "profile_manifest_artifact_mismatch");
         return 0;
     }
 
     if (strcmp(profile->backend, manifest->backend) != 0) {
-        runtime_error("TEAR: profile backend %s does not match manifest %s\n",
-                      profile->backend,
-                      manifest->backend);
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "profile backend %s does not match manifest %s",
+                 profile->backend,
+                 manifest->backend);
         runtime_manifest_event(manifest,
                                "profile_manifest_backend_mismatch");
         return 0;
@@ -336,7 +322,10 @@ static void record_and_report_optimizer_decision(
         return;
     }
 
-    runtime_print("TEAR: reported_decision %s\n", reported_decision);
+    tear_log(TEAR_COMPONENT,
+             TEAR_LOG_INFO,
+             "reported_decision %s",
+             reported_decision);
 
     runtime_profile_event(profile,
                           "optimization_decision_reported_by_runtime_manager");
@@ -423,12 +412,15 @@ int tear_runtime_manager_main(int argc, char **argv)
     char run_id[TEAR_RUN_ID_MAX];
     int status = 0;
     int ret = 1;
+    pid_t pid;
 
     if (validate_config(&cfg) < 0)
         return 1;
 
     if (tear_event_init(cfg.event_log) < 0) {
-        runtime_error("TEAR: failed to initialize runtime manager events\n");
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "failed to initialize runtime manager events");
         return 1;
     }
 
@@ -438,7 +430,9 @@ int tear_runtime_manager_main(int argc, char **argv)
     runtime_event("manifest_load_start");
 
     if (tear_manifest_load(cfg.manifest, &manifest) < 0) {
-        runtime_error("TEAR: failed to load manifest\n");
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "failed to load manifest");
         runtime_event("manifest_load_failed");
         goto out;
     }
@@ -448,7 +442,9 @@ int tear_runtime_manager_main(int argc, char **argv)
     tear_manifest_print(&manifest);
 
     if (tear_profile_load(cfg.profile, &profile) < 0) {
-        runtime_error("TEAR: failed to load profile\n");
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "failed to load profile");
         runtime_manifest_event(&manifest, "profile_load_failed");
         goto out;
     }
@@ -467,7 +463,9 @@ int tear_runtime_manager_main(int argc, char **argv)
                            run_id,
                            metrics_path,
                            sizeof(metrics_path)) < 0) {
-        runtime_error("TEAR: metrics path too long\n");
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "metrics path too long");
         runtime_profile_event(&profile, "metrics_path_too_long");
         goto out;
     }
@@ -476,13 +474,17 @@ int tear_runtime_manager_main(int argc, char **argv)
                                   run_id,
                                   workload_event_path,
                                   sizeof(workload_event_path)) < 0) {
-        runtime_error("TEAR: workload event path too long\n");
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "workload event path too long");
         runtime_profile_event(&profile, "workload_event_path_too_long");
         goto out;
     }
 
     if (tear_trust_verify(&manifest) < 0) {
-        runtime_error("TEAR: manifest verification failed\n");
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "manifest verification failed");
         runtime_manifest_event(&manifest, "manifest_verify_failed");
         goto out;
     }
@@ -490,8 +492,9 @@ int tear_runtime_manager_main(int argc, char **argv)
     runtime_manifest_event(&manifest, "manifest_verified");
 
     if (manifest.optimization_capable && !cfg.enable_optimizer) {
-        runtime_error("TEAR: workload is optimization-capable "
-                      "but optimizer is disabled\n");
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "workload is optimization-capable but optimizer is disabled");
         runtime_profile_event(&profile, "optimizer_required_but_disabled");
         goto out;
     }
@@ -505,7 +508,7 @@ int tear_runtime_manager_main(int argc, char **argv)
     if (use_optimizer)
         unlink(metrics_path);
 
-    pid_t pid = fork();
+    pid = fork();
 
     if (pid < 0) {
         runtime_perror("fork");

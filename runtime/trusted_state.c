@@ -2,8 +2,13 @@
 
 #include "trusted_state.h"
 
+#include "observability.h"
+
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
+
+#define TEAR_COMPONENT "trusted_state"
 
 static int trusted_state_write_decision(FILE *f,
                                         const char *run_id,
@@ -67,8 +72,14 @@ int tear_trusted_state_append_decision(const char *path,
     int ret;
 
     f = fopen(path, "a");
-    if (!f)
+    if (!f) {
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "failed to open decision store %s: %s",
+                 path,
+                 strerror(errno));
         return -1;
+    }
 
     ret = trusted_state_write_decision(f,
                                        run_id,
@@ -79,6 +90,13 @@ int tear_trusted_state_append_decision(const char *path,
                                        value);
 
     fclose(f);
+
+    if (ret < 0) {
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "failed to write decision store %s",
+                 path);
+    }
 
     return ret;
 }
@@ -95,20 +113,35 @@ int tear_trusted_state_report_decision(const char *path,
         return -1;
 
     f = fopen(path, "r");
-    if (!f)
+    if (!f) {
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "failed to open decision store %s: %s",
+                 path,
+                 strerror(errno));
         return -1;
+    }
 
     while (fgets(line, sizeof(line), f)) {
         if (trusted_state_copy_line(last, sizeof(last), line) < 0) {
             fclose(f);
+            tear_log(TEAR_COMPONENT,
+                     TEAR_LOG_ERROR,
+                     "decision record too long in %s",
+                     path);
             return -1;
         }
     }
 
     fclose(f);
 
-    if (last[0] == '\0')
+    if (last[0] == '\0') {
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "decision store is empty: %s",
+                 path);
         return -1;
+    }
 
     last[strcspn(last, "\n")] = '\0';
 
@@ -123,12 +156,25 @@ int tear_trusted_state_store(
     int ret;
 
     f = fopen(path, "w");
-    if (!f)
+    if (!f) {
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "failed to open trusted state %s: %s",
+                 path,
+                 strerror(errno));
         return -1;
+    }
 
     ret = trusted_state_write_manifest(f, manifest);
 
     fclose(f);
+
+    if (ret < 0) {
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "failed to write trusted state %s",
+                 path);
+    }
 
     return ret;
 }
@@ -139,8 +185,14 @@ int tear_trusted_state_load(
 {
     FILE *f = fopen(path, "r");
 
-    if (!f)
+    if (!f) {
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "failed to open trusted state %s: %s",
+                 path,
+                 strerror(errno));
         return -1;
+    }
 
     memset(manifest, 0, sizeof(*manifest));
 
@@ -173,6 +225,10 @@ int tear_trusted_state_load(
     return 0;
 
 fail:
+    tear_log(TEAR_COMPONENT,
+             TEAR_LOG_ERROR,
+             "invalid trusted state: %s",
+             path);
     fclose(f);
     return -1;
 }

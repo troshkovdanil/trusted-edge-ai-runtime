@@ -4,8 +4,6 @@
 #include "observability.h"
 #include "trust_client.h"
 
-#include <stdarg.h>
-#include <stdio.h>
 #include <string.h>
 
 #define TEAR_COMPONENT "tearictl"
@@ -21,37 +19,17 @@ static void tearictl_manifest_event(const struct tear_model_manifest *manifest,
     tear_event_manifest(TEAR_COMPONENT, manifest, event);
 }
 
-static void cli_error(const char *fmt, ...)
-{
-    va_list ap;
-
-    va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
-    va_end(ap);
-}
-
-static void cli_print(const char *fmt, ...)
-{
-    va_list ap;
-
-    va_start(ap, fmt);
-    vprintf(fmt, ap);
-    va_end(ap);
-}
-
 static void usage(const char *prog)
 {
-    cli_error("usage:\n"
-              "  %s enroll <manifest>\n"
-              "  %s verify <manifest>\n"
-              "  %s update-model <manifest>\n"
-              "  %s report\n"
-              "  %s report-decision\n",
-              prog,
-              prog,
-              prog,
-              prog,
-              prog);
+    tear_log(TEAR_COMPONENT,
+             TEAR_LOG_ERROR,
+             "usage: %s enroll <manifest> | %s verify <manifest> | "
+             "%s update-model <manifest> | %s report | %s report-decision",
+             prog,
+             prog,
+             prog,
+             prog,
+             prog);
 }
 
 static int cmd_enroll(const char *path)
@@ -59,12 +37,15 @@ static int cmd_enroll(const char *path)
     struct tear_model_manifest manifest;
 
     if (tear_manifest_load(path, &manifest) < 0) {
-        cli_error("TEAR: failed to load manifest: %s\n", path);
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "failed to load manifest: %s",
+                 path);
         return 1;
     }
 
     if (tear_trust_enroll(&manifest) < 0) {
-        cli_error("TEAR: enroll failed\n");
+        tear_log(TEAR_COMPONENT, TEAR_LOG_ERROR, "enroll failed");
         tearictl_manifest_event(&manifest, "tearictl_enroll_failed");
         return 1;
     }
@@ -79,12 +60,15 @@ static int cmd_verify(const char *path)
     struct tear_model_manifest manifest;
 
     if (tear_manifest_load(path, &manifest) < 0) {
-        cli_error("TEAR: failed to load manifest: %s\n", path);
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "failed to load manifest: %s",
+                 path);
         return 1;
     }
 
     if (tear_trust_verify(&manifest) < 0) {
-        cli_error("TEAR: verify failed\n");
+        tear_log(TEAR_COMPONENT, TEAR_LOG_ERROR, "verify failed");
         tearictl_manifest_event(&manifest, "tearictl_verify_failed");
         return 1;
     }
@@ -97,7 +81,7 @@ static int cmd_verify(const char *path)
 static int cmd_report(void)
 {
     if (tear_trust_report() < 0) {
-        cli_error("TEAR: report failed\n");
+        tear_log(TEAR_COMPONENT, TEAR_LOG_ERROR, "report failed");
         tearictl_event("tearictl_report_failed");
         return 1;
     }
@@ -112,12 +96,14 @@ static int cmd_report_decision(void)
     char decision[512];
 
     if (tear_trust_report_decision(decision, sizeof(decision)) < 0) {
-        cli_error("TEAR: report decision failed\n");
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "report decision failed");
         tearictl_event("tearictl_report_decision_failed");
         return 1;
     }
 
-    cli_print("DECISION %s\n", decision);
+    tear_log(TEAR_COMPONENT, TEAR_LOG_INFO, "DECISION %s", decision);
     tearictl_event("tearictl_report_decision_done");
 
     return 0;
@@ -128,12 +114,17 @@ static int cmd_update_model(const char *path)
     struct tear_model_manifest manifest;
 
     if (tear_manifest_load(path, &manifest) < 0) {
-        cli_error("TEAR: failed to load manifest: %s\n", path);
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "failed to load manifest: %s",
+                 path);
         return 1;
     }
 
     if (tear_trust_update_model(&manifest) < 0) {
-        cli_error("TEAR: model update rejected\n");
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "model update rejected");
         tearictl_manifest_event(&manifest, "tearictl_update_model_failed");
         return 1;
     }

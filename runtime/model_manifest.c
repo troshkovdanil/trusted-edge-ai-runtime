@@ -2,33 +2,14 @@
 
 #include "model_manifest.h"
 
-#include <stdarg.h>
+#include "observability.h"
+
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-static void manifest_error(const char *fmt, ...)
-{
-    va_list ap;
-
-    va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
-    va_end(ap);
-}
-
-static void manifest_print(const char *fmt, ...)
-{
-    va_list ap;
-
-    va_start(ap, fmt);
-    vprintf(fmt, ap);
-    va_end(ap);
-}
-
-static void manifest_perror(const char *msg)
-{
-    perror(msg);
-}
+#define TEAR_COMPONENT "model_manifest"
 
 static int extract_string(
     const char *buf,
@@ -136,12 +117,17 @@ int tear_manifest_load(
     FILE *f;
     long size;
     char *buf;
+    size_t nread;
 
     memset(manifest, 0, sizeof(*manifest));
 
     f = fopen(path, "r");
     if (!f) {
-        manifest_perror("fopen");
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "failed to open manifest %s: %s",
+                 path,
+                 strerror(errno));
         return -1;
     }
 
@@ -155,7 +141,7 @@ int tear_manifest_load(
         return -1;
     }
 
-    size_t nread = fread(buf, 1, size, f);
+    nread = fread(buf, 1, size, f);
 
     if (nread != (size_t)size) {
         free(buf);
@@ -195,7 +181,10 @@ int tear_manifest_load(
     return 0;
 
 fail:
-    manifest_error("TEAR manifest: invalid manifest: %s\n", path);
+    tear_log(TEAR_COMPONENT,
+             TEAR_LOG_ERROR,
+             "invalid manifest: %s",
+             path);
     free(buf);
     return -1;
 }
@@ -203,11 +192,12 @@ fail:
 void tear_manifest_print(
     const struct tear_model_manifest *manifest)
 {
-    manifest_print("TEAR manifest:\n");
-    manifest_print("  artifact_id=%s\n", manifest->artifact_id);
-    manifest_print("  version=%d\n", manifest->version);
-    manifest_print("  backend=%s\n", manifest->backend);
-    manifest_print("  model_hash=%s\n", manifest->model_hash);
-    manifest_print("  optimization_capable=%s\n",
-                   manifest->optimization_capable ? "true" : "false");
+    tear_log(TEAR_COMPONENT,
+             TEAR_LOG_INFO,
+             "manifest artifact_id=%s version=%d backend=%s model_hash=%s optimization_capable=%s",
+             manifest->artifact_id,
+             manifest->version,
+             manifest->backend,
+             manifest->model_hash,
+             manifest->optimization_capable ? "true" : "false");
 }

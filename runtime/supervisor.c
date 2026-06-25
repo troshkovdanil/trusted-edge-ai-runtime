@@ -72,18 +72,13 @@ static void supervisor_event_kv(const char *event,
     tear_event_kv(TEAR_COMPONENT, event, key, value);
 }
 
-static void supervisor_error(const char *fmt, ...)
-{
-    va_list ap;
-
-    va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
-    va_end(ap);
-}
-
 static void supervisor_perror(const char *msg)
 {
-    perror(msg);
+    tear_log(TEAR_COMPONENT,
+             TEAR_LOG_ERROR,
+             "%s: %s",
+             msg,
+             strerror(errno));
 }
 
 static void client_reply(int client, const char *fmt, ...)
@@ -442,7 +437,9 @@ static struct tear_run_config parse_args(int argc, char **argv)
 static int validate_config(const struct tear_run_config *cfg)
 {
     if (!cfg->event_log || cfg->event_log[0] == '\0') {
-        supervisor_error("TEAR supervisor: missing --event-log <path>\n");
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "missing --event-log <path>");
         return -1;
     }
 
@@ -450,16 +447,15 @@ static int validate_config(const struct tear_run_config *cfg)
         return 0;
 
     if (!cfg->workload || !cfg->manifest || !cfg->profile) {
-        supervisor_error("usage: tear-supervisor "
-                         "--workload <path> "
-                         "--manifest <path> "
-                         "--profile <path> "
-                         "[--args <args>] "
-                         "[--event-log <path>] "
-                         "[--enable-optimizer]\n");
-        supervisor_error("       tear-supervisor --daemon "
-                         "[--event-log <path>] "
-                         "[--enable-optimizer]\n");
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "usage: tear-supervisor --workload <path> "
+                 "--manifest <path> --profile <path> [--args <args>] "
+                 "[--event-log <path>] [--enable-optimizer]");
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "       tear-supervisor --daemon [--event-log <path>] "
+                 "[--enable-optimizer]");
         return -1;
     }
 
@@ -724,7 +720,9 @@ int main(int argc, char **argv)
         return 1;
 
     if (tear_event_init(cfg.event_log) < 0) {
-        supervisor_error("TEAR supervisor: failed to initialize events\n");
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "failed to initialize events");
         return 1;
     }
 

@@ -1,20 +1,13 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "profile.h"
+#include "observability.h"
 
-#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-static void profile_print(const char *fmt, ...)
-{
-    va_list ap;
-
-    va_start(ap, fmt);
-    vprintf(fmt, ap);
-    va_end(ap);
-}
+#define TEAR_COMPONENT "profile"
 
 static void trim_newline(char *s)
 {
@@ -130,37 +123,28 @@ int tear_profile_load(const char *path,
             strncpy(profile->profile_id,
                     value,
                     sizeof(profile->profile_id) - 1);
-
         } else if (strcmp(key, "artifact_id") == 0) {
             strncpy(profile->artifact_id,
                     value,
                     sizeof(profile->artifact_id) - 1);
-
         } else if (strcmp(key, "backend") == 0) {
             strncpy(profile->backend,
                     value,
                     sizeof(profile->backend) - 1);
-
         } else if (strcmp(key, "metrics_file_template") == 0) {
             strncpy(metrics_template,
                     value,
                     sizeof(metrics_template) - 1);
-
         } else if (strcmp(key,
                           "adaptation.keep_current_profile") == 0) {
-
             parse_bool(&profile->allow_keep_current_profile,
                        value);
-
         } else if (strcmp(key,
                           "adaptation.request_high_accuracy_profile") == 0) {
-
             parse_bool(&profile->allow_request_high_accuracy_profile,
                        value);
-
         } else if (strcmp(key,
                           "adaptation.reject_input") == 0) {
-
             parse_bool(&profile->allow_reject_input,
                        value);
         }
@@ -188,21 +172,25 @@ int tear_profile_load(const char *path,
 
 void tear_profile_print(const struct tear_profile *profile)
 {
-    profile_print("TEAR profile:\n");
-    profile_print("  profile_id: %s\n", profile->profile_id);
-    profile_print("  artifact_id: %s\n", profile->artifact_id);
-    profile_print("  backend: %s\n", profile->backend);
-    profile_print("  metrics_file_template: %s\n",
-                  profile->metrics_file_template);
-
-    profile_print("  adaptation.keep_current_profile: %s\n",
-                  profile->allow_keep_current_profile ?
-                  "allowed" : "disabled");
-
-    profile_print("  adaptation.request_high_accuracy_profile: %s\n",
-                  profile->allow_request_high_accuracy_profile ?
-                  "allowed" : "disabled");
-
-    profile_print("  adaptation.reject_input: %s\n",
-                  profile->allow_reject_input ? "allowed" : "disabled");
+    tear_log(TEAR_COMPONENT, TEAR_LOG_INFO, "TEAR profile:");
+    tear_log(TEAR_COMPONENT, TEAR_LOG_INFO,
+             "profile_id=%s", profile->profile_id);
+    tear_log(TEAR_COMPONENT, TEAR_LOG_INFO,
+             "artifact_id=%s", profile->artifact_id);
+    tear_log(TEAR_COMPONENT, TEAR_LOG_INFO,
+             "backend=%s", profile->backend);
+    tear_log(TEAR_COMPONENT, TEAR_LOG_INFO,
+             "metrics_file_template=%s",
+             profile->metrics_file_template);
+    tear_log(TEAR_COMPONENT, TEAR_LOG_INFO,
+             "adaptation.keep_current_profile=%s",
+             profile->allow_keep_current_profile ?
+             "allowed" : "disabled");
+    tear_log(TEAR_COMPONENT, TEAR_LOG_INFO,
+             "adaptation.request_high_accuracy_profile=%s",
+             profile->allow_request_high_accuracy_profile ?
+             "allowed" : "disabled");
+    tear_log(TEAR_COMPONENT, TEAR_LOG_INFO,
+             "adaptation.reject_input=%s",
+             profile->allow_reject_input ? "allowed" : "disabled");
 }

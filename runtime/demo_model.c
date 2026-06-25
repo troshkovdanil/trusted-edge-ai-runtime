@@ -3,7 +3,6 @@
 #include "observability.h"
 #include "profile.h"
 
-#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
@@ -17,24 +16,6 @@
 #else
 #define DEFAULT_EVENT_PATH "/tmp/tear-demo-model-events.log"
 #endif
-
-static void demo_print(const char *fmt, ...)
-{
-    va_list ap;
-
-    va_start(ap, fmt);
-    vprintf(fmt, ap);
-    va_end(ap);
-}
-
-static void demo_error(const char *fmt, ...)
-{
-    va_list ap;
-
-    va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
-    va_end(ap);
-}
 
 static const char *parse_arg_value(int argc, char **argv, const char *name)
 {
@@ -51,11 +32,7 @@ static int build_run_path(const char *base,
                           char *path,
                           size_t path_size)
 {
-    int n = snprintf(path,
-                     path_size,
-                     "%s-%s",
-                     base,
-                     run_id);
+    int n = snprintf(path, path_size, "%s-%s", base, run_id);
 
     return n >= 0 && (size_t)n < path_size ? 0 : -1;
 }
@@ -81,18 +58,24 @@ int main(int argc, char **argv)
     char default_event_path[TEAR_EVENT_PATH_MAX];
 
     if (!profile_path) {
-        demo_error("TEAR model: missing --profile <path>\n");
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "TEAR model: missing --profile <path>");
         return 1;
     }
 
     if (!run_id) {
-        demo_error("TEAR model: missing --run-id <id>\n");
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "TEAR model: missing --run-id <id>");
         return 1;
     }
 
     if (tear_profile_load(profile_path, &profile) < 0) {
-        demo_error("TEAR model: failed to load profile %s\n",
-                   profile_path);
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "TEAR model: failed to load profile %s",
+                 profile_path);
         return 1;
     }
 
@@ -100,7 +83,9 @@ int main(int argc, char **argv)
                            run_id,
                            metrics_path,
                            sizeof(metrics_path)) < 0) {
-        demo_error("TEAR model: metrics path too long\n");
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "TEAR model: metrics path too long");
         return 1;
     }
 
@@ -109,7 +94,9 @@ int main(int argc, char **argv)
                            run_id,
                            default_event_path,
                            sizeof(default_event_path)) < 0) {
-            demo_error("TEAR model: event path too long\n");
+            tear_log(TEAR_COMPONENT,
+                     TEAR_LOG_ERROR,
+                     "TEAR model: event path too long");
             return 1;
         }
 
@@ -117,37 +104,37 @@ int main(int argc, char **argv)
     }
 
     if (tear_event_init(event_log) < 0) {
-        demo_error("TEAR model: failed to initialize events\n");
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "TEAR model: failed to initialize events");
         return 1;
     }
 
     if (tear_metric_init(metrics_path) < 0) {
-        demo_error("TEAR model: failed to initialize metrics\n");
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "TEAR model: failed to initialize metrics");
         tear_event_shutdown();
         return 1;
     }
 
-    tear_event_profile(TEAR_COMPONENT,
-                          &profile,
-                          "model_init");
+    tear_event_profile(TEAR_COMPONENT, &profile, "model_init");
 
-    demo_print("TEAR model: loading model metadata\n");
-    demo_print("TEAR model: profile_id=%s\n", profile.profile_id);
-    demo_print("TEAR model: artifact_id=%s\n", profile.artifact_id);
-    demo_print("TEAR model: backend=%s\n", profile.backend);
-    demo_print("TEAR model: run_id=%s\n", run_id);
+    tear_log(TEAR_COMPONENT, TEAR_LOG_INFO, "TEAR model: loading model metadata");
+    tear_log(TEAR_COMPONENT, TEAR_LOG_INFO, "TEAR model: profile_id=%s", profile.profile_id);
+    tear_log(TEAR_COMPONENT, TEAR_LOG_INFO, "TEAR model: artifact_id=%s", profile.artifact_id);
+    tear_log(TEAR_COMPONENT, TEAR_LOG_INFO, "TEAR model: backend=%s", profile.backend);
+    tear_log(TEAR_COMPONENT, TEAR_LOG_INFO, "TEAR model: run_id=%s", run_id);
 
     sleep(1);
 
-    tear_event_profile(TEAR_COMPONENT,
-                          &profile,
-                          "inference_start");
+    tear_event_profile(TEAR_COMPONENT, &profile, "inference_start");
 
-    demo_print("TEAR model: input=synthetic-frame\n");
+    tear_log(TEAR_COMPONENT, TEAR_LOG_INFO, "TEAR model: input=synthetic-frame");
 
     sleep(1);
 
-    demo_print("TEAR model: running inference\n");
+    tear_log(TEAR_COMPONENT, TEAR_LOG_INFO, "TEAR model: running inference");
 
     sleep(1);
 
@@ -156,15 +143,13 @@ int main(int argc, char **argv)
                      "confidence_x100",
                      87);
 
-    tear_event_profile(TEAR_COMPONENT,
-                          &profile,
-                          "inference_done");
+    tear_event_profile(TEAR_COMPONENT, &profile, "inference_done");
 
-    demo_print("TEAR model: result=object:box confidence=0.87\n");
+    tear_log(TEAR_COMPONENT,
+             TEAR_LOG_INFO,
+             "TEAR model: result=object:box confidence=0.87");
 
-    tear_event_profile(TEAR_COMPONENT,
-                          &profile,
-                          "model_shutdown");
+    tear_event_profile(TEAR_COMPONENT, &profile, "model_shutdown");
 
     tear_metric_shutdown();
     tear_event_shutdown();

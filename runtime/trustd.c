@@ -8,6 +8,7 @@
 #endif
 #include "runtime_paths.h"
 
+#include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
@@ -41,18 +42,13 @@ static void trustd_manifest_event(const struct tear_model_manifest *manifest,
     tear_event_manifest(TEAR_COMPONENT, manifest, event);
 }
 
-static void trustd_error(const char *fmt, ...)
-{
-    va_list ap;
-
-    va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
-    va_end(ap);
-}
-
 static void trustd_perror(const char *msg)
 {
-    perror(msg);
+    tear_log(TEAR_COMPONENT,
+             TEAR_LOG_ERROR,
+             "%s: %s",
+             msg,
+             strerror(errno));
 }
 
 static void client_reply(int client, const char *fmt, ...)
@@ -603,11 +599,16 @@ static int parse_backend(int argc, char **argv,
 #ifdef TEAR_ENABLE_OPTEE
                 *backend = TEAR_TRUST_BACKEND_OPTEE;
 #else
-                trustd_error("TEAR trustd: OP-TEE backend not built\n");
+                tear_log(TEAR_COMPONENT,
+                         TEAR_LOG_ERROR,
+                         "OP-TEE backend not built");
                 return -1;
 #endif
             } else {
-                trustd_error("TEAR trustd: unknown backend: %s\n", argv[i]);
+                tear_log(TEAR_COMPONENT,
+                         TEAR_LOG_ERROR,
+                         "unknown backend: %s",
+                         argv[i]);
                 return -1;
             }
         } else if (strcmp(argv[i], "--event-log") == 0 && i + 1 < argc) {
@@ -619,17 +620,21 @@ static int parse_backend(int argc, char **argv,
         } else if (strcmp(argv[i], "--self-test-verify") == 0) {
             *self_test_verify = 1;
         } else {
-            trustd_error("usage: tear-trustd [--backend file|optee] "
-                         "[--event-log <path>] "
-                         "[--self-test] "
-                         "[--self-test-enroll] "
-                         "[--self-test-verify]\n");
+            tear_log(TEAR_COMPONENT,
+                     TEAR_LOG_ERROR,
+                     "usage: tear-trustd [--backend file|optee] "
+                     "[--event-log <path>] "
+                     "[--self-test] "
+                     "[--self-test-enroll] "
+                     "[--self-test-verify]");
             return -1;
         }
     }
 
     if (!*event_log || (*event_log)[0] == '\0') {
-        trustd_error("TEAR trustd: missing --event-log <path>\n");
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "missing --event-log <path>");
         return -1;
     }
 
@@ -708,7 +713,8 @@ int main(int argc, char **argv)
     int self_test_verify;
     int server;
 
-    if (parse_backend(argc, argv,
+    if (parse_backend(argc,
+                      argv,
                       &backend,
                       &event_log,
                       &self_test,
@@ -717,7 +723,9 @@ int main(int argc, char **argv)
         return 1;
 
     if (tear_event_init(event_log) < 0) {
-        trustd_error("TEAR trustd: failed to initialize events\n");
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "failed to initialize events");
         return 1;
     }
 

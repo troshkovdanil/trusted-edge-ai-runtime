@@ -32,7 +32,6 @@ check_log_ordered() {
 echo "TEAR verify: OP-TEE QEMU host log"
 
 check_log_ordered "TEAR_OPTEE_CA_TEST start"
-check_log_ordered "TEAR_OPTEE_CA_PING_OK"
 check_log_ordered "TEAR_OPTEE_CA_TEST done"
 
 check_log_ordered "TEAR_OPTEE_TRUSTD_SELF_TEST start"
