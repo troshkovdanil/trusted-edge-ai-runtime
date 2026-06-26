@@ -4,12 +4,22 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 OPTEE_QEMU_DIR="${OPTEE_QEMU_DIR:-external/optee-qemu-v8}"
 
+NORMAL_LOG="$ROOT_DIR/build/optee-normal-world.log"
+SECURE_LOG="$ROOT_DIR/build/optee-secure-world.log"
+VERIFY_SCRIPT="${VERIFY_SCRIPT:-$ROOT_DIR/scripts/verify-optee-qemu-run.sh}"
+GUEST_OK_MARKER="TEAR_QEMU_GUEST_VERIFY_OK"
+
 mkdir -p "$ROOT_DIR/build"
-rm -f "$ROOT_DIR/build/optee-normal-world.log"
-rm -f "$ROOT_DIR/build/optee-secure-world.log"
+rm -f "$NORMAL_LOG" "$SECURE_LOG"
+
+echo "TEAR: normal-world log: $NORMAL_LOG"
+echo "TEAR: secure-world log: $SECURE_LOG"
+
+echo "TEAR: OP-TEE QEMU test running..."
 
 cd "$ROOT_DIR/$OPTEE_QEMU_DIR/out/bin"
 
+set +e
 ../../qemu/build/qemu-system-aarch64 \
   -nographic \
   -monitor none \
@@ -27,11 +37,26 @@ cd "$ROOT_DIR/$OPTEE_QEMU_DIR/out/bin"
   -device virtio-rng-pci,rng=rng0,max-bytes=1024,period=1000 \
   -netdev user,id=vmnic \
   -device virtio-net-device,netdev=vmnic \
-  -serial file:"$ROOT_DIR/build/optee-normal-world.log" \
-  -serial file:"$ROOT_DIR/build/optee-secure-world.log"
+  -serial file:"$NORMAL_LOG" \
+  -serial file:"$SECURE_LOG"
+qemu_rc=$?
+set -e
 
-VERIFY_SCRIPT="${VERIFY_SCRIPT:-$ROOT_DIR/scripts/verify-optee-qemu-run.sh}"
+if [ "$qemu_rc" -ne 0 ] && ! grep -q "$GUEST_OK_MARKER" "$NORMAL_LOG"; then
+    echo "TEAR: QEMU exited with rc=$qemu_rc before successful guest verification"
+    echo "TEAR: inspect log: $NORMAL_LOG"
+    exit "$qemu_rc"
+fi
 
+if [ "$qemu_rc" -ne 0 ]; then
+    echo "TEAR: QEMU exited with rc=$qemu_rc after successful guest verification (expected)"
+fi
+
+echo "TEAR: OP-TEE QEMU test running... OK"
+
+echo "TEAR: running host-side verification..."
 "$VERIFY_SCRIPT"
 
-echo "TEAR: OP-TEE QEMU headless test passed"
+echo "TEAR: OP-TEE QEMU test passed"
+#echo "TEAR: normal-world log: $NORMAL_LOG"
+#echo "TEAR: secure-world log: $SECURE_LOG"

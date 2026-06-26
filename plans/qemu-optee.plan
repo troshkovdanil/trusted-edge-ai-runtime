@@ -1,0 +1,4 @@
+RUN /bin/demo-model /etc/tear/model-v2.json /etc/tear/demo.profile
+RUN /bin/mnist-model /etc/tear/mnist-model.json /etc/tear/mnist.profile -- --sample clean7
+RUN /bin/mnist-model /etc/tear/mnist-model.json /etc/tear/mnist.profile -- --sample weak7
+RUN /bin/mnist-model /etc/tear/mnist-model.json /etc/tear/mnist.profile -- --sample noise

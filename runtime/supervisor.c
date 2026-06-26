@@ -48,9 +48,10 @@ struct tear_run_config {
     const char *manifest;
     const char *profile;
     const char *args;
+};
+
+struct supervisor_config {
     const char *event_log;
-    int enable_optimizer;
-    int daemon_mode;
 };
 
 static enum supervisor_state supervisor_state = SUPERVISOR_STATE_INIT;
@@ -245,16 +246,14 @@ static int parse_run_command(const char *buf,
         return -1;
 
     while ((token = next_token(&cursor)) != NULL) {
-        if (strcmp(token, "optimizer") == 0) {
-            run_cfg->enable_optimizer = 1;
-        } else if (strcmp(token, "--") == 0) {
+        if (strcmp(token, "--") == 0) {
             while (*cursor == ' ' || *cursor == '\t')
                 cursor++;
             args = cursor;
             break;
-        } else {
-            return -1;
         }
+
+        return -1;
     }
 
     run_cfg->workload = strdup(workload);
@@ -401,61 +400,33 @@ static void handle_supervisor_client(int client)
     }
 }
 
-static struct tear_run_config parse_args(int argc, char **argv)
+static struct supervisor_config parse_args(int argc, char **argv)
 {
-    struct tear_run_config cfg = {
-        .workload = NULL,
-        .manifest = NULL,
-        .profile = NULL,
-        .args = "",
+    struct supervisor_config cfg = {
         .event_log = DEFAULT_EVENT_PATH,
-        .enable_optimizer = 0,
-        .daemon_mode = 0,
     };
 
     for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--workload") == 0 && i + 1 < argc) {
-            cfg.workload = argv[++i];
-        } else if (strcmp(argv[i], "--manifest") == 0 && i + 1 < argc) {
-            cfg.manifest = argv[++i];
-        } else if (strcmp(argv[i], "--profile") == 0 && i + 1 < argc) {
-            cfg.profile = argv[++i];
-        } else if (strcmp(argv[i], "--args") == 0 && i + 1 < argc) {
-            cfg.args = argv[++i];
-        } else if (strcmp(argv[i], "--event-log") == 0 && i + 1 < argc) {
+        if (strcmp(argv[i], "--event-log") == 0 && i + 1 < argc) {
             cfg.event_log = argv[++i];
-        } else if (strcmp(argv[i], "--enable-optimizer") == 0) {
-            cfg.enable_optimizer = 1;
-        } else if (strcmp(argv[i], "--daemon") == 0) {
-            cfg.daemon_mode = 1;
+        } else {
+            tear_log(TEAR_COMPONENT,
+                     TEAR_LOG_ERROR,
+                     "usage: tear-supervisor [--event-log <path>]");
+            cfg.event_log = NULL;
+            break;
         }
     }
 
     return cfg;
 }
 
-static int validate_config(const struct tear_run_config *cfg)
+static int validate_config(const struct supervisor_config *cfg)
 {
     if (!cfg->event_log || cfg->event_log[0] == '\0') {
         tear_log(TEAR_COMPONENT,
                  TEAR_LOG_ERROR,
                  "missing --event-log <path>");
-        return -1;
-    }
-
-    if (cfg->daemon_mode)
-        return 0;
-
-    if (!cfg->workload || !cfg->manifest || !cfg->profile) {
-        tear_log(TEAR_COMPONENT,
-                 TEAR_LOG_ERROR,
-                 "usage: tear-supervisor --workload <path> "
-                 "--manifest <path> --profile <path> [--args <args>] "
-                 "[--event-log <path>] [--enable-optimizer]");
-        tear_log(TEAR_COMPONENT,
-                 TEAR_LOG_ERROR,
-                 "       tear-supervisor --daemon [--event-log <path>] "
-                 "[--enable-optimizer]");
         return -1;
     }
 
@@ -583,36 +554,19 @@ static int provision_selected_manifest(const struct tear_run_config *cfg)
 
 static void run_runtime_manager(const struct tear_run_config *cfg)
 {
-    if (cfg->enable_optimizer) {
-        execl(RUNTIME_MANAGER_PATH,
-              RUNTIME_MANAGER_PATH,
-              "--workload",
-              cfg->workload,
-              "--manifest",
-              cfg->manifest,
-              "--profile",
-              cfg->profile,
-              "--args",
-              cfg->args,
-              "--event-log",
-              RUNTIME_MANAGER_EVENT_PATH,
-              "--enable-optimizer",
-              NULL);
-    } else {
-        execl(RUNTIME_MANAGER_PATH,
-              RUNTIME_MANAGER_PATH,
-              "--workload",
-              cfg->workload,
-              "--manifest",
-              cfg->manifest,
-              "--profile",
-              cfg->profile,
-              "--args",
-              cfg->args,
-              "--event-log",
-              RUNTIME_MANAGER_EVENT_PATH,
-              NULL);
-    }
+    execl(RUNTIME_MANAGER_PATH,
+          RUNTIME_MANAGER_PATH,
+          "--workload",
+          cfg->workload,
+          "--manifest",
+          cfg->manifest,
+          "--profile",
+          cfg->profile,
+          "--args",
+          cfg->args,
+          "--event-log",
+          RUNTIME_MANAGER_EVENT_PATH,
+          NULL);
 }
 
 static int run_workload_once(const struct tear_run_config *cfg)
@@ -712,9 +666,9 @@ static int run_supervisor_daemon(pid_t trustd_pid, pid_t optd_pid)
 int main(int argc, char **argv)
 {
     int ret;
-    struct tear_run_config cfg = parse_args(argc, argv);
+    struct supervisor_config cfg = parse_args(argc, argv);
     pid_t trustd_pid;
-    pid_t optd_pid = -1;
+    pid_t optd_pid;
 
     if (validate_config(&cfg) < 0)
         return 1;
@@ -736,33 +690,18 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    if (cfg.enable_optimizer) {
-        optd_pid = start_optd();
+    optd_pid = start_optd();
 
-        if (optd_pid < 0) {
-            supervisor_event("optd_start_failed");
-            stop_child(trustd_pid);
-            tear_event_shutdown();
-            return 1;
-        }
-    }
-
-    if (cfg.daemon_mode) {
-        ret = run_supervisor_daemon(trustd_pid, optd_pid);
-        supervisor_event("supervisor_shutdown");
+    if (optd_pid < 0) {
+        supervisor_event("optd_start_failed");
+        stop_child(trustd_pid);
         tear_event_shutdown();
-        return ret;
+        return 1;
     }
 
-    supervisor_state = SUPERVISOR_STATE_READY;
-
-    ret = run_workload_once(&cfg);
-
-    stop_child(optd_pid);
-    stop_child(trustd_pid);
+    ret = run_supervisor_daemon(trustd_pid, optd_pid);
 
     supervisor_event("supervisor_shutdown");
-
     tear_event_shutdown();
 
     return ret;

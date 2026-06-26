@@ -36,7 +36,6 @@ struct tear_run_config {
     const char *profile;
     const char *args;
     const char *event_log;
-    int enable_optimizer;
 };
 
 struct opt_proposal {
@@ -95,7 +94,6 @@ static struct tear_run_config parse_args(int argc, char **argv)
         .profile = NULL,
         .args = "",
         .event_log = DEFAULT_EVENT_PATH,
-        .enable_optimizer = 0,
     };
 
     for (int i = 1; i < argc; i++) {
@@ -109,8 +107,13 @@ static struct tear_run_config parse_args(int argc, char **argv)
             cfg.args = argv[++i];
         } else if (strcmp(argv[i], "--event-log") == 0 && i + 1 < argc) {
             cfg.event_log = argv[++i];
-        } else if (strcmp(argv[i], "--enable-optimizer") == 0) {
-            cfg.enable_optimizer = 1;
+        } else {
+            tear_log(TEAR_COMPONENT,
+                     TEAR_LOG_ERROR,
+                     "unknown argument: %s",
+                     argv[i]);
+            cfg.workload = NULL;
+            break;
         }
     }
 
@@ -131,7 +134,7 @@ static int validate_config(const struct tear_run_config *cfg)
                  TEAR_LOG_ERROR,
                  "usage: tear-runtime-manager --workload <path> "
                  "--manifest <path> --profile <path> [--args <args>] "
-                 "[--event-log <path>] [--enable-optimizer]");
+                 "[--event-log <path>]");
         return -1;
     }
 
@@ -491,19 +494,7 @@ int tear_runtime_manager_main(int argc, char **argv)
 
     runtime_manifest_event(&manifest, "manifest_verified");
 
-    if (manifest.optimization_capable && !cfg.enable_optimizer) {
-        tear_log(TEAR_COMPONENT,
-                 TEAR_LOG_ERROR,
-                 "workload is optimization-capable but optimizer is disabled");
-        runtime_profile_event(&profile, "optimizer_required_but_disabled");
-        goto out;
-    }
-
-    use_optimizer = cfg.enable_optimizer && manifest.optimization_capable;
-
-    if (cfg.enable_optimizer && !manifest.optimization_capable)
-        runtime_profile_event(&profile,
-                              "optimizer_skipped_manifest_not_capable");
+    use_optimizer = manifest.optimization_capable;
 
     if (use_optimizer)
         unlink(metrics_path);

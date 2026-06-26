@@ -20,6 +20,8 @@ HOST_TRUSTD := $(HOST_BUILD)/tear-trustd-host
 HOST_TEARICTL := $(HOST_BUILD)/tearictl-host
 HOST_OPTD := $(HOST_BUILD)/tear-optd-host
 
+HOST_PLAN := plans/host-demo.plan
+
 MNIST_MODEL_FILE := models/mnist/mnist.onnx
 ORT_INCLUDE := external/onnxruntime/include/onnxruntime_c_api.h
 
@@ -51,7 +53,7 @@ TEARICTL_SRCS := runtime/tearictl.c
 DEMO_MODEL_SRCS := runtime/demo_model.c
 MNIST_MODEL_SRCS := runtime/mnist_model.c
 
-.PHONY: build clean clean-all host-build host-test host-supervisor-test host-mnist-test host-adaptive-supervisor-test host-plan-test full-verify mnist-assets optee-qemu-install optee-qemu-build optee-qemu-run optee-qemu-test optee-qemu-mnist-adaptive-install optee-qemu-mnist-adaptive-build optee-qemu-mnist-adaptive-run optee-qemu-mnist-adaptive-test optee-ta optee-ca optee-trustd
+.PHONY: build clean clean-all host-build host-test host-supervisor-test host-mnist-test host-adaptive-supervisor-test host-plan-test full-verify mnist-assets optee-qemu-install optee-qemu-build optee-qemu-run optee-qemu-test optee-ta optee-ca optee-trustd
 
 mnist-assets:
 	./scripts/fetch-mnist-onnx.sh
@@ -150,12 +152,15 @@ host-test: host-build
 	./$(HOST_HELLO)
 
 host-supervisor-test: host-build
-	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-metric-demo-model-demo-default-* $(HOST_BUILD)/tear-*-events.log*
-	./$(HOST_SUPERVISOR) \
-	    --workload "$(abspath $(HOST_DEMO_MODEL))" \
-	    --manifest examples/model-v2.json \
-	    --profile profiles/demo.profile \
-	    > $(HOST_BUILD)/supervisor.log 2>&1
+	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-supervisor.sock /tmp/tear-metric-demo-model-demo-default-* $(HOST_BUILD)/tear-*-events.log*
+	./$(HOST_SUPERVISOR) > $(HOST_BUILD)/supervisor.log 2>&1 & \
+	    supervisor_pid=$$!; \
+	    sleep 2; \
+	    ./$(HOST_TEARICTL) run "$(abspath $(HOST_DEMO_MODEL))" examples/model-v2.json profiles/demo.profile > $(HOST_BUILD)/supervisor-client.log 2>&1; \
+	    rc=$$?; \
+	    kill -INT $$supervisor_pid; \
+	    wait $$supervisor_pid || true; \
+	    exit $$rc
 	grep -q "event=supervisor_start" $(HOST_BUILD)/tear-supervisor-events.log
 	grep -q "event=workload_start" $(HOST_BUILD)/tear-supervisor-events.log
 	grep -q "event=inference_done" $(HOST_BUILD)/tear-runtime-manager-events.log-run-*
@@ -177,55 +182,53 @@ host-mnist-test: host-build
 	grep -q "event=mnist_inference_metrics" $(HOST_BUILD)/tear-mnist-model-events.log-host-noise
 
 host-adaptive-supervisor-test: host-build
-	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-trusted-decisions /tmp/tear-metric-mnist-onnx-v1-mnist-default-* $(HOST_BUILD)/tear-*-events.log*
-	./$(HOST_SUPERVISOR) \
-	    --workload "$(abspath $(HOST_MNIST_MODEL))" \
-	    --manifest examples/mnist-model.json \
-	    --profile profiles/mnist.profile \
-	    --args "--sample clean7" \
-	    --enable-optimizer \
-	    > $(HOST_BUILD)/adaptive-clean7.log 2>&1
+	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-supervisor.sock /tmp/tear-trusted-decisions /tmp/tear-metric-mnist-onnx-v1-mnist-default-* $(HOST_BUILD)/tear-*-events.log*
+	./$(HOST_SUPERVISOR) > $(HOST_BUILD)/adaptive-clean7.log 2>&1 & \
+	    supervisor_pid=$$!; \
+	    sleep 2; \
+	    ./$(HOST_TEARICTL) run "$(abspath $(HOST_MNIST_MODEL))" examples/mnist-model.json profiles/mnist.profile -- --sample clean7 > $(HOST_BUILD)/adaptive-clean7-client.log 2>&1; \
+	    rc=$$?; \
+	    kill -INT $$supervisor_pid; \
+	    wait $$supervisor_pid || true; \
+	    exit $$rc
 	grep -q "TEAR_METRIC .*profile_id=mnist-default .*artifact_id=mnist-onnx-v1 .*name=confidence_margin_x1000" /tmp/tear-metric-mnist-onnx-v1-mnist-default-*
 	grep -q "event=optimizer_proposal_received" $(HOST_BUILD)/tear-runtime-manager-events.log
 	grep -Eq "run_id=run-[0-9]+-[0-9]+ artifact_id=mnist-onnx-v1 proposal=keep_current_profile decision=approved reason=policy_allows" /tmp/tear-trusted-decisions
-	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-trusted-decisions /tmp/tear-metric-mnist-onnx-v1-mnist-default-* $(HOST_BUILD)/tear-*-events.log*
-	./$(HOST_SUPERVISOR) \
-	    --workload "$(abspath $(HOST_MNIST_MODEL))" \
-	    --manifest examples/mnist-model.json \
-	    --profile profiles/mnist.profile \
-	    --args "--sample weak7" \
-	    --enable-optimizer \
-	    > $(HOST_BUILD)/adaptive-weak7.log 2>&1
+	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-supervisor.sock /tmp/tear-trusted-decisions /tmp/tear-metric-mnist-onnx-v1-mnist-default-* $(HOST_BUILD)/tear-*-events.log*
+	./$(HOST_SUPERVISOR) > $(HOST_BUILD)/adaptive-weak7.log 2>&1 & \
+	    supervisor_pid=$$!; \
+	    sleep 2; \
+	    ./$(HOST_TEARICTL) run "$(abspath $(HOST_MNIST_MODEL))" examples/mnist-model.json profiles/mnist.profile -- --sample weak7 > $(HOST_BUILD)/adaptive-weak7-client.log 2>&1; \
+	    rc=$$?; \
+	    kill -INT $$supervisor_pid; \
+	    wait $$supervisor_pid || true; \
+	    exit $$rc
 	grep -q "TEAR_METRIC .*profile_id=mnist-default .*artifact_id=mnist-onnx-v1 .*name=confidence_margin_x1000" /tmp/tear-metric-mnist-onnx-v1-mnist-default-*
 	grep -q "event=optimizer_proposal_received" $(HOST_BUILD)/tear-runtime-manager-events.log
 	grep -Eq "run_id=run-[0-9]+-[0-9]+ artifact_id=mnist-onnx-v1 proposal=request_high_accuracy_profile decision=rejected reason=profile_unavailable" /tmp/tear-trusted-decisions
-	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-trusted-decisions /tmp/tear-metric-mnist-onnx-v1-mnist-default-* $(HOST_BUILD)/tear-*-events.log*
-	./$(HOST_SUPERVISOR) \
-	    --workload "$(abspath $(HOST_MNIST_MODEL))" \
-	    --manifest examples/mnist-model.json \
-	    --profile profiles/mnist.profile \
-	    --args "--sample noise" \
-	    --enable-optimizer \
-	    > $(HOST_BUILD)/adaptive-noise.log 2>&1
+	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-supervisor.sock /tmp/tear-trusted-decisions /tmp/tear-metric-mnist-onnx-v1-mnist-default-* $(HOST_BUILD)/tear-*-events.log*
+	./$(HOST_SUPERVISOR) > $(HOST_BUILD)/adaptive-noise.log 2>&1 & \
+	    supervisor_pid=$$!; \
+	    sleep 2; \
+	    ./$(HOST_TEARICTL) run "$(abspath $(HOST_MNIST_MODEL))" examples/mnist-model.json profiles/mnist.profile -- --sample noise > $(HOST_BUILD)/adaptive-noise-client.log 2>&1; \
+	    rc=$$?; \
+	    kill -INT $$supervisor_pid; \
+	    wait $$supervisor_pid || true; \
+	    exit $$rc
 	grep -q "TEAR_METRIC .*profile_id=mnist-default .*artifact_id=mnist-onnx-v1 .*name=confidence_margin_x1000" /tmp/tear-metric-mnist-onnx-v1-mnist-default-*
 	grep -q "event=optimizer_proposal_received" $(HOST_BUILD)/tear-runtime-manager-events.log
 	grep -Eq "run_id=run-[0-9]+-[0-9]+ artifact_id=mnist-onnx-v1 proposal=reject_input decision=approved reason=input_rejected" /tmp/tear-trusted-decisions
 
 host-plan-test: host-build
 	rm -f /tmp/tear-trustd.sock /tmp/tear-optd.sock /tmp/tear-supervisor.sock /tmp/tear-trusted-decisions /tmp/tear-metric-* $(HOST_BUILD)/tear-*-events.log*
-	printf '%s\n' \
-	    'RUN $(abspath $(HOST_DEMO_MODEL)) examples/model-v2.json profiles/demo.profile' \
-	    'RUN $(abspath $(HOST_MNIST_MODEL)) examples/mnist-model.json profiles/mnist.profile optimizer -- --sample clean7' \
-	    'RUN $(abspath $(HOST_MNIST_MODEL)) examples/mnist-model.json profiles/mnist.profile optimizer -- --sample weak7' \
-	    'RUN $(abspath $(HOST_MNIST_MODEL)) examples/mnist-model.json profiles/mnist.profile optimizer -- --sample noise' \
-	    > $(HOST_BUILD)/host-demo.plan
-	./$(HOST_SUPERVISOR) --daemon --enable-optimizer > $(HOST_BUILD)/plan.log 2>&1 & \
+	./$(HOST_SUPERVISOR) > $(HOST_BUILD)/plan.log 2>&1 & \
 	    supervisor_pid=$$!; \
 	    sleep 2; \
-	    python3 -c 'import socket; s=socket.socket(socket.AF_UNIX, socket.SOCK_STREAM); s.connect("/tmp/tear-supervisor.sock"); s.sendall(b"RUN_PLAN build/host/host-demo.plan\n"); print(s.recv(4096).decode(), end=""); s.close()' > $(HOST_BUILD)/plan-client.log; \
+	    ./$(HOST_TEARICTL) run-plan $(HOST_PLAN) > $(HOST_BUILD)/plan-client.log 2>&1; \
+	    rc=$$?; \
 	    kill -INT $$supervisor_pid; \
-	    wait $$supervisor_pid || true
-	grep -q "OK" $(HOST_BUILD)/plan-client.log
+	    wait $$supervisor_pid || true; \
+	    exit $$rc
 	grep -q "component=supervisor event=run_plan_start" $(HOST_BUILD)/tear-supervisor-events.log
 	grep -q "component=supervisor event=workload_selected" $(HOST_BUILD)/tear-supervisor-events.log
 	grep -q "component=supervisor event=run_plan_done" $(HOST_BUILD)/tear-supervisor-events.log
@@ -239,27 +242,16 @@ full-verify: host-test host-supervisor-test host-mnist-test host-adaptive-superv
 optee-qemu-install: build optee-ta optee-ca optee-trustd
 	./scripts/install-optee-qemu-files.sh $(OPTEE_QEMU_DIR)
 
-optee-qemu-mnist-adaptive-install: build optee-ta optee-ca optee-trustd
-	./scripts/install-optee-qemu-files.sh $(OPTEE_QEMU_DIR) mnist-adaptive
-
 optee-qemu-build: optee-qemu-install
-	./scripts/optee-qemu.sh
-
-optee-qemu-mnist-adaptive-build: optee-qemu-mnist-adaptive-install
 	./scripts/optee-qemu.sh
 
 optee-qemu-run:
 	$(MAKE) -C $(OPTEE_QEMU_DIR)/build run-only
 
-optee-qemu-mnist-adaptive-run:
-	$(MAKE) -C $(OPTEE_QEMU_DIR)/build run-only
-
 optee-qemu-test: optee-qemu-build
 	./scripts/run-optee-qemu-headless.sh
 
-optee-qemu-mnist-adaptive-test: optee-qemu-mnist-adaptive-build
-	VERIFY_SCRIPT="$(abspath scripts/verify-optee-qemu-mnist-adaptive-run.sh)" \
-	./scripts/run-optee-qemu-headless.sh
+optee-qemu-mnist-adaptive-test: optee-qemu-test
 
 $(OPTEE_TA_DEV_KIT_MK):
 	./scripts/optee-qemu.sh
