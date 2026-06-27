@@ -20,8 +20,8 @@ HOST_TRUSTD := $(HOST_BUILD)/tear-trustd-host
 HOST_TEARICTL := $(HOST_BUILD)/tearictl-host
 HOST_OPTD := $(HOST_BUILD)/tear-optd-host
 
-HOST_PLAN := plans/host-demo.plan
-QEMU_OPTEE_PLAN := plans/qemu-optee.plan
+HOST_DEMO_PLAN := plans/host-demo.plan
+QEMU_OPTEE_PLAN := /etc/tear/qemu-optee.plan
 
 MNIST_MODEL_FILE := models/mnist/mnist.onnx
 ORT_INCLUDE := external/onnxruntime/include/onnxruntime_c_api.h
@@ -31,7 +31,6 @@ OPTEE_TA_DEV_KIT := $(abspath $(OPTEE_QEMU_DIR)/optee_os/out/arm/export-ta_arm64
 OPTEE_TA_DEV_KIT_MK := $(OPTEE_TA_DEV_KIT)/mk/ta_dev_kit.mk
 OPTEE_CROSS_COMPILE := $(abspath $(OPTEE_QEMU_DIR)/toolchains/aarch64/bin/aarch64-linux-gnu-)
 TEAR_TA_BUILD := $(BUILD)/optee/tear_ta
-TEAR_TA := $(TEAR_TA_BUILD)/7c9d7b3a-2f4e-4c8f-9a11-6b4454454152.ta
 TEAR_CA := $(BUILD)/optee/tear-optee-ca
 OPTEE_CLIENT_INCLUDE := $(abspath $(OPTEE_QEMU_DIR)/optee_client/libteec/include)
 OPTEE_CLIENT_LIB := $(abspath $(OPTEE_QEMU_DIR)/out-br/target/usr/lib)
@@ -54,53 +53,18 @@ TEARICTL_SRCS := runtime/tearictl.c
 DEMO_MODEL_SRCS := runtime/demo_model.c
 MNIST_MODEL_SRCS := runtime/mnist_model.c
 
-.PHONY: build clean clean-all mnist-assets \
-	host-build host-test host-demo-build host-demo-test \
-	qemu-optee-install qemu-optee-build qemu-optee-run qemu-optee-test \
-	optee-ta optee-ca optee-trustd full-verify
+.PHONY: build test full-verify clean clean-all mnist-assets \
+	host-demo-build host-demo-test host-test \
+	qemu-optee-binaries qemu-optee-install qemu-optee-build qemu-optee-run qemu-optee-test \
+	optee-ta optee-ca optee-trustd
 
 mnist-assets:
 	./scripts/fetch-mnist-onnx.sh
 
-build: mnist-assets
-	mkdir -p $(BUILD)
-	$(CC) -static -O2 -Wall -Wextra \
-		-o $(SUPERVISOR) runtime/supervisor.c $(RUNTIME_PATHS_SRCS) $(OBSERVABILITY_SRCS)
-	$(CC) -static -O2 -Wall -Wextra \
-		-o $(DEMO_MODEL) $(DEMO_MODEL_SRCS) $(PROFILE_SRCS) $(OBSERVABILITY_SRCS)
-	$(CC) -static -O2 -Wall -Wextra \
-		-o $(RUNTIME_MANAGER) \
-		$(RUNTIME_MANAGER_SRCS) \
-		$(PROFILE_SRCS) \
-		$(MANIFEST_SRCS) \
-		$(TRUST_CLIENT_SRCS) \
-		$(RUNTIME_PATHS_SRCS) \
-		$(OBSERVABILITY_SRCS)
-	$(CC) -static -O2 -Wall -Wextra \
-		-o $(TRUSTD) \
-		$(TRUSTD_SRCS) \
-		$(RUNTIME_PATHS_SRCS) \
-		$(OBSERVABILITY_SRCS)
-	$(CC) -static -O2 -Wall -Wextra \
-		-o $(TEARICTL) \
-		$(TEARICTL_SRCS) \
-		$(MANIFEST_SRCS) \
-		$(TRUST_CLIENT_SRCS) \
-		$(RUNTIME_PATHS_SRCS) \
-		$(OBSERVABILITY_SRCS)
-	$(CC) -static -O2 -Wall -Wextra \
-		-o $(OPTD) \
-		$(OPTD_SRCS) \
-		$(RUNTIME_PATHS_SRCS) \
-		$(OBSERVABILITY_SRCS)
-	$(CC) -O2 -Wall -Wextra \
-		-I$(ORT_AARCH64_INCLUDE) \
-		-o $(MNIST_MODEL) $(MNIST_MODEL_SRCS) $(PROFILE_SRCS) $(OBSERVABILITY_SRCS) \
-		-L$(ORT_AARCH64_LIB) \
-		-lonnxruntime \
-		-Wl,-rpath,/usr/lib
-
-host-build: mnist-assets
+#
+# Platform: host-demo
+#
+host-demo-build: mnist-assets
 	mkdir -p $(HOST_BUILD)
 	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
 		-o $(HOST_HELLO) runtime/hello.c
@@ -139,29 +103,54 @@ host-build: mnist-assets
 		$(RUNTIME_PATHS_SRCS) \
 		$(OBSERVABILITY_SRCS)
 
-host-demo-build: host-build
-
 host-demo-test: host-demo-build
-	./scripts/run-tear-plan.sh host-demo "$(HOST_PLAN)"
+	./scripts/run-host-demo.sh "$(HOST_DEMO_PLAN)"
 
 host-test: host-demo-test
 
-full-verify: host-demo-test qemu-optee-test
-
-qemu-optee-install: build optee-ta optee-ca optee-trustd
-	./scripts/install-optee-qemu-files.sh $(OPTEE_QEMU_DIR)
-
-qemu-optee-build: qemu-optee-install
-	./scripts/optee-qemu.sh
-
-qemu-optee-run:
-	$(MAKE) -C $(OPTEE_QEMU_DIR)/build run-only
-
-qemu-optee-test: qemu-optee-build
-	./scripts/run-tear-plan.sh qemu-optee "$(QEMU_OPTEE_PLAN)"
-
+#
+# Platform: qemu-optee
+#
 $(OPTEE_TA_DEV_KIT_MK):
 	./scripts/optee-qemu.sh
+
+qemu-optee-binaries: mnist-assets
+	mkdir -p $(BUILD)
+	$(CC) -static -O2 -Wall -Wextra \
+		-o $(SUPERVISOR) runtime/supervisor.c $(RUNTIME_PATHS_SRCS) $(OBSERVABILITY_SRCS)
+	$(CC) -static -O2 -Wall -Wextra \
+		-o $(DEMO_MODEL) $(DEMO_MODEL_SRCS) $(PROFILE_SRCS) $(OBSERVABILITY_SRCS)
+	$(CC) -static -O2 -Wall -Wextra \
+		-o $(RUNTIME_MANAGER) \
+		$(RUNTIME_MANAGER_SRCS) \
+		$(PROFILE_SRCS) \
+		$(MANIFEST_SRCS) \
+		$(TRUST_CLIENT_SRCS) \
+		$(RUNTIME_PATHS_SRCS) \
+		$(OBSERVABILITY_SRCS)
+	$(CC) -static -O2 -Wall -Wextra \
+		-o $(TRUSTD) \
+		$(TRUSTD_SRCS) \
+		$(RUNTIME_PATHS_SRCS) \
+		$(OBSERVABILITY_SRCS)
+	$(CC) -static -O2 -Wall -Wextra \
+		-o $(TEARICTL) \
+		$(TEARICTL_SRCS) \
+		$(MANIFEST_SRCS) \
+		$(TRUST_CLIENT_SRCS) \
+		$(RUNTIME_PATHS_SRCS) \
+		$(OBSERVABILITY_SRCS)
+	$(CC) -static -O2 -Wall -Wextra \
+		-o $(OPTD) \
+		$(OPTD_SRCS) \
+		$(RUNTIME_PATHS_SRCS) \
+		$(OBSERVABILITY_SRCS)
+	$(CC) -O2 -Wall -Wextra \
+		-I$(ORT_AARCH64_INCLUDE) \
+		-o $(MNIST_MODEL) $(MNIST_MODEL_SRCS) $(PROFILE_SRCS) $(OBSERVABILITY_SRCS) \
+		-L$(ORT_AARCH64_LIB) \
+		-lonnxruntime \
+		-Wl,-rpath,/usr/lib
 
 optee-ta: $(OPTEE_TA_DEV_KIT_MK)
 	mkdir -p $(TEAR_TA_BUILD)
@@ -201,6 +190,25 @@ optee-trustd: optee-ca
 		-L$(OPTEE_CLIENT_LIB) \
 		-Wl,-rpath-link,$(OPTEE_CLIENT_LIB) \
 		-lteec
+
+qemu-optee-install: qemu-optee-binaries optee-ta optee-ca optee-trustd
+	./scripts/install-optee-qemu-files.sh $(OPTEE_QEMU_DIR)
+
+qemu-optee-build: qemu-optee-install
+	./scripts/optee-qemu.sh
+
+qemu-optee-run:
+	$(MAKE) -C $(OPTEE_QEMU_DIR)/build run-only
+
+qemu-optee-test: qemu-optee-build
+	./scripts/run-qemu-optee.sh "$(QEMU_OPTEE_PLAN)"
+
+#
+# main targets
+#
+build: host-demo-build qemu-optee-build
+
+test: host-demo-test qemu-optee-test
 
 clean:
 	rm -rf $(BUILD)/rootfs

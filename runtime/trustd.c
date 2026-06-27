@@ -557,9 +557,7 @@ static void handle_record_decision(int client,
         return;
     }
 
-    if (backend == TEAR_TRUST_BACKEND_OPTEE)
-        trustd_event("optee_record_decision_ok");
-
+    trustd_event("optee_record_decision_ok");
     trustd_event("optimization_decision_recorded");
     client_reply_ok(client);
 }

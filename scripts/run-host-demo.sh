@@ -10,7 +10,8 @@ TEARICTL="$HOST_BUILD/tearictl-host"
 
 SUPERVISOR_LOG="$HOST_BUILD/host-demo-supervisor.log"
 CLIENT_LOG="$HOST_BUILD/host-demo-client.log"
-VERIFY_SCRIPT="${VERIFY_SCRIPT:-$ROOT_DIR/scripts/verify-host-demo.sh}"
+EVENT_METRIC_VERIFY_LOG="$HOST_BUILD/host-demo-verify.log"
+VERIFY_SCRIPT="${VERIFY_SCRIPT:-$ROOT_DIR/scripts/verify-tear-plan.sh}"
 
 cd "$ROOT_DIR"
 
@@ -23,11 +24,13 @@ rm -f /tmp/tear-trustd.sock \
       /tmp/tear-metric-* \
       "$HOST_BUILD"/tear-*-events.log* \
       "$SUPERVISOR_LOG" \
-      "$CLIENT_LOG"
+      "$CLIENT_LOG" \
+      "$EVENT_METRIC_VERIFY_LOG"
 
 echo "TEAR: host-demo plan: $PLAN"
 echo "TEAR: supervisor log: $SUPERVISOR_LOG"
 echo "TEAR: client log: $CLIENT_LOG"
+echo "TEAR: verify log: $EVENT_METRIC_VERIFY_LOG"
 echo "TEAR: host-demo test running..."
 
 "$SUPERVISOR" > "$SUPERVISOR_LOG" 2>&1 &
@@ -58,9 +61,14 @@ fi
 cleanup
 trap - EXIT INT TERM
 
+TEAR_LOG_DIR="$HOST_BUILD" \
+TEAR_DECISION_LOG="/tmp/tear-trusted-decisions" \
+"$ROOT_DIR/scripts/verify-tear-plan-event-metric.sh" \
+    > "$EVENT_METRIC_VERIFY_LOG" 2>&1
+
 echo "TEAR: host-demo test running... OK"
 
 echo "TEAR: running host-side verification..."
-"$VERIFY_SCRIPT"
+"$VERIFY_SCRIPT" host-demo
 
 echo "TEAR: host-demo test passed"
