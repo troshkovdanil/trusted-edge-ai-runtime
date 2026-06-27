@@ -574,6 +574,7 @@ static int run_workload_once(const struct tear_run_config *cfg)
     pid_t pid;
     int status = 0;
 
+    tear_log(TEAR_COMPONENT, TEAR_LOG_INFO, "\n\nrun_workload_once");
     supervisor_event("workload_selected");
 
     if (provision_selected_manifest(cfg) < 0)

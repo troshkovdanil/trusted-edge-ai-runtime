@@ -62,22 +62,22 @@ static void client_reply(int client, const char *fmt, ...)
 
 static void client_reply_ok(int client)
 {
-    client_reply(client, "OK\n");
+    client_reply(client, "OK");
 }
 
 static void client_reply_err(int client)
 {
-    client_reply(client, "ERR\n");
+    client_reply(client, "ERR");
 }
 
 static void client_reply_state(int client, const char *state)
 {
-    client_reply(client, "STATE %s\n", state);
+    client_reply(client, "STATE %s", state);
 }
 
 static void client_reply_decision(int client, const char *decision)
 {
-    client_reply(client, "DECISION %s\n", decision);
+    client_reply(client, "DECISION %s", decision);
 }
 
 static int create_socket(void)
