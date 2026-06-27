@@ -58,8 +58,8 @@ qemu-optee)
     cp -v "$PLAN" "$TARGET/etc/tear/active.plan"
 
     TEAR_QEMU_PLAN="/etc/tear/active.plan" \
-    VERIFY_SCRIPT="$ROOT_DIR/scripts/verify-optee-qemu-run.sh" \
-        "$ROOT_DIR/scripts/run-optee-qemu-headless.sh"
+    VERIFY_SCRIPT="$ROOT_DIR/scripts/verify-qemu-optee.sh" \
+        "$ROOT_DIR/scripts/run-qemu-optee.sh"
 
     echo "TEAR: qemu-optee plan completed"
     ;;

@@ -6,7 +6,7 @@ OPTEE_QEMU_DIR="${OPTEE_QEMU_DIR:-external/optee-qemu-v8}"
 
 NORMAL_LOG="$ROOT_DIR/build/optee-normal-world.log"
 SECURE_LOG="$ROOT_DIR/build/optee-secure-world.log"
-VERIFY_SCRIPT="${VERIFY_SCRIPT:-$ROOT_DIR/scripts/verify-optee-qemu-run.sh}"
+VERIFY_SCRIPT="${VERIFY_SCRIPT:-$ROOT_DIR/scripts/verify-qemu-optee.sh}"
 GUEST_OK_MARKER="TEAR_QEMU_GUEST_VERIFY_OK"
 TEAR_QEMU_PLAN="${TEAR_QEMU_PLAN:-/etc/tear/active.plan}"
 
