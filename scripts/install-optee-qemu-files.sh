@@ -27,6 +27,7 @@ cp -v build/optee/tear-trustd-optee "$TARGET/bin/"
 
 cp -v build/mnist-model "$TARGET/bin/"
 cp -v examples/mnist-model.json "$TARGET/etc/tear/"
+
 mkdir -p "$TARGET/models/mnist"
 cp -v models/mnist/mnist.onnx "$TARGET/models/mnist/"
 cp -v external/onnxruntime-aarch64/lib/libonnxruntime.so* "$TARGET/usr/lib/"
@@ -41,7 +42,6 @@ cp -v plans/qemu-optee.plan "$TARGET/etc/tear/"
 
 cat > "$TARGET/bin/verify-tear-qemu-run.sh" <<'EOS'
 #!/bin/sh
-
 set -eu
 
 check_file_contains() {
@@ -168,7 +168,6 @@ chmod +x "$TARGET/bin/verify-tear-qemu-run.sh"
 
 cat > "$TARGET/etc/init.d/S99tear-test" <<'EOS'
 #!/bin/sh
-
 set -eu
 
 shutdown_guest() {
