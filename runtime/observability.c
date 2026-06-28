@@ -153,12 +153,18 @@ static FILE *log_stream(enum tear_log_level level)
 
 static FILE *event_stream(void)
 {
-    return event_fp ? event_fp : stdout;
+    if (!event_fp)
+        tear_observability_panic("event file is not initialized");
+
+    return event_fp;
 }
 
 static FILE *metric_stream(void)
 {
-    return metric_fp ? metric_fp : stdout;
+    if (!metric_fp)
+        tear_observability_panic("metric file is not initialized");
+
+    return metric_fp;
 }
 
 static const char *log_level_name(enum tear_log_level level)

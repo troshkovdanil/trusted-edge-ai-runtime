@@ -7,14 +7,33 @@
 
 #define TEAR_COMPONENT "tear_optee_ca"
 
+#ifdef TEAR_HOST_BUILD
+#define DEFAULT_EVENT_PATH "build/host/tear-optee-ca-events.log"
+#else
+#define DEFAULT_EVENT_PATH "/tmp/tear-optee-ca-events.log"
+#endif
+
 int main(void)
 {
+    int ret = EXIT_FAILURE;
+
+    if (tear_event_init(DEFAULT_EVENT_PATH) < 0) {
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "failed to initialize OP-TEE CA events");
+        return EXIT_FAILURE;
+    }
+
     if (tear_optee_ping() != 0) {
         tear_event(TEAR_COMPONENT, "optee_ca_ping_failed");
-        return EXIT_FAILURE;
+        goto out;
     }
 
     tear_event(TEAR_COMPONENT, "optee_ca_ping_ok");
 
-    return EXIT_SUCCESS;
+    ret = EXIT_SUCCESS;
+
+out:
+    tear_event_shutdown();
+    return ret;
 }

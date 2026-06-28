@@ -15,6 +15,12 @@
 
 #define TEAR_COMPONENT "tearictl"
 
+#ifdef TEAR_HOST_BUILD
+#define DEFAULT_EVENT_PATH "build/host/tearictl-events.log"
+#else
+#define DEFAULT_EVENT_PATH "/tmp/tearictl-events.log"
+#endif
+
 static void tearictl_event(const char *event)
 {
     tear_event(TEAR_COMPONENT, event);
@@ -291,96 +297,118 @@ static int cmd_run(int argc, char **argv)
 
 int main(int argc, char **argv)
 {
+    int ret = 1;
+
+    if (tear_event_init(DEFAULT_EVENT_PATH) < 0) {
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "failed to initialize tearictl events");
+        return 1;
+    }
+
     if (argc < 2) {
         usage(argv[0]);
-        return 1;
+        goto out;
     }
 
     if (strcmp(argv[1], "enroll") == 0) {
         if (argc != 3) {
             usage(argv[0]);
-            return 1;
+            goto out;
         }
 
-        return cmd_enroll(argv[2]);
+        ret = cmd_enroll(argv[2]);
+        goto out;
     }
 
     if (strcmp(argv[1], "verify") == 0) {
         if (argc != 3) {
             usage(argv[0]);
-            return 1;
+            goto out;
         }
 
-        return cmd_verify(argv[2]);
+        ret = cmd_verify(argv[2]);
+        goto out;
     }
 
     if (strcmp(argv[1], "report") == 0) {
         if (argc != 2) {
             usage(argv[0]);
-            return 1;
+            goto out;
         }
 
-        return cmd_report();
+        ret = cmd_report();
+        goto out;
     }
 
     if (strcmp(argv[1], "report-decision") == 0) {
         if (argc != 2) {
             usage(argv[0]);
-            return 1;
+            goto out;
         }
 
-        return cmd_report_decision();
+        ret = cmd_report_decision();
+        goto out;
     }
 
     if (strcmp(argv[1], "update-model") == 0) {
         if (argc != 3) {
             usage(argv[0]);
-            return 1;
+            goto out;
         }
 
-        return cmd_update_model(argv[2]);
+        ret = cmd_update_model(argv[2]);
+        goto out;
     }
 
     if (strcmp(argv[1], "status") == 0) {
         if (argc != 2) {
             usage(argv[0]);
-            return 1;
+            goto out;
         }
 
-        return cmd_status();
+        ret = cmd_status();
+        goto out;
     }
 
     if (strcmp(argv[1], "provision") == 0) {
         if (argc != 3) {
             usage(argv[0]);
-            return 1;
+            goto out;
         }
 
-        return cmd_provision(argv[2]);
+        ret = cmd_provision(argv[2]);
+        goto out;
     }
 
     if (strcmp(argv[1], "provision-plan") == 0) {
         if (argc != 3) {
             usage(argv[0]);
-            return 1;
+            goto out;
         }
 
-        return cmd_provision_plan(argv[2]);
+        ret = cmd_provision_plan(argv[2]);
+        goto out;
     }
 
     if (strcmp(argv[1], "run-plan") == 0) {
         if (argc != 3) {
             usage(argv[0]);
-            return 1;
+            goto out;
         }
 
-        return cmd_run_plan(argv[2]);
+        ret = cmd_run_plan(argv[2]);
+        goto out;
     }
 
-    if (strcmp(argv[1], "run") == 0)
-        return cmd_run(argc, argv);
+    if (strcmp(argv[1], "run") == 0) {
+        ret = cmd_run(argc, argv);
+        goto out;
+    }
 
     usage(argv[0]);
 
-    return 1;
+out:
+    tear_event_shutdown();
+    return ret;
 }
