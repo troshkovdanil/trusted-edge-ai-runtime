@@ -2,9 +2,14 @@
 
 #include "model_manifest.h"
 
+#include "observability.h"
+
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#define TEAR_COMPONENT "model_manifest"
 
 static int extract_string(
     const char *buf,
@@ -112,12 +117,17 @@ int tear_manifest_load(
     FILE *f;
     long size;
     char *buf;
+    size_t nread;
 
     memset(manifest, 0, sizeof(*manifest));
 
     f = fopen(path, "r");
     if (!f) {
-        perror("fopen");
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "failed to open manifest %s: %s",
+                 path,
+                 strerror(errno));
         return -1;
     }
 
@@ -131,7 +141,7 @@ int tear_manifest_load(
         return -1;
     }
 
-    size_t nread = fread(buf, 1, size, f);
+    nread = fread(buf, 1, size, f);
 
     if (nread != (size_t)size) {
         free(buf);
@@ -143,9 +153,9 @@ int tear_manifest_load(
 
     fclose(f);
 
-    if (extract_string(buf, "model_id",
-                       manifest->model_id,
-                       sizeof(manifest->model_id)) < 0)
+    if (extract_string(buf, "artifact_id",
+                       manifest->artifact_id,
+                       sizeof(manifest->artifact_id)) < 0)
         goto fail;
 
     if (extract_int(buf, "version",
@@ -171,6 +181,10 @@ int tear_manifest_load(
     return 0;
 
 fail:
+    tear_log(TEAR_COMPONENT,
+             TEAR_LOG_ERROR,
+             "invalid manifest: %s",
+             path);
     free(buf);
     return -1;
 }
@@ -178,11 +192,12 @@ fail:
 void tear_manifest_print(
     const struct tear_model_manifest *manifest)
 {
-    printf("TEAR manifest:\n");
-    printf("  model_id=%s\n", manifest->model_id);
-    printf("  version=%d\n", manifest->version);
-    printf("  backend=%s\n", manifest->backend);
-    printf("  model_hash=%s\n", manifest->model_hash);
-    printf("  optimization_capable=%s\n",
-           manifest->optimization_capable ? "true" : "false");
+    tear_log(TEAR_COMPONENT,
+             TEAR_LOG_INFO,
+             "manifest artifact_id=%s version=%d backend=%s model_hash=%s optimization_capable=%s",
+             manifest->artifact_id,
+             manifest->version,
+             manifest->backend,
+             manifest->model_hash,
+             manifest->optimization_capable ? "true" : "false");
 }

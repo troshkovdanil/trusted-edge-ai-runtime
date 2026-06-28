@@ -1,18 +1,53 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include "optimizer_policy.h"
-#include "telemetry.h"
+#include "observability.h"
+#include "runtime_paths.h"
 
+#include <errno.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/un.h>
 #include <unistd.h>
 
-#define TEAR_OPTD_SOCKET "/tmp/tear-optd.sock"
+#ifdef TEAR_HOST_BUILD
+#define DEFAULT_EVENT_PATH "build/host/tear-optd-events.log"
+#else
+#define DEFAULT_EVENT_PATH "/tmp/tear-optd-events.log"
+#endif
+
+#define TEAR_COMPONENT "optd"
+
+static void optd_event(const char *event)
+{
+    tear_event(TEAR_COMPONENT, event);
+}
+
+static void client_reply(int client, const char *fmt, ...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    vdprintf(client, fmt, ap);
+    va_end(ap);
+}
+
+static void client_reply_no_proposal(int client)
+{
+    client_reply(client, "NO_PROPOSAL metrics_unavailable\n");
+}
+
+static void client_reply_proposal(int client,
+                                  const struct tear_optimizer_proposal *p)
+{
+    client_reply(client, "PROPOSAL %s %s\n", p->action, p->reason);
+}
 
 static int create_socket(void)
 {
+    const char *socket_path = tear_optd_socket_path();
     int fd = socket(AF_UNIX, SOCK_STREAM, 0);
 
     if (fd < 0)
@@ -22,9 +57,8 @@ static int create_socket(void)
         .sun_family = AF_UNIX,
     };
 
-    strncpy(addr.sun_path, TEAR_OPTD_SOCKET, sizeof(addr.sun_path) - 1);
-
-    unlink(TEAR_OPTD_SOCKET);
+    strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
+    unlink(socket_path);
 
     if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
         close(fd);
@@ -37,6 +71,53 @@ static int create_socket(void)
     }
 
     return fd;
+}
+
+static const char *parse_event_log(int argc, char **argv)
+{
+    const char *event_log = DEFAULT_EVENT_PATH;
+
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--event-log") == 0 && i + 1 < argc) {
+            event_log = argv[++i];
+        } else {
+            tear_log(TEAR_COMPONENT,
+                     TEAR_LOG_ERROR,
+                     "usage: tear-optd [--event-log <path>]");
+            return NULL;
+        }
+    }
+
+    if (!event_log || event_log[0] == '\0') {
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "missing --event-log <path>");
+        return NULL;
+    }
+
+    return event_log;
+}
+
+static int parse_metric_line(const char *line,
+                             const char *metric_name,
+                             long *value)
+{
+    const char *record = strstr(line, "TEAR_METRIC");
+    const char *name = strstr(line, "name=");
+    const char *metric_value = strstr(line, "value=");
+
+    if (!record || !name || !metric_value)
+        return -1;
+
+    if (strncmp(name + strlen("name="),
+                metric_name,
+                strlen(metric_name)) != 0)
+        return -1;
+
+    if (sscanf(metric_value, "value=%ld", value) != 1)
+        return -1;
+
+    return 0;
 }
 
 static int load_metrics(const char *path, struct tear_inference_metrics *metrics)
@@ -55,17 +136,17 @@ static int load_metrics(const char *path, struct tear_inference_metrics *metrics
     while (fgets(line, sizeof(line), f)) {
         long value;
 
-        if (sscanf(line,
-                   "TEAR_EVENT %*s event=mnist confidence_margin_x1000=%ld",
-                   &value) == 1) {
+        if (parse_metric_line(line,
+                              "confidence_margin_x1000",
+                              &value) == 0) {
             metrics->confidence_margin_x1000 = value;
             have_margin = 1;
             continue;
         }
 
-        if (sscanf(line,
-                   "TEAR_EVENT %*s event=mnist input_density_x1000=%ld",
-                   &value) == 1) {
+        if (parse_metric_line(line,
+                              "input_density_x1000",
+                              &value) == 0) {
             metrics->input_density_x1000 = value;
             have_density = 1;
             continue;
@@ -84,42 +165,60 @@ static void handle_propose(int client, const char *buf)
     struct tear_optimizer_proposal proposal;
 
     if (sscanf(buf, "PROPOSE %255s", path) != 1) {
-        tear_event("optd_no_proposal");
-        dprintf(client, "NO_PROPOSAL metrics_unavailable\n");
+        optd_event("optd_no_proposal");
+        client_reply_no_proposal(client);
         return;
     }
 
     if (load_metrics(path, &metrics) < 0) {
-        tear_event("optd_no_proposal");
-        dprintf(client, "NO_PROPOSAL metrics_unavailable\n");
+        optd_event("optd_no_proposal");
+        client_reply_no_proposal(client);
         return;
     }
 
     tear_optimizer_propose(&metrics, &proposal);
 
-    tear_event("optd_proposal");
-    dprintf(client, "PROPOSAL %s %s\n", proposal.action, proposal.reason);
+    optd_event("optd_proposal");
+    client_reply_proposal(client, &proposal);
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
-    int server = create_socket();
+    const char *event_log = parse_event_log(argc, argv);
+    int server;
 
-    if (server < 0) {
-        perror("optd socket");
+    if (!event_log)
+        return 1;
+
+    if (tear_event_init(event_log) < 0) {
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "failed to initialize events");
         return 1;
     }
 
-    tear_event("optd_start");
+    server = create_socket();
+
+    if (server < 0) {
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "optd socket failed: %s",
+                 strerror(errno));
+        tear_event_shutdown();
+        return 1;
+    }
+
+    optd_event("optd_start");
 
     while (1) {
         int client = accept(server, NULL, NULL);
+        char buf[512];
+        ssize_t n;
 
         if (client < 0)
             continue;
 
-        char buf[512];
-        ssize_t n = read(client, buf, sizeof(buf) - 1);
+        n = read(client, buf, sizeof(buf) - 1);
 
         if (n <= 0) {
             close(client);
@@ -131,7 +230,7 @@ int main(void)
         if (strncmp(buf, "PROPOSE", 7) == 0)
             handle_propose(client, buf);
         else
-            dprintf(client, "NO_PROPOSAL metrics_unavailable\n");
+            client_reply_no_proposal(client);
 
         close(client);
     }

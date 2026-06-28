@@ -4,7 +4,7 @@
 #define TEAR_MODEL_MANIFEST_H
 
 struct tear_model_manifest {
-    char model_id[64];
+    char artifact_id[64];
     int version;
     char backend[32];
     char model_hash[128];

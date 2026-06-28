@@ -1,12 +1,39 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
+#include "observability.h"
+#include "tear_optee_client.h"
+
 #include <stdio.h>
 #include <string.h>
 
 #include <tee_client_api.h>
 
 #include "../ta/tear_ta/include/tear_ta.h"
-#include "tear_optee_client.h"
+
+#define TEAR_COMPONENT "tear_optee_client"
+
+static void optee_client_error(const char *op,
+			       TEEC_Result res,
+			       uint32_t err_origin)
+{
+	tear_log(TEAR_COMPONENT,
+		 TEAR_LOG_ERROR,
+		 "TEAR_OPTEE_ERROR %s res=0x%x origin=0x%x",
+		 op,
+		 res,
+		 err_origin);
+}
+
+static int tear_optee_result_to_errno(TEEC_Result res)
+{
+	if (res == TEEC_SUCCESS)
+		return 0;
+
+	if (res == TEEC_ERROR_SECURITY)
+		return -2;
+
+	return -1;
+}
 
 int tear_optee_ping(void)
 {
@@ -18,25 +45,21 @@ int tear_optee_ping(void)
 
 	res = TEEC_InitializeContext(NULL, &ctx);
 	if (res != TEEC_SUCCESS) {
-		fprintf(stderr, "TEAR_OPTEE_ERROR initialize_context res=0x%x\n", res);
+		optee_client_error("initialize_context", res, err_origin);
 		return -1;
 	}
 
 	res = TEEC_OpenSession(&ctx, &sess, &uuid,
 			       TEEC_LOGIN_PUBLIC, NULL, NULL, &err_origin);
 	if (res != TEEC_SUCCESS) {
-		fprintf(stderr,
-			"TEAR_OPTEE_ERROR open_session res=0x%x origin=0x%x\n",
-			res, err_origin);
+		optee_client_error("open_session", res, err_origin);
 		TEEC_FinalizeContext(&ctx);
 		return -1;
 	}
 
 	res = TEEC_InvokeCommand(&sess, TEAR_TA_CMD_PING, NULL, &err_origin);
 	if (res != TEEC_SUCCESS) {
-		fprintf(stderr,
-			"TEAR_OPTEE_ERROR ping res=0x%x origin=0x%x\n",
-			res, err_origin);
+		optee_client_error("ping", res, err_origin);
 		TEEC_CloseSession(&sess);
 		TEEC_FinalizeContext(&ctx);
 		return -1;
@@ -58,12 +81,15 @@ static int tear_optee_invoke_state_cmd(uint32_t cmd, const char *state)
 	uint32_t err_origin = 0;
 
 	res = TEEC_InitializeContext(NULL, &ctx);
-	if (res != TEEC_SUCCESS)
+	if (res != TEEC_SUCCESS) {
+		optee_client_error("initialize_context", res, err_origin);
 		return -1;
+	}
 
 	res = TEEC_OpenSession(&ctx, &sess, &uuid,
 			       TEEC_LOGIN_PUBLIC, NULL, NULL, &err_origin);
 	if (res != TEEC_SUCCESS) {
+		optee_client_error("open_session", res, err_origin);
 		TEEC_FinalizeContext(&ctx);
 		return -1;
 	}
@@ -77,11 +103,13 @@ static int tear_optee_invoke_state_cmd(uint32_t cmd, const char *state)
 	op.params[0].tmpref.size = strlen(state);
 
 	res = TEEC_InvokeCommand(&sess, cmd, &op, &err_origin);
+	if (res != TEEC_SUCCESS)
+		optee_client_error("invoke_state_cmd", res, err_origin);
 
 	TEEC_CloseSession(&sess);
 	TEEC_FinalizeContext(&ctx);
 
-	return res == TEEC_SUCCESS ? 0 : -1;
+	return tear_optee_result_to_errno(res);
 }
 
 int tear_optee_enroll(const char *state)
@@ -112,12 +140,15 @@ int tear_optee_report(char *state, size_t state_size)
 		return -1;
 
 	res = TEEC_InitializeContext(NULL, &ctx);
-	if (res != TEEC_SUCCESS)
+	if (res != TEEC_SUCCESS) {
+		optee_client_error("initialize_context", res, err_origin);
 		return -1;
+	}
 
 	res = TEEC_OpenSession(&ctx, &sess, &uuid,
 			       TEEC_LOGIN_PUBLIC, NULL, NULL, &err_origin);
 	if (res != TEEC_SUCCESS) {
+		optee_client_error("open_session", res, err_origin);
 		TEEC_FinalizeContext(&ctx);
 		return -1;
 	}
@@ -131,6 +162,8 @@ int tear_optee_report(char *state, size_t state_size)
 	op.params[0].tmpref.size = state_size;
 
 	res = TEEC_InvokeCommand(&sess, TEAR_TA_CMD_REPORT, &op, &err_origin);
+	if (res != TEEC_SUCCESS)
+		optee_client_error("report", res, err_origin);
 
 	TEEC_CloseSession(&sess);
 	TEEC_FinalizeContext(&ctx);
@@ -142,7 +175,8 @@ int tear_optee_report(char *state, size_t state_size)
 	return 0;
 }
 
-int tear_optee_record_decision(const char *model_id,
+int tear_optee_record_decision(const char *run_id,
+			       const char *artifact_id,
 			       const char *proposal,
 			       const char *decision,
 			       const char *reason,
@@ -151,12 +185,13 @@ int tear_optee_record_decision(const char *model_id,
 	char record[512];
 	int n;
 
-	if (!model_id || !proposal || !decision || !reason)
+	if (!run_id || !artifact_id || !proposal || !decision || !reason)
 		return -1;
 
 	n = snprintf(record, sizeof(record),
-		     "model_id=%s proposal=%s decision=%s reason=%s value=%ld",
-		     model_id,
+		     "run_id=%s artifact_id=%s proposal=%s decision=%s reason=%s value=%ld",
+		     run_id,
+		     artifact_id,
 		     proposal,
 		     decision,
 		     reason,
@@ -180,12 +215,15 @@ int tear_optee_report_decision(char *decision, size_t decision_size)
 		return -1;
 
 	res = TEEC_InitializeContext(NULL, &ctx);
-	if (res != TEEC_SUCCESS)
+	if (res != TEEC_SUCCESS) {
+		optee_client_error("initialize_context", res, err_origin);
 		return -1;
+	}
 
 	res = TEEC_OpenSession(&ctx, &sess, &uuid,
 			       TEEC_LOGIN_PUBLIC, NULL, NULL, &err_origin);
 	if (res != TEEC_SUCCESS) {
+		optee_client_error("open_session", res, err_origin);
 		TEEC_FinalizeContext(&ctx);
 		return -1;
 	}
@@ -202,6 +240,8 @@ int tear_optee_report_decision(char *decision, size_t decision_size)
 				 TEAR_TA_CMD_REPORT_DECISION,
 				 &op,
 				 &err_origin);
+	if (res != TEEC_SUCCESS)
+		optee_client_error("report_decision", res, err_origin);
 
 	TEEC_CloseSession(&sess);
 	TEEC_FinalizeContext(&ctx);

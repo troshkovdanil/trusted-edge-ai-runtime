@@ -1,0 +1,4 @@
+RUN build/host/demo-model-host examples/model-v2.json profiles/demo.profile
+RUN build/host/mnist-model-host examples/mnist-model.json profiles/mnist.profile -- --sample clean7
+RUN build/host/mnist-model-host examples/mnist-model.json profiles/mnist.profile -- --sample weak7
+RUN build/host/mnist-model-host examples/mnist-model.json profiles/mnist.profile -- --sample noise
