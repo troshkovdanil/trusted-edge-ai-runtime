@@ -7,7 +7,8 @@
 
 #include "tear_ta.h"
 
-#define TEAR_STATE_MAX 256
+#define TEAR_STATE_RECORD_MAX 256
+#define TEAR_STATE_DB_MAX 2048
 
 #define TEAR_STATE_OBJECT_ID "tear.trusted_state.v1"
 #define TEAR_STATE_OBJECT_ID_LEN (sizeof(TEAR_STATE_OBJECT_ID) - 1)
@@ -17,12 +18,19 @@
 #define TEAR_DECISION_OBJECT_ID "tear.last_decision.v1"
 #define TEAR_DECISION_OBJECT_ID_LEN (sizeof(TEAR_DECISION_OBJECT_ID) - 1)
 
-static TEE_Result write_trusted_state(const void *buf, size_t len)
+struct tear_ta_state {
+	char artifact_id[64];
+	int version;
+	char backend[32];
+	char model_hash[128];
+};
+
+static TEE_Result write_trusted_state_db(const void *buf, size_t len)
 {
 	TEE_ObjectHandle obj;
 	TEE_Result res;
 
-	if (len == 0 || len >= TEAR_STATE_MAX)
+	if (len == 0 || len >= TEAR_STATE_DB_MAX)
 		return TEE_ERROR_BAD_PARAMETERS;
 
 	res = TEE_CreatePersistentObject(TEE_STORAGE_PRIVATE,
@@ -43,7 +51,9 @@ static TEE_Result write_trusted_state(const void *buf, size_t len)
 	return TEE_SUCCESS;
 }
 
-static TEE_Result read_trusted_state(void *buf, size_t buf_len, size_t *out_len)
+static TEE_Result read_trusted_state_db(void *buf,
+					size_t buf_len,
+					size_t *out_len)
 {
 	TEE_ObjectHandle obj;
 	TEE_ObjectInfo info;
@@ -148,13 +158,6 @@ static TEE_Result read_trusted_decision(void *buf, size_t buf_len,
 	return TEE_SUCCESS;
 }
 
-struct tear_ta_state {
-	char artifact_id[64];
-	int version;
-	char backend[32];
-	char model_hash[128];
-};
-
 static int copy_token(char *dst, size_t dst_size,
 		      const char **cursor)
 {
@@ -226,6 +229,15 @@ static int parse_state(const char *buf, struct tear_ta_state *state)
 	return *cursor == '\0' ? 0 : -1;
 }
 
+static bool same_state(const struct tear_ta_state *a,
+		       const struct tear_ta_state *b)
+{
+	return strcmp(a->artifact_id, b->artifact_id) == 0 &&
+	       a->version == b->version &&
+	       strcmp(a->backend, b->backend) == 0 &&
+	       strcmp(a->model_hash, b->model_hash) == 0;
+}
+
 static bool update_allowed(const struct tear_ta_state *old,
 			   const struct tear_ta_state *new)
 {
@@ -236,6 +248,244 @@ static bool update_allowed(const struct tear_ta_state *old,
 		return false;
 
 	return new->version > old->version;
+}
+
+static int copy_input_state(const TEE_Param *param,
+			    char *state,
+			    size_t state_size)
+{
+	if (param->memref.size == 0 || param->memref.size >= state_size)
+		return -1;
+
+	TEE_MemMove(state, param->memref.buffer, param->memref.size);
+	state[param->memref.size] = '\0';
+
+	return 0;
+}
+
+static int next_state_record(const char *db,
+			     size_t db_len,
+			     size_t *offset,
+			     char *record,
+			     size_t record_size)
+{
+	size_t start;
+	size_t len;
+
+	while (*offset < db_len &&
+	       (db[*offset] == '\n' || db[*offset] == '\r'))
+		(*offset)++;
+
+	if (*offset >= db_len)
+		return 0;
+
+	start = *offset;
+
+	while (*offset < db_len &&
+	       db[*offset] != '\n' &&
+	       db[*offset] != '\r')
+		(*offset)++;
+
+	len = *offset - start;
+	if (len == 0 || len >= record_size)
+		return -1;
+
+	TEE_MemMove(record, db + start, len);
+	record[len] = '\0';
+
+	return 1;
+}
+
+static int append_record(char *db,
+			 size_t *db_len,
+			 const char *record,
+			 size_t record_len)
+{
+	if (record_len == 0 || record_len >= TEAR_STATE_RECORD_MAX)
+		return -1;
+
+	if (*db_len + record_len + 1 >= TEAR_STATE_DB_MAX)
+		return -1;
+
+	TEE_MemMove(db + *db_len, record, record_len);
+	*db_len += record_len;
+
+	db[*db_len] = '\n';
+	(*db_len)++;
+
+	return 0;
+}
+
+static TEE_Result find_trusted_state(const char *artifact_id,
+				     char *trusted,
+				     size_t trusted_size)
+{
+	char db[TEAR_STATE_DB_MAX];
+	size_t db_len = 0;
+	size_t offset = 0;
+	TEE_Result res;
+
+	res = read_trusted_state_db(db, sizeof(db), &db_len);
+	if (res != TEE_SUCCESS)
+		return res;
+
+	while (offset < db_len) {
+		char record[TEAR_STATE_RECORD_MAX];
+		struct tear_ta_state state;
+		int ret;
+
+		ret = next_state_record(db,
+					db_len,
+					&offset,
+					record,
+					sizeof(record));
+		if (ret < 0)
+			return TEE_ERROR_BAD_FORMAT;
+
+		if (ret == 0)
+			break;
+
+		if (parse_state(record, &state) < 0)
+			return TEE_ERROR_BAD_FORMAT;
+
+		if (strcmp(state.artifact_id, artifact_id) == 0) {
+			size_t len = strlen(record);
+
+			if (len == 0 || len >= trusted_size)
+				return TEE_ERROR_SHORT_BUFFER;
+
+			TEE_MemMove(trusted, record, len);
+			trusted[len] = '\0';
+
+			return TEE_SUCCESS;
+		}
+	}
+
+	return TEE_ERROR_ITEM_NOT_FOUND;
+}
+
+static TEE_Result upsert_trusted_state(const char *incoming)
+{
+	char db[TEAR_STATE_DB_MAX];
+	char out[TEAR_STATE_DB_MAX];
+	size_t db_len = 0;
+	size_t out_len = 0;
+	size_t offset = 0;
+	size_t incoming_len = strlen(incoming);
+	struct tear_ta_state incoming_state;
+	bool found = false;
+	TEE_Result res;
+
+	if (incoming_len == 0 || incoming_len >= TEAR_STATE_RECORD_MAX)
+		return TEE_ERROR_BAD_PARAMETERS;
+
+	if (parse_state(incoming, &incoming_state) < 0)
+		return TEE_ERROR_BAD_FORMAT;
+
+	TEE_MemFill(db, 0, sizeof(db));
+	TEE_MemFill(out, 0, sizeof(out));
+
+	res = read_trusted_state_db(db, sizeof(db), &db_len);
+	if (res != TEE_SUCCESS && res != TEE_ERROR_ITEM_NOT_FOUND)
+		return res;
+
+	if (res == TEE_SUCCESS) {
+		while (offset < db_len) {
+			char record[TEAR_STATE_RECORD_MAX];
+			struct tear_ta_state existing_state;
+			int ret;
+
+			ret = next_state_record(db,
+						db_len,
+						&offset,
+						record,
+						sizeof(record));
+			if (ret < 0)
+				return TEE_ERROR_BAD_FORMAT;
+
+			if (ret == 0)
+				break;
+
+			if (parse_state(record, &existing_state) < 0)
+				return TEE_ERROR_BAD_FORMAT;
+
+			if (strcmp(existing_state.artifact_id,
+				   incoming_state.artifact_id) == 0) {
+				if (append_record(out,
+						  &out_len,
+						  incoming,
+						  incoming_len) < 0)
+					return TEE_ERROR_SHORT_BUFFER;
+
+				found = true;
+			} else {
+				if (append_record(out,
+						  &out_len,
+						  record,
+						  strlen(record)) < 0)
+					return TEE_ERROR_SHORT_BUFFER;
+			}
+		}
+	}
+
+	if (!found) {
+		if (append_record(out, &out_len, incoming, incoming_len) < 0)
+			return TEE_ERROR_SHORT_BUFFER;
+	}
+
+	return write_trusted_state_db(out, out_len);
+}
+
+static TEE_Result latest_trusted_state(char *state, size_t state_size,
+				       size_t *state_len)
+{
+	char db[TEAR_STATE_DB_MAX];
+	char latest[TEAR_STATE_RECORD_MAX];
+	size_t db_len = 0;
+	size_t offset = 0;
+	size_t latest_len = 0;
+	TEE_Result res;
+
+	res = read_trusted_state_db(db, sizeof(db), &db_len);
+	if (res != TEE_SUCCESS)
+		return res;
+
+	TEE_MemFill(latest, 0, sizeof(latest));
+
+	while (offset < db_len) {
+		char record[TEAR_STATE_RECORD_MAX];
+		int ret;
+
+		ret = next_state_record(db,
+					db_len,
+					&offset,
+					record,
+					sizeof(record));
+		if (ret < 0)
+			return TEE_ERROR_BAD_FORMAT;
+
+		if (ret == 0)
+			break;
+
+		latest_len = strlen(record);
+		if (latest_len == 0 || latest_len >= sizeof(latest))
+			return TEE_ERROR_BAD_FORMAT;
+
+		TEE_MemMove(latest, record, latest_len);
+		latest[latest_len] = '\0';
+	}
+
+	if (latest_len == 0)
+		return TEE_ERROR_ITEM_NOT_FOUND;
+
+	if (latest_len >= state_size)
+		return TEE_ERROR_SHORT_BUFFER;
+
+	TEE_MemMove(state, latest, latest_len);
+	state[latest_len] = '\0';
+	*state_len = latest_len;
+
+	return TEE_SUCCESS;
 }
 
 TEE_Result TA_CreateEntryPoint(void)
@@ -274,8 +524,6 @@ TEE_Result TA_InvokeCommandEntryPoint(void *sess_ctx,
 				      TEE_Param params[4])
 {
 	(void)sess_ctx;
-	(void)param_types;
-	(void)params;
 
 	switch (cmd_id) {
 	case TEAR_TA_CMD_PING:
@@ -283,18 +531,23 @@ TEE_Result TA_InvokeCommandEntryPoint(void *sess_ctx,
 		return TEE_SUCCESS;
 
 	case TEAR_TA_CMD_ENROLL: {
+		char incoming[TEAR_STATE_RECORD_MAX];
 		TEE_Result res;
 
 		DMSG("TEAR TA enroll");
+
 		if (param_types != TEE_PARAM_TYPES(TEE_PARAM_TYPE_MEMREF_INPUT,
 						   TEE_PARAM_TYPE_NONE,
 						   TEE_PARAM_TYPE_NONE,
 						   TEE_PARAM_TYPE_NONE))
 			return TEE_ERROR_BAD_PARAMETERS;
 
-		DMSG("TEAR TA enroll persistent");
-		res = write_trusted_state(params[0].memref.buffer,
-				params[0].memref.size);
+		if (copy_input_state(&params[0],
+				     incoming,
+				     sizeof(incoming)) < 0)
+			return TEE_ERROR_BAD_PARAMETERS;
+
+		res = upsert_trusted_state(incoming);
 		if (res != TEE_SUCCESS)
 			return res;
 
@@ -303,32 +556,38 @@ TEE_Result TA_InvokeCommandEntryPoint(void *sess_ctx,
 	}
 
 	case TEAR_TA_CMD_VERIFY: {
-		char trusted_state[TEAR_STATE_MAX];
-		size_t trusted_state_len = 0;
+		char incoming[TEAR_STATE_RECORD_MAX];
+		char trusted[TEAR_STATE_RECORD_MAX];
+		struct tear_ta_state incoming_state;
+		struct tear_ta_state trusted_state;
 		TEE_Result res;
 
 		DMSG("TEAR TA verify");
+
 		if (param_types != TEE_PARAM_TYPES(TEE_PARAM_TYPE_MEMREF_INPUT,
 						   TEE_PARAM_TYPE_NONE,
 						   TEE_PARAM_TYPE_NONE,
 						   TEE_PARAM_TYPE_NONE))
 			return TEE_ERROR_BAD_PARAMETERS;
 
-		res = read_trusted_state(trusted_state,
-				sizeof(trusted_state),
-				&trusted_state_len);
+		if (copy_input_state(&params[0],
+				     incoming,
+				     sizeof(incoming)) < 0)
+			return TEE_ERROR_BAD_PARAMETERS;
+
+		if (parse_state(incoming, &incoming_state) < 0)
+			return TEE_ERROR_BAD_FORMAT;
+
+		res = find_trusted_state(incoming_state.artifact_id,
+					 trusted,
+					 sizeof(trusted));
 		if (res != TEE_SUCCESS)
 			return res;
 
-		DMSG("TEAR TA verify persistent: trusted_state_len=%zu",
-				trusted_state_len);
+		if (parse_state(trusted, &trusted_state) < 0)
+			return TEE_ERROR_BAD_FORMAT;
 
-		if (params[0].memref.size != trusted_state_len)
-			return TEE_ERROR_SECURITY;
-
-		if (TEE_MemCompare(trusted_state,
-					params[0].memref.buffer,
-					trusted_state_len) != 0)
+		if (!same_state(&incoming_state, &trusted_state))
 			return TEE_ERROR_SECURITY;
 
 		DMSG("TEAR TA verify - TEE_SUCCESS");
@@ -336,11 +595,10 @@ TEE_Result TA_InvokeCommandEntryPoint(void *sess_ctx,
 	}
 
 	case TEAR_TA_CMD_UPDATE: {
-		char old_buf[TEAR_STATE_MAX];
-		char new_buf[TEAR_STATE_MAX];
-		size_t old_len = 0;
-		struct tear_ta_state old_state;
-		struct tear_ta_state new_state;
+		char incoming[TEAR_STATE_RECORD_MAX];
+		char trusted[TEAR_STATE_RECORD_MAX];
+		struct tear_ta_state incoming_state;
+		struct tear_ta_state trusted_state;
 		TEE_Result res;
 
 		DMSG("TEAR TA update");
@@ -351,27 +609,27 @@ TEE_Result TA_InvokeCommandEntryPoint(void *sess_ctx,
 						   TEE_PARAM_TYPE_NONE))
 			return TEE_ERROR_BAD_PARAMETERS;
 
-		if (params[0].memref.size == 0 ||
-		    params[0].memref.size >= sizeof(new_buf))
+		if (copy_input_state(&params[0],
+				     incoming,
+				     sizeof(incoming)) < 0)
 			return TEE_ERROR_BAD_PARAMETERS;
 
-		TEE_MemMove(new_buf, params[0].memref.buffer, params[0].memref.size);
-		new_buf[params[0].memref.size] = '\0';
+		if (parse_state(incoming, &incoming_state) < 0)
+			return TEE_ERROR_BAD_FORMAT;
 
-		res = read_trusted_state(old_buf, sizeof(old_buf), &old_len);
+		res = find_trusted_state(incoming_state.artifact_id,
+					 trusted,
+					 sizeof(trusted));
 		if (res != TEE_SUCCESS)
 			return res;
 
-		old_buf[old_len] = '\0';
-
-		if (parse_state(old_buf, &old_state) < 0 ||
-		    parse_state(new_buf, &new_state) < 0)
+		if (parse_state(trusted, &trusted_state) < 0)
 			return TEE_ERROR_BAD_FORMAT;
 
-		if (!update_allowed(&old_state, &new_state))
+		if (!update_allowed(&trusted_state, &incoming_state))
 			return TEE_ERROR_SECURITY;
 
-		res = write_trusted_state(new_buf, params[0].memref.size);
+		res = upsert_trusted_state(incoming);
 		if (res != TEE_SUCCESS)
 			return res;
 
@@ -380,7 +638,7 @@ TEE_Result TA_InvokeCommandEntryPoint(void *sess_ctx,
 	}
 
 	case TEAR_TA_CMD_REPORT: {
-		char trusted_state[TEAR_STATE_MAX];
+		char trusted_state[TEAR_STATE_RECORD_MAX];
 		size_t trusted_state_len = 0;
 		TEE_Result res;
 
@@ -392,9 +650,9 @@ TEE_Result TA_InvokeCommandEntryPoint(void *sess_ctx,
 						   TEE_PARAM_TYPE_NONE))
 			return TEE_ERROR_BAD_PARAMETERS;
 
-		res = read_trusted_state(trusted_state,
-					 sizeof(trusted_state),
-					 &trusted_state_len);
+		res = latest_trusted_state(trusted_state,
+					   sizeof(trusted_state),
+					   &trusted_state_len);
 		if (res != TEE_SUCCESS)
 			return res;
 

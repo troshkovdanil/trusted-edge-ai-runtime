@@ -15,6 +15,11 @@ int tear_trusted_state_load(
     const char *path,
     struct tear_model_manifest *manifest);
 
+int tear_trusted_state_load_artifact(
+    const char *path,
+    const char *artifact_id,
+    struct tear_model_manifest *manifest);
+
 int tear_trusted_state_append_decision(
     const char *path,
     const char *run_id,

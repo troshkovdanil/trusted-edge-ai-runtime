@@ -36,8 +36,12 @@ static void usage(const char *prog)
              "%s report | "
              "%s report-decision | "
              "%s status | "
-             "%s run <workload> <manifest> <profile> [optimizer] [-- <args>] | "
+             "%s provision <manifest> | "
+             "%s provision-plan <plan> | "
+             "%s run <workload> <manifest> <profile> [-- <args>] | "
              "%s run-plan <plan>",
+             prog,
+             prog,
              prog,
              prog,
              prog,
@@ -214,6 +218,26 @@ static int cmd_status(void)
     return supervisor_command("STATUS");
 }
 
+static int cmd_provision(const char *path)
+{
+    int ret = supervisor_command("PROVISION %s", path);
+
+    tearictl_event(ret == 0 ? "tearictl_provision_done" :
+                            "tearictl_provision_failed");
+
+    return ret;
+}
+
+static int cmd_provision_plan(const char *path)
+{
+    int ret = supervisor_command("PROVISION_PLAN %s", path);
+
+    tearictl_event(ret == 0 ? "tearictl_provision_plan_done" :
+                            "tearictl_provision_plan_failed");
+
+    return ret;
+}
+
 static int cmd_run_plan(const char *path)
 {
     int ret = supervisor_command("RUN_PLAN %s", path);
@@ -324,6 +348,24 @@ int main(int argc, char **argv)
         }
 
         return cmd_status();
+    }
+
+    if (strcmp(argv[1], "provision") == 0) {
+        if (argc != 3) {
+            usage(argv[0]);
+            return 1;
+        }
+
+        return cmd_provision(argv[2]);
+    }
+
+    if (strcmp(argv[1], "provision-plan") == 0) {
+        if (argc != 3) {
+            usage(argv[0]);
+            return 1;
+        }
+
+        return cmd_provision_plan(argv[2]);
     }
 
     if (strcmp(argv[1], "run-plan") == 0) {

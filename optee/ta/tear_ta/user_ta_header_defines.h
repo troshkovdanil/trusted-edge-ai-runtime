@@ -8,8 +8,8 @@
 #define TA_UUID TEAR_TA_UUID
 
 #define TA_FLAGS TA_FLAG_EXEC_DDR
-#define TA_STACK_SIZE (2 * 1024)
-#define TA_DATA_SIZE (8 * 1024)
+#define TA_STACK_SIZE (16 * 1024)
+#define TA_DATA_SIZE (32 * 1024)
 
 #define TA_DESCRIPTION "TEAR trusted-state TA"
 

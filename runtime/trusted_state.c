@@ -9,6 +9,8 @@
 #include <string.h>
 
 #define TEAR_COMPONENT "trusted_state"
+#define TEAR_STATE_LINE_MAX 512
+#define TEAR_STATE_TMP_PATH_MAX 512
 
 static int trusted_state_write_decision(FILE *f,
                                         const char *run_id,
@@ -31,19 +33,26 @@ static int trusted_state_write_decision(FILE *f,
 static int trusted_state_write_manifest(FILE *f,
                                         const struct tear_model_manifest *m)
 {
-    if (fprintf(f, "%s\n", m->artifact_id) < 0)
-        return -1;
+    return fprintf(f,
+                   "%s %d %s %s\n",
+                   m->artifact_id,
+                   m->version,
+                   m->backend,
+                   m->model_hash) < 0 ? -1 : 0;
+}
 
-    if (fprintf(f, "%d\n", m->version) < 0)
-        return -1;
+static int trusted_state_parse_manifest_line(
+    const char *line,
+    struct tear_model_manifest *manifest)
+{
+    memset(manifest, 0, sizeof(*manifest));
 
-    if (fprintf(f, "%s\n", m->backend) < 0)
-        return -1;
-
-    if (fprintf(f, "%s\n", m->model_hash) < 0)
-        return -1;
-
-    return 0;
+    return sscanf(line,
+                  "%63s %d %63s %127s",
+                  manifest->artifact_id,
+                  &manifest->version,
+                  manifest->backend,
+                  manifest->model_hash) == 4 ? 0 : -1;
 }
 
 static int trusted_state_copy_line(char *dst,
@@ -152,39 +161,94 @@ int tear_trusted_state_store(
     const char *path,
     const struct tear_model_manifest *manifest)
 {
-    FILE *f;
-    int ret;
+    FILE *in;
+    FILE *out;
+    char tmp_path[TEAR_STATE_TMP_PATH_MAX];
+    char line[TEAR_STATE_LINE_MAX];
+    int found = 0;
+    int ret = 0;
 
-    f = fopen(path, "w");
-    if (!f) {
+    if (snprintf(tmp_path, sizeof(tmp_path), "%s.tmp", path) >=
+        (int)sizeof(tmp_path)) {
         tear_log(TEAR_COMPONENT,
                  TEAR_LOG_ERROR,
-                 "failed to open trusted state %s: %s",
-                 path,
-                 strerror(errno));
+                 "trusted state path too long: %s",
+                 path);
         return -1;
     }
 
-    ret = trusted_state_write_manifest(f, manifest);
+    in = fopen(path, "r");
+    out = fopen(tmp_path, "w");
 
-    fclose(f);
+    if (!out) {
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "failed to open trusted state temp %s: %s",
+                 tmp_path,
+                 strerror(errno));
+        if (in)
+            fclose(in);
+        return -1;
+    }
+
+    if (in) {
+        while (fgets(line, sizeof(line), in)) {
+            struct tear_model_manifest existing;
+
+            if (trusted_state_parse_manifest_line(line, &existing) < 0)
+                continue;
+
+            if (strcmp(existing.artifact_id, manifest->artifact_id) == 0) {
+                if (trusted_state_write_manifest(out, manifest) < 0)
+                    ret = -1;
+                found = 1;
+            } else {
+                if (trusted_state_write_manifest(out, &existing) < 0)
+                    ret = -1;
+            }
+        }
+
+        fclose(in);
+    }
+
+    if (!found) {
+        if (trusted_state_write_manifest(out, manifest) < 0)
+            ret = -1;
+    }
+
+    fclose(out);
 
     if (ret < 0) {
         tear_log(TEAR_COMPONENT,
                  TEAR_LOG_ERROR,
                  "failed to write trusted state %s",
                  path);
+        remove(tmp_path);
+        return -1;
     }
 
-    return ret;
+    if (rename(tmp_path, path) < 0) {
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "failed to replace trusted state %s: %s",
+                 path,
+                 strerror(errno));
+        remove(tmp_path);
+        return -1;
+    }
+
+    return 0;
 }
 
-int tear_trusted_state_load(
+int tear_trusted_state_load_artifact(
     const char *path,
+    const char *artifact_id,
     struct tear_model_manifest *manifest)
 {
-    FILE *f = fopen(path, "r");
+    FILE *f;
+    char line[TEAR_STATE_LINE_MAX];
 
+    f = fopen(path, "r");
     if (!f) {
         tear_log(TEAR_COMPONENT,
                  TEAR_LOG_ERROR,
@@ -194,41 +258,59 @@ int tear_trusted_state_load(
         return -1;
     }
 
-    memset(manifest, 0, sizeof(*manifest));
+    while (fgets(line, sizeof(line), f)) {
+        struct tear_model_manifest candidate;
 
-    if (!fgets(manifest->artifact_id,
-               sizeof(manifest->artifact_id), f))
-        goto fail;
+        if (trusted_state_parse_manifest_line(line, &candidate) < 0)
+            continue;
 
-    if (fscanf(f, "%d\n", &manifest->version) != 1)
-        goto fail;
-
-    if (!fgets(manifest->backend,
-               sizeof(manifest->backend), f))
-        goto fail;
-
-    if (!fgets(manifest->model_hash,
-               sizeof(manifest->model_hash), f))
-        goto fail;
-
-    manifest->artifact_id[
-        strcspn(manifest->artifact_id, "\n")] = '\0';
-
-    manifest->backend[
-        strcspn(manifest->backend, "\n")] = '\0';
-
-    manifest->model_hash[
-        strcspn(manifest->model_hash, "\n")] = '\0';
+        if (strcmp(candidate.artifact_id, artifact_id) == 0) {
+            *manifest = candidate;
+            fclose(f);
+            return 0;
+        }
+    }
 
     fclose(f);
 
-    return 0;
+    tear_log(TEAR_COMPONENT,
+             TEAR_LOG_ERROR,
+             "trusted state artifact not found: %s",
+             artifact_id);
 
-fail:
+    return -1;
+}
+
+int tear_trusted_state_load(
+    const char *path,
+    struct tear_model_manifest *manifest)
+{
+    FILE *f;
+    char line[TEAR_STATE_LINE_MAX];
+
+    f = fopen(path, "r");
+    if (!f) {
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "failed to open trusted state %s: %s",
+                 path,
+                 strerror(errno));
+        return -1;
+    }
+
+    while (fgets(line, sizeof(line), f)) {
+        if (trusted_state_parse_manifest_line(line, manifest) == 0) {
+            fclose(f);
+            return 0;
+        }
+    }
+
+    fclose(f);
+
     tear_log(TEAR_COMPONENT,
              TEAR_LOG_ERROR,
              "invalid trusted state: %s",
              path);
-    fclose(f);
+
     return -1;
 }

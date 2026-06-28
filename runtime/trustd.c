@@ -193,7 +193,9 @@ static int file_update(const struct tear_model_manifest *incoming)
 {
     struct tear_model_manifest trusted;
 
-    if (tear_trusted_state_load(TEAR_TRUSTED_STATE, &trusted) < 0)
+    if (tear_trusted_state_load_artifact(TEAR_TRUSTED_STATE,
+                                         incoming->artifact_id,
+                                         &trusted) < 0)
         return -1;
 
     if (!model_update_allowed(&trusted, incoming))
@@ -206,7 +208,9 @@ static int file_verify(const struct tear_model_manifest *incoming)
 {
     struct tear_model_manifest trusted;
 
-    if (tear_trusted_state_load(TEAR_TRUSTED_STATE, &trusted) < 0)
+    if (tear_trusted_state_load_artifact(TEAR_TRUSTED_STATE,
+                                         incoming->artifact_id,
+                                         &trusted) < 0)
         return -1;
 
     return same_manifest(incoming, &trusted) ? 0 : -1;
@@ -557,7 +561,9 @@ static void handle_record_decision(int client,
         return;
     }
 
-    trustd_event("optee_record_decision_ok");
+    trustd_event(backend == TEAR_TRUST_BACKEND_OPTEE ?
+                 "optee_record_decision_ok" :
+                 "record_decision_ok");
     trustd_event("optimization_decision_recorded");
     client_reply_ok(client);
 }

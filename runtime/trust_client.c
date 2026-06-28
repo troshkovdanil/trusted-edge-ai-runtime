@@ -58,7 +58,7 @@ static void trust_client_send(int fd, const char *fmt, ...)
 
 static int trust_client_expect_ok(int fd)
 {
-    char buf[32];
+    char buf[64];
     ssize_t n = read(fd, buf, sizeof(buf) - 1);
 
     if (n <= 0) {

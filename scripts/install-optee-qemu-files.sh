@@ -47,6 +47,24 @@ cat > "$TARGET/etc/init.d/S99tear-test" <<'EOS'
 #!/bin/sh
 set -eu
 
+case "${1:-start}" in
+    start)
+        ;;
+    stop|restart|reload)
+        exit 0
+        ;;
+    *)
+        exit 0
+        ;;
+esac
+
+if [ -f /tmp/tear-optee-qemu-test-ran ]; then
+    echo "TEAR_OPTEE_QEMU_TEST already ran"
+    exit 0
+fi
+
+touch /tmp/tear-optee-qemu-test-ran
+
 shutdown_guest() {
     sync
     poweroff
@@ -70,6 +88,22 @@ tear_plan_path() {
     echo "/etc/tear/qemu-optee.plan"
 }
 
+wait_for_supervisor() {
+    for i in 1 2 3 4 5; do
+        [ -S /tmp/tear-supervisor.sock ] && return 0
+        sleep 1
+    done
+
+    return 1
+}
+
+stop_supervisor() {
+    pid="$1"
+
+    kill -INT "$pid" 2>/dev/null || true
+    wait "$pid" 2>/dev/null || true
+}
+
 TEAR_PLAN="$(tear_plan_path)"
 
 echo "TEAR_OPTEE_CA_TEST start"
@@ -90,34 +124,6 @@ echo "TEAR_OPTEE_TRUSTD_VERIFY_SELF_TEST start"
 /bin/tear-trustd-optee --backend optee --self-test-verify || fail_guest "TEAR_OPTEE_TRUSTD_VERIFY_SELF_TEST failed"
 echo "TEAR_OPTEE_TRUSTD_VERIFY_SELF_TEST done"
 
-echo "TEAR_OPTEE_TRUSTD_UPDATE_SOCKET_TEST start"
-/bin/tear-trustd-optee --backend optee &
-trustd_pid=$!
-sleep 1
-
-/bin/tearictl enroll /etc/tear/model-v1.json || {
-    kill "$trustd_pid"
-    fail_guest "TEAR_OPTEE_TRUSTD_UPDATE_SOCKET_TEST enroll failed"
-}
-
-/bin/tearictl verify /etc/tear/model-v1.json || {
-    kill "$trustd_pid"
-    fail_guest "TEAR_OPTEE_TRUSTD_UPDATE_SOCKET_TEST verify failed"
-}
-
-/bin/tearictl update-model /etc/tear/model-v2.json || {
-    kill "$trustd_pid"
-    fail_guest "TEAR_OPTEE_TRUSTD_UPDATE_SOCKET_TEST update failed"
-}
-
-/bin/tearictl update-model /etc/tear/model-v1.json && {
-    kill "$trustd_pid"
-    fail_guest "TEAR_OPTEE_TRUSTD_UPDATE_SOCKET_TEST rollback accepted unexpectedly"
-}
-
-kill "$trustd_pid"
-echo "TEAR_OPTEE_TRUSTD_UPDATE_SOCKET_TEST done"
-
 rm -f /tmp/tear-trustd.sock \
       /tmp/tear-optd.sock \
       /tmp/tear-supervisor.sock \
@@ -128,9 +134,10 @@ rm -f /tmp/tear-trustd.sock \
       /tmp/tear-runtime-manager-events.log-run-* \
       /tmp/tear-demo-model-events.log* \
       /tmp/tear-mnist-model-events.log* \
-      /tmp/tear-optd-events.log
+      /tmp/tear-optd-events.log \
+      /tmp/tear-trustd-events.log
 
-echo "TEAR_OPTEE_QEMU_RUN_PLAN_TEST start"
+echo "TEAR_OPTEE_QEMU_TEST start"
 echo "TEAR_OPTEE_QEMU_PLAN path=$TEAR_PLAN"
 
 TEAR_TRUSTD_PATH=/bin/tear-trustd-optee \
@@ -138,36 +145,55 @@ TEAR_TRUSTD_BACKEND=optee \
 /bin/tear-supervisor &
 supervisor_pid=$!
 
-for i in 1 2 3 4 5; do
-    [ -S /tmp/tear-supervisor.sock ] && break
-    sleep 1
-done
+wait_for_supervisor || {
+    stop_supervisor "$supervisor_pid"
+    fail_guest "TEAR_OPTEE_QEMU_SUPERVISOR_SOCKET failed"
+}
+
+echo "TEAR_OPTEE_QEMU_PROVISION_TEST start"
+
+/bin/tearictl provision /etc/tear/model-v1.json || {
+    stop_supervisor "$supervisor_pid"
+    fail_guest "TEAR_OPTEE_QEMU_PROVISION_TEST provision failed"
+}
+
+/bin/tearictl update-model /etc/tear/model-v2.json || {
+    stop_supervisor "$supervisor_pid"
+    fail_guest "TEAR_OPTEE_QEMU_PROVISION_TEST update failed"
+}
+
+/bin/tearictl update-model /etc/tear/model-v1.json && {
+    stop_supervisor "$supervisor_pid"
+    fail_guest "TEAR_OPTEE_QEMU_PROVISION_TEST rollback accepted unexpectedly"
+}
+
+/bin/tearictl provision-plan "$TEAR_PLAN" || {
+    stop_supervisor "$supervisor_pid"
+    fail_guest "TEAR_OPTEE_QEMU_PROVISION_TEST provision-plan failed"
+}
+
+echo "TEAR_OPTEE_QEMU_PROVISION_TEST done"
+
+echo "TEAR_OPTEE_QEMU_RUN_PLAN_TEST start"
 
 /bin/tearictl run-plan "$TEAR_PLAN" || {
-    kill -INT "$supervisor_pid"
-    wait "$supervisor_pid" || true
+    stop_supervisor "$supervisor_pid"
     fail_guest "TEAR_OPTEE_QEMU_RUN_PLAN_TEST failed"
 }
 
-kill -INT "$supervisor_pid"
-wait "$supervisor_pid" || true
-
-echo "TEAR_OPTEE_QEMU_RUN_PLAN_TEST done"
-
-rm -f /tmp/tear-trustd.sock
-/bin/tear-trustd-optee --backend optee &
-trustd_pid=$!
-sleep 1
-
 /bin/tearictl report-decision > /tmp/tear-reported-decision.log 2>&1 || {
-    kill "$trustd_pid"
+    stop_supervisor "$supervisor_pid"
     fail_guest "TEAR_OPTEE_QEMU_REPORT_DECISION failed"
 }
 
-kill "$trustd_pid"
+stop_supervisor "$supervisor_pid"
+
+echo "TEAR_OPTEE_QEMU_RUN_PLAN_TEST done"
 
 /bin/verify-tear-plan-event-metric.sh || \
     fail_guest "TEAR_OPTEE_QEMU_EVENT_METRIC_VERIFY failed"
+
+echo "TEAR_OPTEE_QEMU_TEST done"
 
 shutdown_guest
 EOS

@@ -59,6 +59,7 @@ static volatile sig_atomic_t supervisor_running = 1;
 
 static int run_workload_once(const struct tear_run_config *cfg);
 static int run_plan_file(const char *path);
+static int provision_plan_file(const char *path);
 static const char *state_name(enum supervisor_state state);
 
 static void supervisor_event(const char *event)
@@ -340,99 +341,6 @@ static int run_plan_file(const char *path)
     return 0;
 }
 
-static void handle_supervisor_client(int client)
-{
-    char buf[512];
-    ssize_t n = read(client, buf, sizeof(buf) - 1);
-
-    if (n <= 0)
-        return;
-
-    buf[n] = '\0';
-
-    if (strncmp(buf, "PING", 4) == 0) {
-        client_reply_pong(client);
-    } else if (strncmp(buf, "STATUS", 6) == 0) {
-        client_reply_status(client);
-    } else if (strncmp(buf, "RUN_PLAN ", 9) == 0) {
-        char path[256];
-        int ret;
-
-        if (supervisor_state == SUPERVISOR_STATE_RUNNING) {
-            client_reply_err(client, "busy");
-            return;
-        }
-
-        if (sscanf(buf, "RUN_PLAN %255s", path) != 1) {
-            client_reply_err(client, "invalid_run_plan_command");
-            return;
-        }
-
-        ret = run_plan_file(path);
-
-        if (ret == 0)
-            client_reply_ok(client);
-        else
-            client_reply_err(client, "run_plan_failed");
-    } else if (strncmp(buf, "RUN ", 4) == 0) {
-        struct tear_run_config run_cfg;
-        int ret;
-
-        if (supervisor_state == SUPERVISOR_STATE_RUNNING) {
-            client_reply_err(client, "busy");
-            return;
-        }
-
-        if (parse_run_command(buf, &run_cfg) < 0) {
-            client_reply_err(client, "invalid_run_command");
-            return;
-        }
-
-        ret = run_workload_once(&run_cfg);
-        free_run_config(&run_cfg);
-
-        if (ret == 0)
-            client_reply_ok(client);
-        else
-            client_reply_err(client, "run_failed");
-    } else {
-        client_reply_err(client, "unknown_command");
-    }
-}
-
-static struct supervisor_config parse_args(int argc, char **argv)
-{
-    struct supervisor_config cfg = {
-        .event_log = DEFAULT_EVENT_PATH,
-    };
-
-    for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--event-log") == 0 && i + 1 < argc) {
-            cfg.event_log = argv[++i];
-        } else {
-            tear_log(TEAR_COMPONENT,
-                     TEAR_LOG_ERROR,
-                     "usage: tear-supervisor [--event-log <path>]");
-            cfg.event_log = NULL;
-            break;
-        }
-    }
-
-    return cfg;
-}
-
-static int validate_config(const struct supervisor_config *cfg)
-{
-    if (!cfg->event_log || cfg->event_log[0] == '\0') {
-        tear_log(TEAR_COMPONENT,
-                 TEAR_LOG_ERROR,
-                 "missing --event-log <path>");
-        return -1;
-    }
-
-    return 0;
-}
-
 static pid_t start_trustd(void)
 {
     const char *trustd_path = getenv("TEAR_TRUSTD_PATH");
@@ -531,11 +439,11 @@ static int run_tearictl(const char *command, const char *arg)
     return WIFEXITED(status) && WEXITSTATUS(status) == 0 ? 0 : -1;
 }
 
-static int provision_selected_manifest(const struct tear_run_config *cfg)
+static int provision_manifest_path(const char *manifest)
 {
     supervisor_event("provisioning_start");
 
-    if (run_tearictl("enroll", cfg->manifest) < 0) {
+    if (run_tearictl("enroll", manifest) < 0) {
         supervisor_event("provisioning_failed");
         return -1;
     }
@@ -548,6 +456,269 @@ static int provision_selected_manifest(const struct tear_run_config *cfg)
     }
 
     supervisor_event("provisioning_report_done");
+
+    return 0;
+}
+
+static int provision_command_line(const char *line)
+{
+    struct tear_run_config run_cfg;
+    int ret;
+
+    if (parse_run_command(line, &run_cfg) < 0)
+        return -1;
+
+    ret = provision_manifest_path(run_cfg.manifest);
+    free_run_config(&run_cfg);
+
+    return ret;
+}
+
+static int provision_plan_file(const char *path)
+{
+    FILE *fp;
+    char line[512];
+    int line_no = 0;
+
+    fp = fopen(path, "r");
+    if (!fp) {
+        supervisor_perror("open provision plan");
+        supervisor_event("provision_plan_open_failed");
+        return -1;
+    }
+
+    supervisor_event("provision_plan_start");
+
+    while (fgets(line, sizeof(line), fp)) {
+        line_no++;
+
+        if (should_skip_plan_line(line))
+            continue;
+
+        if (strncmp(line, "RUN ", 4) != 0) {
+            supervisor_event_kv("provision_plan_invalid_line", "line", line_no);
+            fclose(fp);
+            return -1;
+        }
+
+        if (provision_command_line(line) < 0) {
+            supervisor_event_kv("provision_plan_failed", "line", line_no);
+            fclose(fp);
+            return -1;
+        }
+    }
+
+    fclose(fp);
+    supervisor_event("provision_plan_done");
+
+    return 0;
+}
+
+static int update_model_path(const char *manifest)
+{
+    supervisor_event("model_update_start");
+
+    if (run_tearictl("update-model", manifest) < 0) {
+        supervisor_event("model_update_failed");
+        return -1;
+    }
+
+    supervisor_event("model_update_done");
+
+    return 0;
+}
+
+static int report_trusted_state(void)
+{
+    if (run_tearictl("report", NULL) < 0) {
+        supervisor_event("report_failed");
+        return -1;
+    }
+
+    supervisor_event("report_done");
+
+    return 0;
+}
+
+static int report_trusted_decision(void)
+{
+    if (run_tearictl("report-decision", NULL) < 0) {
+        supervisor_event("report_decision_failed");
+        return -1;
+    }
+
+    supervisor_event("report_decision_done");
+
+    return 0;
+}
+
+static void handle_supervisor_client(int client)
+{
+    char buf[512];
+    ssize_t n = read(client, buf, sizeof(buf) - 1);
+
+    if (n <= 0)
+        return;
+
+    buf[n] = '\0';
+
+    if (strncmp(buf, "PING", 4) == 0) {
+        client_reply_pong(client);
+    } else if (strncmp(buf, "STATUS", 6) == 0) {
+        client_reply_status(client);
+    } else if (strncmp(buf, "PROVISION_PLAN ", 15) == 0) {
+        char path[256];
+        int ret;
+
+        if (supervisor_state == SUPERVISOR_STATE_RUNNING) {
+            client_reply_err(client, "busy");
+            return;
+        }
+
+        if (sscanf(buf, "PROVISION_PLAN %255s", path) != 1) {
+            client_reply_err(client, "invalid_provision_plan_command");
+            return;
+        }
+
+        ret = provision_plan_file(path);
+
+        if (ret == 0)
+            client_reply_ok(client);
+        else
+            client_reply_err(client, "provision_plan_failed");
+    } else if (strncmp(buf, "PROVISION ", 10) == 0) {
+        char path[256];
+        int ret;
+
+        if (supervisor_state == SUPERVISOR_STATE_RUNNING) {
+            client_reply_err(client, "busy");
+            return;
+        }
+
+        if (sscanf(buf, "PROVISION %255s", path) != 1) {
+            client_reply_err(client, "invalid_provision_command");
+            return;
+        }
+
+        ret = provision_manifest_path(path);
+
+        if (ret == 0)
+            client_reply_ok(client);
+        else
+            client_reply_err(client, "provision_failed");
+    } else if (strncmp(buf, "UPDATE_MODEL ", 13) == 0) {
+        char path[256];
+        int ret;
+
+        if (supervisor_state == SUPERVISOR_STATE_RUNNING) {
+            client_reply_err(client, "busy");
+            return;
+        }
+
+        if (sscanf(buf, "UPDATE_MODEL %255s", path) != 1) {
+            client_reply_err(client, "invalid_update_model_command");
+            return;
+        }
+
+        ret = update_model_path(path);
+
+        if (ret == 0)
+            client_reply_ok(client);
+        else
+            client_reply_err(client, "update_model_failed");
+    } else if (strncmp(buf, "REPORT_DECISION", 15) == 0) {
+        int ret;
+
+        ret = report_trusted_decision();
+
+        if (ret == 0)
+            client_reply_ok(client);
+        else
+            client_reply_err(client, "report_decision_failed");
+    } else if (strncmp(buf, "REPORT", 6) == 0) {
+        int ret;
+
+        ret = report_trusted_state();
+
+        if (ret == 0)
+            client_reply_ok(client);
+        else
+            client_reply_err(client, "report_failed");
+    } else if (strncmp(buf, "RUN_PLAN ", 9) == 0) {
+        char path[256];
+        int ret;
+
+        if (supervisor_state == SUPERVISOR_STATE_RUNNING) {
+            client_reply_err(client, "busy");
+            return;
+        }
+
+        if (sscanf(buf, "RUN_PLAN %255s", path) != 1) {
+            client_reply_err(client, "invalid_run_plan_command");
+            return;
+        }
+
+        ret = run_plan_file(path);
+
+        if (ret == 0)
+            client_reply_ok(client);
+        else
+            client_reply_err(client, "run_plan_failed");
+    } else if (strncmp(buf, "RUN ", 4) == 0) {
+        struct tear_run_config run_cfg;
+        int ret;
+
+        if (supervisor_state == SUPERVISOR_STATE_RUNNING) {
+            client_reply_err(client, "busy");
+            return;
+        }
+
+        if (parse_run_command(buf, &run_cfg) < 0) {
+            client_reply_err(client, "invalid_run_command");
+            return;
+        }
+
+        ret = run_workload_once(&run_cfg);
+        free_run_config(&run_cfg);
+
+        if (ret == 0)
+            client_reply_ok(client);
+        else
+            client_reply_err(client, "run_failed");
+    } else {
+        client_reply_err(client, "unknown_command");
+    }
+}
+
+static struct supervisor_config parse_args(int argc, char **argv)
+{
+    struct supervisor_config cfg = {
+        .event_log = DEFAULT_EVENT_PATH,
+    };
+
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--event-log") == 0 && i + 1 < argc) {
+            cfg.event_log = argv[++i];
+        } else {
+            tear_log(TEAR_COMPONENT,
+                     TEAR_LOG_ERROR,
+                     "usage: tear-supervisor [--event-log <path>]");
+            cfg.event_log = NULL;
+            break;
+        }
+    }
+
+    return cfg;
+}
+
+static int validate_config(const struct supervisor_config *cfg)
+{
+    if (!cfg->event_log || cfg->event_log[0] == '\0') {
+        tear_log(TEAR_COMPONENT,
+                 TEAR_LOG_ERROR,
+                 "missing --event-log <path>");
+        return -1;
+    }
 
     return 0;
 }
@@ -574,11 +745,7 @@ static int run_workload_once(const struct tear_run_config *cfg)
     pid_t pid;
     int status = 0;
 
-    tear_log(TEAR_COMPONENT, TEAR_LOG_INFO, "\n\nrun_workload_once");
     supervisor_event("workload_selected");
-
-    if (provision_selected_manifest(cfg) < 0)
-        return 1;
 
     supervisor_state = SUPERVISOR_STATE_RUNNING;
     supervisor_event("workload_start");

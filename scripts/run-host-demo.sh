@@ -56,7 +56,27 @@ if [ ! -S /tmp/tear-supervisor.sock ]; then
     exit 1
 fi
 
-"$TEARICTL" run-plan "$PLAN" > "$CLIENT_LOG" 2>&1
+{
+    echo "TEAR_HOST_DEMO_PROVISION_TEST start"
+
+    "$TEARICTL" provision examples/model-v1.json
+    "$TEARICTL" update-model examples/model-v2.json
+
+    if "$TEARICTL" update-model examples/model-v1.json; then
+        echo "TEAR_HOST_DEMO_PROVISION_TEST rollback accepted unexpectedly"
+        exit 1
+    fi
+
+    "$TEARICTL" provision-plan "$PLAN"
+
+    echo "TEAR_HOST_DEMO_PROVISION_TEST done"
+
+    echo "TEAR_HOST_DEMO_RUN_PLAN_TEST start"
+
+    "$TEARICTL" run-plan "$PLAN"
+
+    echo "TEAR_HOST_DEMO_RUN_PLAN_TEST done"
+} > "$CLIENT_LOG" 2>&1
 
 cleanup
 trap - EXIT INT TERM
