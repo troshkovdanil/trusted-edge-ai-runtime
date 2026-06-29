@@ -49,6 +49,7 @@ TRUST_CLIENT_SRCS := runtime/trust_client.c
 TRUSTD_SRCS := runtime/trustd.c runtime/trusted_state.c
 OPTD_SRCS := runtime/optd.c runtime/optimizer_policy.c
 WORKLOAD_ADAPTER_SRCS := runtime/workload_adapter.c
+PLATFORM_ADAPTER_SRCS := runtime/platform_adapter.c
 RUNTIME_MANAGER_SRCS := runtime/runtime_manager_main.c runtime/runtime_manager.c
 TEARICTL_SRCS := runtime/tearictl.c
 DEMO_MODEL_SRCS := runtime/demo_model.c
@@ -82,6 +83,7 @@ host-demo-build: mnist-assets
 		-o $(HOST_RUNTIME_MANAGER) \
 		$(RUNTIME_MANAGER_SRCS) \
 		$(WORKLOAD_ADAPTER_SRCS) \
+		$(PLATFORM_ADAPTER_SRCS) \
 		$(PROFILE_SRCS) \
 		$(MANIFEST_SRCS) \
 		$(TRUST_CLIENT_SRCS) \
@@ -126,6 +128,7 @@ qemu-optee-binaries: mnist-assets
 		-o $(RUNTIME_MANAGER) \
 		$(RUNTIME_MANAGER_SRCS) \
 		$(WORKLOAD_ADAPTER_SRCS) \
+		$(PLATFORM_ADAPTER_SRCS) \
 		$(PROFILE_SRCS) \
 		$(MANIFEST_SRCS) \
 		$(TRUST_CLIENT_SRCS) \

@@ -3,9 +3,10 @@
 #include "runtime_manager.h"
 
 #include "model_manifest.h"
-#include "runtime_paths.h"
 #include "observability.h"
+#include "platform_adapter.h"
 #include "profile.h"
+#include "runtime_paths.h"
 #include "trust_client.h"
 #include "workload_adapter.h"
 
@@ -292,6 +293,7 @@ int tear_runtime_manager_main(int argc, char **argv)
     struct tear_run_config cfg = parse_args(argc, argv);
     struct tear_model_manifest manifest;
     struct tear_profile profile;
+    struct tear_platform_context platform;
     struct tear_workload_run workload_run;
     int use_optimizer = 0;
     int ret = 1;
@@ -332,6 +334,16 @@ int tear_runtime_manager_main(int argc, char **argv)
     runtime_profile_event(&profile, "profile_loaded");
 
     tear_profile_print(&profile);
+
+    if (tear_platform_detect(&platform) < 0) {
+        runtime_profile_event(&profile, "platform_detect_failed");
+        goto out;
+    }
+
+    if (tear_platform_check_profile(&platform, &profile) < 0) {
+        runtime_profile_event(&profile, "platform_profile_check_failed");
+        goto out;
+    }
 
     if (tear_workload_prepare(&manifest,
                               &profile,

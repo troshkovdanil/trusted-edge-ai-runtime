@@ -86,6 +86,12 @@ check_file_contains "$RUNTIME_MANAGER_EVENTS" "event=manifest_loaded"
 check_file_contains "$RUNTIME_MANAGER_EVENTS" "artifact_id=demo-model"
 check_file_contains "$RUNTIME_MANAGER_EVENTS" "artifact_id=mnist-onnx-v1"
 check_file_contains "$RUNTIME_MANAGER_EVENTS" "event=profile_loaded"
+
+check_file_contains "$RUNTIME_MANAGER_EVENTS" "component=platform_adapter event=platform_detected"
+check_file_contains "$RUNTIME_MANAGER_EVENTS" "component=platform_adapter event=platform_(optee_present|optee_absent)"
+check_file_contains "$RUNTIME_MANAGER_EVENTS" "component=platform_adapter .*event=platform_profile_verified"
+check_file_contains "$RUNTIME_MANAGER_EVENTS" "component=platform_adapter .*event=platform_backend_available"
+
 check_file_contains "$RUNTIME_MANAGER_EVENTS" "event=profile_manifest_verified"
 check_file_contains "$RUNTIME_MANAGER_EVENTS" "event=run-[0-9]+-[0-9]+"
 check_file_contains "$RUNTIME_MANAGER_EVENTS" "event=manifest_verified"
