@@ -8,24 +8,35 @@ TARGET="$OPTEE_QEMU_DIR/out-br/target"
 
 TEAR_TA_UUID="7c9d7b3a-2f4e-4c8f-9a11-6b4454454152"
 
-TEAR_TA="${PLATFORM_BUILD_DIR}/optee/tear_ta/${TEAR_TA_UUID}.ta"
-TEAR_CA="${PLATFORM_BUILD_DIR}/optee/tear-optee-ca"
-TEAR_OPTEE_TRUSTD="${PLATFORM_BUILD_DIR}/optee/tear-trustd-optee"
+TEAR_SUPERVISOR_BIN="${TEAR_SUPERVISOR_BIN:-${PLATFORM_BUILD_DIR}/tear-supervisor}"
+TEAR_TRUSTD_BIN="${TEAR_TRUSTD_BIN:-${PLATFORM_BUILD_DIR}/tear-trustd}"
+TEARICTL_BIN="${TEARICTL_BIN:-${PLATFORM_BUILD_DIR}/tearictl}"
+TEAR_OPTD_BIN="${TEAR_OPTD_BIN:-${PLATFORM_BUILD_DIR}/tear-optd}"
+TEAR_RUNTIME_MANAGER_BIN="${TEAR_RUNTIME_MANAGER_BIN:-${PLATFORM_BUILD_DIR}/tear-runtime-manager}"
+
+TEAR_DEMO_MODEL_BIN="${TEAR_DEMO_MODEL_BIN:-${PLATFORM_BUILD_DIR}/demo-model}"
+TEAR_MNIST_MODEL_BIN="${TEAR_MNIST_MODEL_BIN:-${PLATFORM_BUILD_DIR}/mnist-model}"
+
+TEAR_TA="${TEAR_TA:-${PLATFORM_BUILD_DIR}/optee/tear_ta/${TEAR_TA_UUID}.ta}"
+TEAR_CA="${TEAR_CA:-${PLATFORM_BUILD_DIR}/optee/tear-optee-ca}"
+TEAR_OPTEE_TRUSTD="${TEAR_OPTEE_TRUSTD:-${PLATFORM_BUILD_DIR}/optee/tear-trustd-optee}"
 
 mkdir -p "$TARGET/bin" "$TARGET/etc/tear" "$TARGET/lib/optee_armtz"
 
 cp -v "$TEAR_TA" "$TARGET/lib/optee_armtz/"
 cp -v "$TEAR_CA" "$TARGET/bin/tear-optee-ca"
 
-cp -v "$PLATFORM_BUILD_DIR/tear-supervisor" "$TARGET/bin/"
-cp -v "$PLATFORM_BUILD_DIR/tear-trustd" "$TARGET/bin/"
-cp -v "$PLATFORM_BUILD_DIR/tearictl" "$TARGET/bin/"
-cp -v "$PLATFORM_BUILD_DIR/tear-optd" "$TARGET/bin/"
-cp -v "$PLATFORM_BUILD_DIR/demo-model" "$TARGET/bin/"
-cp -v "$PLATFORM_BUILD_DIR/tear-runtime-manager" "$TARGET/bin/"
-cp -v "$TEAR_OPTEE_TRUSTD" "$TARGET/bin/"
+cp -v "$TEAR_SUPERVISOR_BIN" "$TARGET/bin/tear-supervisor"
+cp -v "$TEAR_TRUSTD_BIN" "$TARGET/bin/tear-trustd"
+cp -v "$TEARICTL_BIN" "$TARGET/bin/tearictl"
+cp -v "$TEAR_OPTD_BIN" "$TARGET/bin/tear-optd"
+cp -v "$TEAR_RUNTIME_MANAGER_BIN" "$TARGET/bin/tear-runtime-manager"
 
-cp -v "$PLATFORM_BUILD_DIR/mnist-model" "$TARGET/bin/"
+cp -v "$TEAR_DEMO_MODEL_BIN" "$TARGET/bin/demo-model"
+cp -v "$TEAR_MNIST_MODEL_BIN" "$TARGET/bin/mnist-model"
+
+cp -v "$TEAR_OPTEE_TRUSTD" "$TARGET/bin/tear-trustd-optee"
+
 cp -v examples/mnist-model.json "$TARGET/etc/tear/"
 
 mkdir -p "$TARGET/models/mnist"

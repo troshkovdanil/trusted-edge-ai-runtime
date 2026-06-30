@@ -1,10 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
 BUILD := build
-HOST_BUILD := $(BUILD)/host
+WORKLOAD_BUILD := $(BUILD)/workloads
 
 include platforms/host-mock/build.mk
 include platforms/qemu-optee/build.mk
+include workloads/demo-model/build.mk
+include workloads/mnist-model/build.mk
 
 HOST_MOCK_PLAN := plans/host-mock.plan
 QEMU_OPTEE_PLAN := /etc/tear/qemu-optee.plan
@@ -27,8 +29,6 @@ WORKLOAD_ADAPTER_SRCS := runtime/workload_adapter.c
 PLATFORM_ADAPTER_SRCS := runtime/platform_adapter.c
 RUNTIME_MANAGER_SRCS := runtime/runtime_manager_main.c runtime/runtime_manager.c
 TEARICTL_SRCS := runtime/tearictl.c
-DEMO_MODEL_SRCS := runtime/demo_model.c
-MNIST_MODEL_SRCS := runtime/mnist_model.c
 
 .PHONY: build test full-verify clean clean-all mnist-assets \
 	host-mock-build host-mock-test host-test \
@@ -38,8 +38,6 @@ define build-platform-runtime
 	mkdir -p $($(1)_BUILD_DIR)
 	$($(1)_CC) -static -O2 -Wall -Wextra $($(1)_CFLAGS) \
 		-o $($(1)_SUPERVISOR) runtime/supervisor.c $(RUNTIME_PATHS_SRCS) $(OBSERVABILITY_SRCS)
-	$($(1)_CC) -static -O2 -Wall -Wextra $($(1)_CFLAGS) \
-		-o $($(1)_DEMO_MODEL) $(DEMO_MODEL_SRCS) $(PROFILE_SRCS) $(OBSERVABILITY_SRCS)
 	$($(1)_CC) -static -O2 -Wall -Wextra $($(1)_CFLAGS) \
 		-o $($(1)_RUNTIME_MANAGER) \
 		$(RUNTIME_MANAGER_SRCS) \
@@ -69,13 +67,27 @@ define build-platform-runtime
 		$(OBSERVABILITY_SRCS)
 endef
 
-define build-platform-mnist
+define build-platform-demo-model
+	mkdir -p $(WORKLOAD_BUILD)/$($(1)_ID)
+	$($(1)_CC) -static -O2 -Wall -Wextra $($(1)_CFLAGS) \
+		-o $(WORKLOAD_BUILD)/$($(1)_ID)/$(DEMO_MODEL_ID)-$($(1)_ID) \
+		$(DEMO_MODEL_SRCS) $(PROFILE_SRCS) $(OBSERVABILITY_SRCS)
+endef
+
+define build-platform-mnist-model
+	mkdir -p $(WORKLOAD_BUILD)/$($(1)_ID)
 	$($(1)_CC) -O2 -Wall -Wextra $($(1)_CFLAGS) \
 		-I$($(1)_ORT_INCLUDE) \
-		-o $($(1)_MNIST_MODEL) $(MNIST_MODEL_SRCS) $(PROFILE_SRCS) $(OBSERVABILITY_SRCS) \
+		-o $(WORKLOAD_BUILD)/$($(1)_ID)/$(MNIST_MODEL_ID)-$($(1)_ID) \
+		$(MNIST_MODEL_SRCS) $(PROFILE_SRCS) $(OBSERVABILITY_SRCS) \
 		-L$($(1)_ORT_LIB) \
 		-lonnxruntime \
 		-Wl,-rpath,$($(1)_ORT_RPATH)
+endef
+
+define build-platform-workloads
+	$(call build-platform-demo-model,$(1))
+	$(if $(filter 1,$($(1)_ENABLE_ONNXRUNTIME)),$(call build-platform-mnist-model,$(1)),)
 endef
 
 define build-secure-backend-mock
@@ -121,24 +133,6 @@ define build-secure-backend
 $(if $(filter optee,$($(1)_SECURE_BACKEND)),$(call build-secure-backend-optee,$(1)),$(call build-secure-backend-mock,$(1)))
 endef
 
-define stage-host-mock
-	rm -rf $(HOST_BUILD)
-	ln -s platforms/$(HOST_MOCK_ID) $(HOST_BUILD)
-endef
-
-define stage-qemu-optee
-	ln -sf platforms/$(QEMU_OPTEE_ID)/tear-supervisor $(BUILD)/tear-supervisor
-	ln -sf platforms/$(QEMU_OPTEE_ID)/demo-model $(BUILD)/demo-model
-	ln -sf platforms/$(QEMU_OPTEE_ID)/mnist-model $(BUILD)/mnist-model
-	ln -sf platforms/$(QEMU_OPTEE_ID)/tear-runtime-manager $(BUILD)/tear-runtime-manager
-	ln -sf platforms/$(QEMU_OPTEE_ID)/tear-trustd $(BUILD)/tear-trustd
-	ln -sf platforms/$(QEMU_OPTEE_ID)/tearictl $(BUILD)/tearictl
-	ln -sf platforms/$(QEMU_OPTEE_ID)/tear-optd $(BUILD)/tear-optd
-	mkdir -p $(BUILD)/optee
-	ln -sf ../platforms/$(QEMU_OPTEE_ID)/optee/tear-optee-ca $(BUILD)/optee/tear-optee-ca
-	ln -sf ../platforms/$(QEMU_OPTEE_ID)/optee/tear-trustd-optee $(BUILD)/optee/tear-trustd-optee
-endef
-
 mnist-assets:
 	./scripts/fetch-mnist-onnx.sh
 
@@ -150,11 +144,8 @@ host-mock-build: mnist-assets
 	$(HOST_MOCK_CC) -static -O2 -Wall -Wextra $(HOST_MOCK_CFLAGS) \
 		-o $(HOST_MOCK_HELLO) runtime/hello.c
 	$(call build-platform-runtime,HOST_MOCK)
-ifeq ($(HOST_MOCK_ENABLE_ONNXRUNTIME),1)
-	$(call build-platform-mnist,HOST_MOCK)
-endif
+	$(call build-platform-workloads,HOST_MOCK)
 	$(call build-secure-backend,HOST_MOCK)
-	$(call stage-host-mock)
 
 host-mock-test: host-mock-build
 	./scripts/run-host-mock.sh "$(HOST_MOCK_PLAN)"
@@ -170,11 +161,20 @@ $(OPTEE_TA_DEV_KIT_MK):
 qemu-optee-build: mnist-assets $(OPTEE_TA_DEV_KIT_MK)
 	mkdir -p $(QEMU_OPTEE_BUILD_DIR)
 	$(call build-platform-runtime,QEMU_OPTEE)
-ifeq ($(QEMU_OPTEE_ENABLE_ONNXRUNTIME),1)
-	$(call build-platform-mnist,QEMU_OPTEE)
-endif
+	$(call build-platform-workloads,QEMU_OPTEE)
 	$(call build-secure-backend,QEMU_OPTEE)
-	$(call stage-qemu-optee)
+	TEAR_PLATFORM_ID="$(QEMU_OPTEE_ID)" \
+	TEAR_PLATFORM_BUILD_DIR="$(QEMU_OPTEE_BUILD_DIR)" \
+	TEAR_SUPERVISOR_BIN="$(QEMU_OPTEE_SUPERVISOR)" \
+	TEAR_TRUSTD_BIN="$(QEMU_OPTEE_TRUSTD)" \
+	TEARICTL_BIN="$(QEMU_OPTEE_TEARICTL)" \
+	TEAR_OPTD_BIN="$(QEMU_OPTEE_OPTD)" \
+	TEAR_RUNTIME_MANAGER_BIN="$(QEMU_OPTEE_RUNTIME_MANAGER)" \
+	TEAR_DEMO_MODEL_BIN="$(WORKLOAD_BUILD)/$(QEMU_OPTEE_ID)/$(DEMO_MODEL_ID)-$(QEMU_OPTEE_ID)" \
+	TEAR_MNIST_MODEL_BIN="$(WORKLOAD_BUILD)/$(QEMU_OPTEE_ID)/$(MNIST_MODEL_ID)-$(QEMU_OPTEE_ID)" \
+	TEAR_TA="$(QEMU_OPTEE_OPTEE_TA_BUILD)/7c9d7b3a-2f4e-4c8f-9a11-6b4454454152.ta" \
+	TEAR_CA="$(QEMU_OPTEE_OPTEE_CA)" \
+	TEAR_OPTEE_TRUSTD="$(QEMU_OPTEE_OPTEE_TRUSTD)" \
 	./scripts/install-optee-qemu-files.sh $(OPTEE_QEMU_DIR)
 	./scripts/optee-qemu.sh
 
@@ -193,12 +193,11 @@ test: host-mock-test qemu-optee-test
 
 clean:
 	rm -rf $(BUILD)/rootfs
-	rm -f $(BUILD)/tear-supervisor $(BUILD)/demo-model $(BUILD)/mnist-model
-	rm -f $(BUILD)/tear-runtime-manager $(BUILD)/tear-trustd $(BUILD)/tearictl $(BUILD)/tear-optd
 	rm -f $(BUILD)/optee-normal-world.log $(BUILD)/optee-secure-world.log
 	rm -rf $(BUILD)/optee
 	rm -rf $(BUILD)/host
 	rm -rf $(BUILD)/platforms
+	rm -rf $(BUILD)/workloads
 
 clean-all:
 	rm -rf $(BUILD)
