@@ -2,30 +2,30 @@
 set -euo pipefail
 
 OPTEE_QEMU_DIR="${1:-external/optee-qemu-v8}"
+PLATFORM_ID="${TEAR_PLATFORM_ID:-qemu-optee}"
+PLATFORM_BUILD_DIR="${TEAR_PLATFORM_BUILD_DIR:-build/platforms/${PLATFORM_ID}}"
 TARGET="$OPTEE_QEMU_DIR/out-br/target"
 
 TEAR_TA_UUID="7c9d7b3a-2f4e-4c8f-9a11-6b4454454152"
-TEAR_TA="build/optee/tear_ta/${TEAR_TA_UUID}.ta"
-TEAR_CA="build/optee/tear-optee-ca"
+
+TEAR_TA="${PLATFORM_BUILD_DIR}/optee/tear_ta/${TEAR_TA_UUID}.ta"
+TEAR_CA="${PLATFORM_BUILD_DIR}/optee/tear-optee-ca"
+TEAR_OPTEE_TRUSTD="${PLATFORM_BUILD_DIR}/optee/tear-trustd-optee"
 
 mkdir -p "$TARGET/bin" "$TARGET/etc/tear" "$TARGET/lib/optee_armtz"
-
-make optee-ta
-make optee-ca
-make optee-trustd
 
 cp -v "$TEAR_TA" "$TARGET/lib/optee_armtz/"
 cp -v "$TEAR_CA" "$TARGET/bin/tear-optee-ca"
 
-cp -v build/tear-supervisor "$TARGET/bin/"
-cp -v build/tear-trustd "$TARGET/bin/"
-cp -v build/tearictl "$TARGET/bin/"
-cp -v build/tear-optd "$TARGET/bin/"
-cp -v build/demo-model "$TARGET/bin/"
-cp -v build/tear-runtime-manager "$TARGET/bin/"
-cp -v build/optee/tear-trustd-optee "$TARGET/bin/"
+cp -v "$PLATFORM_BUILD_DIR/tear-supervisor" "$TARGET/bin/"
+cp -v "$PLATFORM_BUILD_DIR/tear-trustd" "$TARGET/bin/"
+cp -v "$PLATFORM_BUILD_DIR/tearictl" "$TARGET/bin/"
+cp -v "$PLATFORM_BUILD_DIR/tear-optd" "$TARGET/bin/"
+cp -v "$PLATFORM_BUILD_DIR/demo-model" "$TARGET/bin/"
+cp -v "$PLATFORM_BUILD_DIR/tear-runtime-manager" "$TARGET/bin/"
+cp -v "$TEAR_OPTEE_TRUSTD" "$TARGET/bin/"
 
-cp -v build/mnist-model "$TARGET/bin/"
+cp -v "$PLATFORM_BUILD_DIR/mnist-model" "$TARGET/bin/"
 cp -v examples/mnist-model.json "$TARGET/etc/tear/"
 
 mkdir -p "$TARGET/models/mnist"
