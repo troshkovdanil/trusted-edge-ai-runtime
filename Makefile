@@ -3,10 +3,10 @@
 BUILD := build
 HOST_BUILD := $(BUILD)/host
 
-include platforms/host-demo/build.mk
+include platforms/host-mock/build.mk
 include platforms/qemu-optee/build.mk
 
-HOST_DEMO_PLAN := plans/host-demo.plan
+HOST_MOCK_PLAN := plans/host-mock.plan
 QEMU_OPTEE_PLAN := /etc/tear/qemu-optee.plan
 
 OPTEE_QEMU_DIR := external/optee-qemu-v8
@@ -31,7 +31,8 @@ DEMO_MODEL_SRCS := runtime/demo_model.c
 MNIST_MODEL_SRCS := runtime/mnist_model.c
 
 .PHONY: build test full-verify clean clean-all mnist-assets \
-	host-demo-build host-demo-test host-test \
+	host-mock-build host-mock-test host-test \
+	host-demo-build host-demo-test \
 	qemu-optee-build qemu-optee-run qemu-optee-test
 
 define build-platform-runtime
@@ -121,9 +122,9 @@ define build-secure-backend
 $(if $(filter optee,$($(1)_SECURE_BACKEND)),$(call build-secure-backend-optee,$(1)),$(call build-secure-backend-mock,$(1)))
 endef
 
-define stage-host-demo-compat
+define stage-host-mock-compat
 	rm -rf $(HOST_BUILD)
-	ln -s platforms/$(HOST_DEMO_ID) $(HOST_BUILD)
+	ln -s platforms/$(HOST_MOCK_ID) $(HOST_BUILD)
 endef
 
 define stage-qemu-optee-compat
@@ -143,23 +144,27 @@ mnist-assets:
 	./scripts/fetch-mnist-onnx.sh
 
 #
-# Platform: host-demo
+# Platform: host-mock
 #
-host-demo-build: mnist-assets
-	mkdir -p $(HOST_DEMO_BUILD_DIR)
-	$(HOST_DEMO_CC) -static -O2 -Wall -Wextra $(HOST_DEMO_CFLAGS) \
-		-o $(HOST_DEMO_HELLO) runtime/hello.c
-	$(call build-platform-runtime,HOST_DEMO)
-ifeq ($(HOST_DEMO_ENABLE_ONNXRUNTIME),1)
-	$(call build-platform-mnist,HOST_DEMO)
+host-mock-build: mnist-assets
+	mkdir -p $(HOST_MOCK_BUILD_DIR)
+	$(HOST_MOCK_CC) -static -O2 -Wall -Wextra $(HOST_MOCK_CFLAGS) \
+		-o $(HOST_MOCK_HELLO) runtime/hello.c
+	$(call build-platform-runtime,HOST_MOCK)
+ifeq ($(HOST_MOCK_ENABLE_ONNXRUNTIME),1)
+	$(call build-platform-mnist,HOST_MOCK)
 endif
-	$(call build-secure-backend,HOST_DEMO)
-	$(call stage-host-demo-compat)
+	$(call build-secure-backend,HOST_MOCK)
+	$(call stage-host-mock-compat)
 
-host-demo-test: host-demo-build
-	./scripts/run-host-demo.sh "$(HOST_DEMO_PLAN)"
+host-mock-test: host-mock-build
+	./scripts/run-host-demo.sh "$(HOST_MOCK_PLAN)"
 
-host-test: host-demo-test
+host-test: host-mock-test
+
+# Backward-compatible aliases.
+host-demo-build: host-mock-build
+host-demo-test: host-mock-test
 
 #
 # Platform: qemu-optee
@@ -187,9 +192,9 @@ qemu-optee-test: qemu-optee-build
 #
 # main targets
 #
-build: host-demo-build qemu-optee-build
+build: host-mock-build qemu-optee-build
 
-test: host-demo-test qemu-optee-test
+test: host-mock-test qemu-optee-test
 
 clean:
 	rm -rf $(BUILD)/rootfs
