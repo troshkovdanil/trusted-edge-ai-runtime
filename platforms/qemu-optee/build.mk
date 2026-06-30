@@ -2,6 +2,7 @@
 
 QEMU_OPTEE_ID := qemu-optee
 QEMU_OPTEE_ARCH := aarch64
+QEMU_OPTEE_PLAN := /etc/tear/qemu-optee.plan
 QEMU_OPTEE_BUILD_DIR := $(BUILD)/platforms/$(QEMU_OPTEE_ID)
 
 QEMU_OPTEE_CC := aarch64-linux-gnu-gcc
@@ -14,9 +15,14 @@ QEMU_OPTEE_ORT_INCLUDE := external/onnxruntime-aarch64/include
 QEMU_OPTEE_ORT_LIB := external/onnxruntime-aarch64/lib
 QEMU_OPTEE_ORT_RPATH := /usr/lib
 
+QEMU_OPTEE_DIR := external/optee-qemu-v8
+QEMU_OPTEE_TA_DEV_KIT := $(abspath $(QEMU_OPTEE_DIR)/optee_os/out/arm/export-ta_arm64)
+QEMU_OPTEE_TA_DEV_KIT_MK := $(QEMU_OPTEE_TA_DEV_KIT)/mk/ta_dev_kit.mk
+QEMU_OPTEE_CROSS_COMPILE := $(abspath $(QEMU_OPTEE_DIR)/toolchains/aarch64/bin/aarch64-linux-gnu-)
+QEMU_OPTEE_CLIENT_INCLUDE := $(abspath $(QEMU_OPTEE_DIR)/optee_client/libteec/include)
+QEMU_OPTEE_CLIENT_LIB := $(abspath $(QEMU_OPTEE_DIR)/out-br/target/usr/lib)
+
 QEMU_OPTEE_SUPERVISOR := $(QEMU_OPTEE_BUILD_DIR)/tear-supervisor
-QEMU_OPTEE_DEMO_MODEL := $(QEMU_OPTEE_BUILD_DIR)/demo-model
-QEMU_OPTEE_MNIST_MODEL := $(QEMU_OPTEE_BUILD_DIR)/mnist-model
 QEMU_OPTEE_RUNTIME_MANAGER := $(QEMU_OPTEE_BUILD_DIR)/tear-runtime-manager
 QEMU_OPTEE_TRUSTD := $(QEMU_OPTEE_BUILD_DIR)/tear-trustd
 QEMU_OPTEE_TEARICTL := $(QEMU_OPTEE_BUILD_DIR)/tearictl
