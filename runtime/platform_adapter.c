@@ -51,10 +51,10 @@ int tear_platform_detect(struct tear_platform_context *ctx)
 #ifdef TEAR_HOST_BUILD
     set_string(ctx->kind,
                sizeof(ctx->kind),
-               TEAR_PLATFORM_KIND_HOST_DEMO);
+               TEAR_PLATFORM_KIND_HOST_MOCK);
     set_string(ctx->hardware_profile,
                sizeof(ctx->hardware_profile),
-               TEAR_PLATFORM_PROFILE_HOST_DEMO);
+               TEAR_PLATFORM_PROFILE_HOST_MOCK);
 #else
     if (ctx->optee_present) {
         set_string(ctx->kind,

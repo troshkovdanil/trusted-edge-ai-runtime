@@ -3,12 +3,12 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
-PLATFORM="${1:?usage: verify-tear-plan.sh <host-demo|qemu-optee>}"
+PLATFORM="${1:?usage: verify-tear-plan.sh <host-mock|qemu-optee>}"
 MARKER="TEAR_PLAN_EVENT_METRIC_VERIFY_OK"
 
 case "$PLATFORM" in
-host-demo)
-    LOG="$ROOT_DIR/build/host/host-demo-verify.log"
+host-mock)
+    LOG="$ROOT_DIR/build/host/host-mock-verify.log"
     ;;
 
 qemu-optee)
@@ -17,7 +17,7 @@ qemu-optee)
 
 *)
     echo "TEAR verify: unknown platform: $PLATFORM" >&2
-    echo "usage: verify-tear-plan.sh <host-demo|qemu-optee>" >&2
+    echo "usage: verify-tear-plan.sh <host-mock|qemu-optee>" >&2
     exit 1
     ;;
 esac

@@ -32,7 +32,6 @@ MNIST_MODEL_SRCS := runtime/mnist_model.c
 
 .PHONY: build test full-verify clean clean-all mnist-assets \
 	host-mock-build host-mock-test host-test \
-	host-demo-build host-demo-test \
 	qemu-optee-build qemu-optee-run qemu-optee-test
 
 define build-platform-runtime
@@ -122,12 +121,12 @@ define build-secure-backend
 $(if $(filter optee,$($(1)_SECURE_BACKEND)),$(call build-secure-backend-optee,$(1)),$(call build-secure-backend-mock,$(1)))
 endef
 
-define stage-host-mock-compat
+define stage-host-mock
 	rm -rf $(HOST_BUILD)
 	ln -s platforms/$(HOST_MOCK_ID) $(HOST_BUILD)
 endef
 
-define stage-qemu-optee-compat
+define stage-qemu-optee
 	ln -sf platforms/$(QEMU_OPTEE_ID)/tear-supervisor $(BUILD)/tear-supervisor
 	ln -sf platforms/$(QEMU_OPTEE_ID)/demo-model $(BUILD)/demo-model
 	ln -sf platforms/$(QEMU_OPTEE_ID)/mnist-model $(BUILD)/mnist-model
@@ -155,16 +154,12 @@ ifeq ($(HOST_MOCK_ENABLE_ONNXRUNTIME),1)
 	$(call build-platform-mnist,HOST_MOCK)
 endif
 	$(call build-secure-backend,HOST_MOCK)
-	$(call stage-host-mock-compat)
+	$(call stage-host-mock)
 
 host-mock-test: host-mock-build
-	./scripts/run-host-demo.sh "$(HOST_MOCK_PLAN)"
+	./scripts/run-host-mock.sh "$(HOST_MOCK_PLAN)"
 
 host-test: host-mock-test
-
-# Backward-compatible aliases.
-host-demo-build: host-mock-build
-host-demo-test: host-mock-test
 
 #
 # Platform: qemu-optee
@@ -179,7 +174,7 @@ ifeq ($(QEMU_OPTEE_ENABLE_ONNXRUNTIME),1)
 	$(call build-platform-mnist,QEMU_OPTEE)
 endif
 	$(call build-secure-backend,QEMU_OPTEE)
-	$(call stage-qemu-optee-compat)
+	$(call stage-qemu-optee)
 	./scripts/install-optee-qemu-files.sh $(OPTEE_QEMU_DIR)
 	./scripts/optee-qemu.sh
 

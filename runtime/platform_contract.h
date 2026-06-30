@@ -3,14 +3,14 @@
 #ifndef TEAR_PLATFORM_CONTRACT_H
 #define TEAR_PLATFORM_CONTRACT_H
 
-#define TEAR_PLATFORM_KIND_HOST_DEMO  "host-demo"
+#define TEAR_PLATFORM_KIND_HOST_MOCK  "host-mock"
 #define TEAR_PLATFORM_KIND_OPTEE_QEMU "optee-qemu"
 #define TEAR_PLATFORM_KIND_UNKNOWN    "unknown"
 
 #define TEAR_PLATFORM_BACKEND_MOCK            "mock"
 #define TEAR_PLATFORM_BACKEND_ONNXRUNTIME_CPU "onnxruntime-cpu"
 
-#define TEAR_PLATFORM_PROFILE_HOST_DEMO  "profile-host-demo.platform"
+#define TEAR_PLATFORM_PROFILE_HOST_MOCK  "profile-host-mock.platform"
 #define TEAR_PLATFORM_PROFILE_OPTEE_QEMU "profile-optee-qemu.platform"
 #define TEAR_PLATFORM_PROFILE_UNKNOWN    "profile-unknown.platform"
 

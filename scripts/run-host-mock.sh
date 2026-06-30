@@ -2,15 +2,15 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-PLAN="${1:-plans/host-demo.plan}"
+PLAN="${1:-plans/host-mock.plan}"
 
 HOST_BUILD="$ROOT_DIR/build/host"
 SUPERVISOR="$HOST_BUILD/tear-supervisor-host"
 TEARICTL="$HOST_BUILD/tearictl-host"
 
-SUPERVISOR_LOG="$HOST_BUILD/host-demo-supervisor.log"
-CLIENT_LOG="$HOST_BUILD/host-demo-client.log"
-EVENT_METRIC_VERIFY_LOG="$HOST_BUILD/host-demo-verify.log"
+SUPERVISOR_LOG="$HOST_BUILD/host-mock-supervisor.log"
+CLIENT_LOG="$HOST_BUILD/host-mock-client.log"
+EVENT_METRIC_VERIFY_LOG="$HOST_BUILD/host-mock-verify.log"
 VERIFY_SCRIPT="${VERIFY_SCRIPT:-$ROOT_DIR/scripts/verify-tear-plan.sh}"
 
 cd "$ROOT_DIR"
@@ -27,11 +27,11 @@ rm -f /tmp/tear-trustd.sock \
       "$CLIENT_LOG" \
       "$EVENT_METRIC_VERIFY_LOG"
 
-echo "TEAR: host-demo plan: $PLAN"
+echo "TEAR: host-mock plan: $PLAN"
 echo "TEAR: supervisor log: $SUPERVISOR_LOG"
 echo "TEAR: client log: $CLIENT_LOG"
 echo "TEAR: verify log: $EVENT_METRIC_VERIFY_LOG"
-echo "TEAR: host-demo test running..."
+echo "TEAR: host-mock test running..."
 
 "$SUPERVISOR" > "$SUPERVISOR_LOG" 2>&1 &
 supervisor_pid=$!
@@ -57,25 +57,25 @@ if [ ! -S /tmp/tear-supervisor.sock ]; then
 fi
 
 {
-    echo "TEAR_HOST_DEMO_PROVISION_TEST start"
+    echo "TEAR_HOST_MOCK_PROVISION_TEST start"
 
     "$TEARICTL" provision examples/model-v1.json
     "$TEARICTL" update-model examples/model-v2.json
 
     if "$TEARICTL" update-model examples/model-v1.json; then
-        echo "TEAR_HOST_DEMO_PROVISION_TEST rollback accepted unexpectedly"
+        echo "TEAR_HOST_MOCK_PROVISION_TEST rollback accepted unexpectedly"
         exit 1
     fi
 
     "$TEARICTL" provision-plan "$PLAN"
 
-    echo "TEAR_HOST_DEMO_PROVISION_TEST done"
+    echo "TEAR_HOST_MOCK_PROVISION_TEST done"
 
-    echo "TEAR_HOST_DEMO_RUN_PLAN_TEST start"
+    echo "TEAR_HOST_MOCK_RUN_PLAN_TEST start"
 
     "$TEARICTL" run-plan "$PLAN"
 
-    echo "TEAR_HOST_DEMO_RUN_PLAN_TEST done"
+    echo "TEAR_HOST_MOCK_RUN_PLAN_TEST done"
 } > "$CLIENT_LOG" 2>&1
 
 cleanup
@@ -86,9 +86,9 @@ TEAR_DECISION_LOG="/tmp/tear-trusted-decisions" \
 "$ROOT_DIR/scripts/verify-tear-plan-event-metric.sh" \
     > "$EVENT_METRIC_VERIFY_LOG" 2>&1
 
-echo "TEAR: host-demo test running... OK"
+echo "TEAR: host-mock test running... OK"
 
 echo "TEAR: running host-side verification..."
-"$VERIFY_SCRIPT" host-demo
+"$VERIFY_SCRIPT" host-mock
 
-echo "TEAR: host-demo test passed"
+echo "TEAR: host-mock test passed"
