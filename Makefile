@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 
-CC := aarch64-linux-gnu-gcc
-
 BUILD := build
 HOST_BUILD := $(BUILD)/host
+
+include platforms/host-demo/build.mk
+include platforms/qemu-optee/build.mk
+
 SUPERVISOR := $(BUILD)/tear-supervisor
 DEMO_MODEL := $(BUILD)/demo-model
 RUNTIME_MANAGER := $(BUILD)/tear-runtime-manager
@@ -37,9 +39,6 @@ OPTEE_CLIENT_LIB := $(abspath $(OPTEE_QEMU_DIR)/out-br/target/usr/lib)
 OPTEE_TRUSTD := $(BUILD)/optee/tear-trustd-optee
 
 MNIST_MODEL := $(BUILD)/mnist-model
-ORT_AARCH64_DIR := external/onnxruntime-aarch64
-ORT_AARCH64_INCLUDE := $(ORT_AARCH64_DIR)/include
-ORT_AARCH64_LIB := $(ORT_AARCH64_DIR)/lib
 
 RUNTIME_PATHS_SRCS := runtime/runtime_paths.c
 OBSERVABILITY_SRCS := runtime/observability.c
@@ -57,30 +56,17 @@ MNIST_MODEL_SRCS := runtime/mnist_model.c
 
 .PHONY: build test full-verify clean clean-all mnist-assets \
 	host-demo-build host-demo-test host-test \
-	qemu-optee-binaries qemu-optee-install qemu-optee-build qemu-optee-run qemu-optee-test \
+	qemu-optee-runtime qemu-optee-install qemu-optee-build qemu-optee-run qemu-optee-test \
 	optee-ta optee-ca optee-trustd
 
-mnist-assets:
-	./scripts/fetch-mnist-onnx.sh
-
-#
-# Platform: host-demo
-#
-host-demo-build: mnist-assets
-	mkdir -p $(HOST_BUILD)
-	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
-		-o $(HOST_HELLO) runtime/hello.c
-	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
-		-o $(HOST_SUPERVISOR) runtime/supervisor.c $(RUNTIME_PATHS_SRCS) $(OBSERVABILITY_SRCS)
-	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
-		-o $(HOST_DEMO_MODEL) $(DEMO_MODEL_SRCS) $(PROFILE_SRCS) $(OBSERVABILITY_SRCS)
-	gcc -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
-		-Iexternal/onnxruntime/include \
-		-o $(HOST_MNIST_MODEL) $(MNIST_MODEL_SRCS) $(PROFILE_SRCS) $(OBSERVABILITY_SRCS) \
-		-Lexternal/onnxruntime/lib -lonnxruntime \
-		-Wl,-rpath,'$$ORIGIN/../../external/onnxruntime/lib'
-	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
-		-o $(HOST_RUNTIME_MANAGER) \
+define build-runtime-binaries
+	mkdir -p $($(1)_BUILD_DIR)
+	$($(1)_CC) -static -O2 -Wall -Wextra $($(1)_CFLAGS) \
+		-o $($(1)_SUPERVISOR) runtime/supervisor.c $(RUNTIME_PATHS_SRCS) $(OBSERVABILITY_SRCS)
+	$($(1)_CC) -static -O2 -Wall -Wextra $($(1)_CFLAGS) \
+		-o $($(1)_DEMO_MODEL) $(DEMO_MODEL_SRCS) $(PROFILE_SRCS) $(OBSERVABILITY_SRCS)
+	$($(1)_CC) -static -O2 -Wall -Wextra $($(1)_CFLAGS) \
+		-o $($(1)_RUNTIME_MANAGER) \
 		$(RUNTIME_MANAGER_SRCS) \
 		$(WORKLOAD_ADAPTER_SRCS) \
 		$(PLATFORM_ADAPTER_SRCS) \
@@ -89,23 +75,57 @@ host-demo-build: mnist-assets
 		$(TRUST_CLIENT_SRCS) \
 		$(RUNTIME_PATHS_SRCS) \
 		$(OBSERVABILITY_SRCS)
-	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
-		-o $(HOST_TRUSTD) \
+	$($(1)_CC) -static -O2 -Wall -Wextra $($(1)_CFLAGS) \
+		-o $($(1)_TRUSTD) \
 		$(TRUSTD_SRCS) \
 		$(RUNTIME_PATHS_SRCS) \
 		$(OBSERVABILITY_SRCS)
-	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
-		-o $(HOST_TEARICTL) \
+	$($(1)_CC) -static -O2 -Wall -Wextra $($(1)_CFLAGS) \
+		-o $($(1)_TEARICTL) \
 		$(TEARICTL_SRCS) \
 		$(MANIFEST_SRCS) \
 		$(TRUST_CLIENT_SRCS) \
 		$(RUNTIME_PATHS_SRCS) \
 		$(OBSERVABILITY_SRCS)
-	gcc -static -O2 -Wall -Wextra -DTEAR_HOST_BUILD \
-		-o $(HOST_OPTD) \
+	$($(1)_CC) -static -O2 -Wall -Wextra $($(1)_CFLAGS) \
+		-o $($(1)_OPTD) \
 		$(OPTD_SRCS) \
 		$(RUNTIME_PATHS_SRCS) \
 		$(OBSERVABILITY_SRCS)
+endef
+
+define build-runtime-mnist
+	$($(1)_CC) -O2 -Wall -Wextra $($(1)_CFLAGS) \
+		-I$($(1)_ORT_INCLUDE) \
+		-o $($(1)_MNIST_MODEL) $(MNIST_MODEL_SRCS) $(PROFILE_SRCS) $(OBSERVABILITY_SRCS) \
+		-L$($(1)_ORT_LIB) \
+		-lonnxruntime \
+		-Wl,-rpath,$($(1)_ORT_RPATH)
+endef
+
+mnist-assets:
+	./scripts/fetch-mnist-onnx.sh
+
+#
+# Platform: host-demo
+#
+HOST_DEMO_BUILD_DIR := $(HOST_BUILD)
+HOST_DEMO_SUPERVISOR := $(HOST_SUPERVISOR)
+HOST_DEMO_DEMO_MODEL := $(HOST_DEMO_MODEL)
+HOST_DEMO_MNIST_MODEL := $(HOST_MNIST_MODEL)
+HOST_DEMO_RUNTIME_MANAGER := $(HOST_RUNTIME_MANAGER)
+HOST_DEMO_TRUSTD := $(HOST_TRUSTD)
+HOST_DEMO_TEARICTL := $(HOST_TEARICTL)
+HOST_DEMO_OPTD := $(HOST_OPTD)
+
+host-demo-build: mnist-assets
+	mkdir -p $(HOST_BUILD)
+	$(HOST_DEMO_CC) -static -O2 -Wall -Wextra $(HOST_DEMO_CFLAGS) \
+		-o $(HOST_HELLO) runtime/hello.c
+	$(call build-runtime-binaries,HOST_DEMO)
+ifeq ($(HOST_DEMO_ENABLE_ONNXRUNTIME),1)
+	$(call build-runtime-mnist,HOST_DEMO)
+endif
 
 host-demo-test: host-demo-build
 	./scripts/run-host-demo.sh "$(HOST_DEMO_PLAN)"
@@ -115,48 +135,23 @@ host-test: host-demo-test
 #
 # Platform: qemu-optee
 #
+QEMU_OPTEE_BUILD_DIR := $(BUILD)
+QEMU_OPTEE_SUPERVISOR := $(SUPERVISOR)
+QEMU_OPTEE_DEMO_MODEL := $(DEMO_MODEL)
+QEMU_OPTEE_MNIST_MODEL := $(MNIST_MODEL)
+QEMU_OPTEE_RUNTIME_MANAGER := $(RUNTIME_MANAGER)
+QEMU_OPTEE_TRUSTD := $(TRUSTD)
+QEMU_OPTEE_TEARICTL := $(TEARICTL)
+QEMU_OPTEE_OPTD := $(OPTD)
+
 $(OPTEE_TA_DEV_KIT_MK):
 	./scripts/optee-qemu.sh
 
-qemu-optee-binaries: mnist-assets
-	mkdir -p $(BUILD)
-	$(CC) -static -O2 -Wall -Wextra \
-		-o $(SUPERVISOR) runtime/supervisor.c $(RUNTIME_PATHS_SRCS) $(OBSERVABILITY_SRCS)
-	$(CC) -static -O2 -Wall -Wextra \
-		-o $(DEMO_MODEL) $(DEMO_MODEL_SRCS) $(PROFILE_SRCS) $(OBSERVABILITY_SRCS)
-	$(CC) -static -O2 -Wall -Wextra \
-		-o $(RUNTIME_MANAGER) \
-		$(RUNTIME_MANAGER_SRCS) \
-		$(WORKLOAD_ADAPTER_SRCS) \
-		$(PLATFORM_ADAPTER_SRCS) \
-		$(PROFILE_SRCS) \
-		$(MANIFEST_SRCS) \
-		$(TRUST_CLIENT_SRCS) \
-		$(RUNTIME_PATHS_SRCS) \
-		$(OBSERVABILITY_SRCS)
-	$(CC) -static -O2 -Wall -Wextra \
-		-o $(TRUSTD) \
-		$(TRUSTD_SRCS) \
-		$(RUNTIME_PATHS_SRCS) \
-		$(OBSERVABILITY_SRCS)
-	$(CC) -static -O2 -Wall -Wextra \
-		-o $(TEARICTL) \
-		$(TEARICTL_SRCS) \
-		$(MANIFEST_SRCS) \
-		$(TRUST_CLIENT_SRCS) \
-		$(RUNTIME_PATHS_SRCS) \
-		$(OBSERVABILITY_SRCS)
-	$(CC) -static -O2 -Wall -Wextra \
-		-o $(OPTD) \
-		$(OPTD_SRCS) \
-		$(RUNTIME_PATHS_SRCS) \
-		$(OBSERVABILITY_SRCS)
-	$(CC) -O2 -Wall -Wextra \
-		-I$(ORT_AARCH64_INCLUDE) \
-		-o $(MNIST_MODEL) $(MNIST_MODEL_SRCS) $(PROFILE_SRCS) $(OBSERVABILITY_SRCS) \
-		-L$(ORT_AARCH64_LIB) \
-		-lonnxruntime \
-		-Wl,-rpath,/usr/lib
+qemu-optee-runtime: mnist-assets
+	$(call build-runtime-binaries,QEMU_OPTEE)
+ifeq ($(QEMU_OPTEE_ENABLE_ONNXRUNTIME),1)
+	$(call build-runtime-mnist,QEMU_OPTEE)
+endif
 
 optee-ta: $(OPTEE_TA_DEV_KIT_MK)
 	mkdir -p $(TEAR_TA_BUILD)
@@ -167,7 +162,7 @@ optee-ta: $(OPTEE_TA_DEV_KIT_MK)
 
 optee-ca:
 	mkdir -p $(BUILD)/optee
-	$(CC) -O2 -Wall -Wextra \
+	$(QEMU_OPTEE_CC) -O2 -Wall -Wextra $(QEMU_OPTEE_CFLAGS) \
 		-Iruntime \
 		-I$(OPTEE_CLIENT_INCLUDE) \
 		-Ioptee/ta/tear_ta/include \
@@ -182,7 +177,7 @@ optee-ca:
 
 optee-trustd: optee-ca
 	mkdir -p $(BUILD)/optee
-	$(CC) -O2 -Wall -Wextra \
+	$(QEMU_OPTEE_CC) -O2 -Wall -Wextra $(QEMU_OPTEE_CFLAGS) \
 		-DTEAR_ENABLE_OPTEE \
 		-Iruntime \
 		-Ioptee/ca \
@@ -197,8 +192,13 @@ optee-trustd: optee-ca
 		-Wl,-rpath-link,$(OPTEE_CLIENT_LIB) \
 		-lteec
 
-qemu-optee-install: qemu-optee-binaries optee-ta optee-ca optee-trustd
+ifeq ($(QEMU_OPTEE_TRUST_BACKEND),optee)
+qemu-optee-install: qemu-optee-runtime optee-ta optee-ca optee-trustd
 	./scripts/install-optee-qemu-files.sh $(OPTEE_QEMU_DIR)
+else
+qemu-optee-install: qemu-optee-runtime
+	./scripts/install-optee-qemu-files.sh $(OPTEE_QEMU_DIR)
+endif
 
 qemu-optee-build: qemu-optee-install
 	./scripts/optee-qemu.sh
