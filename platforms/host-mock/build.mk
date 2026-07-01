@@ -21,11 +21,15 @@ HOST_MOCK_TRUSTD := $(HOST_MOCK_BUILD_DIR)/tear-trustd-host
 HOST_MOCK_TEARICTL := $(HOST_MOCK_BUILD_DIR)/tearictl-host
 HOST_MOCK_OPTD := $(HOST_MOCK_BUILD_DIR)/tear-optd-host
 
+define build-host-mock-runtime
+	$(call runtime-build-platform,HOST_MOCK)
+endef
+
 define build-host-mock-workloads
 	$(call workload-build-demo-model,HOST_MOCK)
 	$(call workload-build-mnist-model,HOST_MOCK)
 endef
 
-define build-host-mock-runtime
-	$(call runtime-build-platform,HOST_MOCK)
+define build-host-mock-secure-backend
+	@true
 endef

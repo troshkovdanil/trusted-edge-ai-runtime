@@ -14,49 +14,6 @@ include platforms/qemu-optee/build.mk
 	qemu-optee-build qemu-optee-run qemu-optee-test \
 	build test clean clean-all
 
-define build-secure-backend-mock
-	@true
-endef
-
-define build-secure-backend-optee
-	mkdir -p $($(1)_OPTEE_TA_BUILD)
-	$(MAKE) -C optee/ta/tear_ta \
-		O=$(abspath $($(1)_OPTEE_TA_BUILD)) \
-		TA_DEV_KIT_DIR=$($(1)_TA_DEV_KIT) \
-		CROSS_COMPILE=$($(1)_CROSS_COMPILE)
-	mkdir -p $($(1)_BUILD_DIR)/optee
-	$($(1)_CC) -O2 -Wall -Wextra $($(1)_CFLAGS) \
-		-Iruntime \
-		-I$($(1)_CLIENT_INCLUDE) \
-		-Ioptee/ta/tear_ta/include \
-		-Ioptee/ca \
-		-o $($(1)_OPTEE_CA) \
-		optee/ca/tear_ca.c \
-		optee/ca/tear_optee_client.c \
-		$(OBSERVABILITY_SRCS) \
-		-L$($(1)_CLIENT_LIB) \
-		-Wl,-rpath-link,$($(1)_CLIENT_LIB) \
-		-lteec
-	$($(1)_CC) -O2 -Wall -Wextra $($(1)_CFLAGS) \
-		-DTEAR_ENABLE_OPTEE \
-		-Iruntime \
-		-Ioptee/ca \
-		-Ioptee/ta/tear_ta/include \
-		-I$($(1)_CLIENT_INCLUDE) \
-		-o $($(1)_OPTEE_TRUSTD) \
-		$(TRUSTD_SRCS) \
-		$(RUNTIME_PATHS_SRCS) \
-		$(OBSERVABILITY_SRCS) \
-		optee/ca/tear_optee_client.c \
-		-L$($(1)_CLIENT_LIB) \
-		-Wl,-rpath-link,$($(1)_CLIENT_LIB) \
-		-lteec
-endef
-
-define build-secure-backend
-$(if $(filter optee,$($(1)_SECURE_BACKEND)),$(call build-secure-backend-optee,$(1)),$(call build-secure-backend-mock,$(1)))
-endef
-
 define install-qemu-optee
 	TEAR_PLATFORM_ID="$(QEMU_OPTEE_ID)" \
 	TEAR_PLATFORM_BUILD_DIR="$(QEMU_OPTEE_BUILD_DIR)" \
@@ -85,10 +42,10 @@ host-mock-build: workload-assets
 	mkdir -p $(HOST_MOCK_BUILD_DIR)
 	$(call build-host-mock-runtime)
 	$(call build-host-mock-workloads)
-	$(call build-secure-backend,HOST_MOCK)
+	$(call build-host-mock-secure-backend)
 
 host-mock-run:
-	$(HOST_MOCK_SUPERVISOR)
+	./scripts/run-host-mock.sh "$(HOST_MOCK_PLAN)"
 
 host-mock-test: host-mock-build
 	./scripts/run-host-mock.sh "$(HOST_MOCK_PLAN)"
@@ -98,7 +55,7 @@ qemu-optee-build: workload-assets
 	mkdir -p $(QEMU_OPTEE_BUILD_DIR)
 	$(call build-qemu-optee-runtime)
 	$(call build-qemu-optee-workloads)
-	$(call build-secure-backend,QEMU_OPTEE)
+	$(call build-qemu-optee-secure-backend)
 	$(call install-qemu-optee)
 	./scripts/optee-qemu.sh build
 
