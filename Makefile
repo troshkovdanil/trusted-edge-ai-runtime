@@ -144,8 +144,6 @@ mnist-assets:
 
 host-mock-build: mnist-assets
 	mkdir -p $(HOST_MOCK_BUILD_DIR)
-	$(HOST_MOCK_CC) -static -O2 -Wall -Wextra $(HOST_MOCK_CFLAGS) \
-		-o $(HOST_MOCK_HELLO) runtime/hello.c
 	$(call build-platform-runtime,HOST_MOCK)
 	$(call build-platform-workloads,HOST_MOCK)
 	$(call build-secure-backend,HOST_MOCK)
@@ -179,7 +177,6 @@ clean:
 	rm -rf $(BUILD)
 
 clean-all: clean
-	rm -rf $(BUILD)
 	rm -rf $(QEMU_OPTEE_DIR)
 	rm -rf external/onnxruntime
 	rm -rf external/onnxruntime-aarch64
