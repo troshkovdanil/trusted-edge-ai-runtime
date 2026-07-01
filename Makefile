@@ -20,9 +20,10 @@ PLATFORM_ADAPTER_SRCS := runtime/platform_adapter.c
 RUNTIME_MANAGER_SRCS := runtime/runtime_manager_main.c runtime/runtime_manager.c
 TEARICTL_SRCS := runtime/tearictl.c
 
-.PHONY: build test clean clean-all workload-assets \
+.PHONY: workload-assets \
 	host-mock-build host-mock-run host-mock-test \
-	qemu-optee-build qemu-optee-run qemu-optee-test
+	qemu-optee-build qemu-optee-run qemu-optee-test \
+	build test clean clean-all
 
 define build-platform-runtime
 	mkdir -p $($(1)_BUILD_DIR)
@@ -137,14 +138,6 @@ define install-qemu-optee
 	TEAR_CA="$(QEMU_OPTEE_OPTEE_CA)" \
 	TEAR_OPTEE_TRUSTD="$(QEMU_OPTEE_OPTEE_TRUSTD)" \
 	./scripts/install-optee-qemu-files.sh $(QEMU_OPTEE_DIR)
-endef
-
-define fetch-workload-assets-demo-model
-	@true
-endef
-
-define fetch-workload-assets-mnist-model
-	./scripts/fetch-mnist-onnx.sh
 endef
 
 define fetch-workload-assets
