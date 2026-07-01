@@ -36,3 +36,7 @@ define build-qemu-optee-workloads
 	$(call workload-build-demo-model,QEMU_OPTEE)
 	$(call workload-build-mnist-model,QEMU_OPTEE)
 endef
+
+define build-qemu-optee-runtime
+	$(call runtime-build-platform,QEMU_OPTEE)
+endef

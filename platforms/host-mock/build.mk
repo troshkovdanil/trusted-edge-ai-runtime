@@ -25,3 +25,7 @@ define build-host-mock-workloads
 	$(call workload-build-demo-model,HOST_MOCK)
 	$(call workload-build-mnist-model,HOST_MOCK)
 endef
+
+define build-host-mock-runtime
+	$(call runtime-build-platform,HOST_MOCK)
+endef

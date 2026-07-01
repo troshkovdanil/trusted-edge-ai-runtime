@@ -3,60 +3,16 @@
 BUILD := build
 WORKLOAD_BUILD := $(BUILD)/workloads
 
-include platforms/host-mock/build.mk
-include platforms/qemu-optee/build.mk
+include runtime/build.mk
 include workloads/demo-model/build.mk
 include workloads/mnist-model/build.mk
-
-RUNTIME_PATHS_SRCS := runtime/runtime_paths.c
-OBSERVABILITY_SRCS := runtime/observability.c
-PROFILE_SRCS := runtime/profile.c
-MANIFEST_SRCS := runtime/model_manifest.c
-TRUST_CLIENT_SRCS := runtime/trust_client.c
-TRUSTD_SRCS := runtime/trustd.c runtime/trusted_state.c
-OPTD_SRCS := runtime/optd.c runtime/optimizer_policy.c
-WORKLOAD_ADAPTER_SRCS := runtime/workload_adapter.c
-PLATFORM_ADAPTER_SRCS := runtime/platform_adapter.c
-RUNTIME_MANAGER_SRCS := runtime/runtime_manager_main.c runtime/runtime_manager.c
-TEARICTL_SRCS := runtime/tearictl.c
+include platforms/host-mock/build.mk
+include platforms/qemu-optee/build.mk
 
 .PHONY: workload-assets \
 	host-mock-build host-mock-run host-mock-test \
 	qemu-optee-build qemu-optee-run qemu-optee-test \
 	build test clean clean-all
-
-define build-platform-runtime
-	mkdir -p $($(1)_BUILD_DIR)
-	$($(1)_CC) -static -O2 -Wall -Wextra $($(1)_CFLAGS) \
-		-o $($(1)_SUPERVISOR) runtime/supervisor.c $(RUNTIME_PATHS_SRCS) $(OBSERVABILITY_SRCS)
-	$($(1)_CC) -static -O2 -Wall -Wextra $($(1)_CFLAGS) \
-		-o $($(1)_RUNTIME_MANAGER) \
-		$(RUNTIME_MANAGER_SRCS) \
-		$(WORKLOAD_ADAPTER_SRCS) \
-		$(PLATFORM_ADAPTER_SRCS) \
-		$(PROFILE_SRCS) \
-		$(MANIFEST_SRCS) \
-		$(TRUST_CLIENT_SRCS) \
-		$(RUNTIME_PATHS_SRCS) \
-		$(OBSERVABILITY_SRCS)
-	$($(1)_CC) -static -O2 -Wall -Wextra $($(1)_CFLAGS) \
-		-o $($(1)_TRUSTD) \
-		$(TRUSTD_SRCS) \
-		$(RUNTIME_PATHS_SRCS) \
-		$(OBSERVABILITY_SRCS)
-	$($(1)_CC) -static -O2 -Wall -Wextra $($(1)_CFLAGS) \
-		-o $($(1)_TEARICTL) \
-		$(TEARICTL_SRCS) \
-		$(MANIFEST_SRCS) \
-		$(TRUST_CLIENT_SRCS) \
-		$(RUNTIME_PATHS_SRCS) \
-		$(OBSERVABILITY_SRCS)
-	$($(1)_CC) -static -O2 -Wall -Wextra $($(1)_CFLAGS) \
-		-o $($(1)_OPTD) \
-		$(OPTD_SRCS) \
-		$(RUNTIME_PATHS_SRCS) \
-		$(OBSERVABILITY_SRCS)
-endef
 
 define build-secure-backend-mock
 	@true
@@ -127,7 +83,7 @@ workload-assets:
 
 host-mock-build: workload-assets
 	mkdir -p $(HOST_MOCK_BUILD_DIR)
-	$(call build-platform-runtime,HOST_MOCK)
+	$(call build-host-mock-runtime)
 	$(call build-host-mock-workloads)
 	$(call build-secure-backend,HOST_MOCK)
 
@@ -140,7 +96,7 @@ host-mock-test: host-mock-build
 qemu-optee-build: workload-assets
 	./scripts/optee-qemu.sh prepare
 	mkdir -p $(QEMU_OPTEE_BUILD_DIR)
-	$(call build-platform-runtime,QEMU_OPTEE)
+	$(call build-qemu-optee-runtime)
 	$(call build-qemu-optee-workloads)
 	$(call build-secure-backend,QEMU_OPTEE)
 	$(call install-qemu-optee)
