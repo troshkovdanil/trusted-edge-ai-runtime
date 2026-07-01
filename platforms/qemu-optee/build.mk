@@ -31,6 +31,11 @@ QEMU_OPTEE_OPTEE_TA_BUILD := $(QEMU_OPTEE_BUILD_DIR)/optee/tear_ta
 QEMU_OPTEE_OPTEE_CA := $(QEMU_OPTEE_BUILD_DIR)/optee/tear-optee-ca
 QEMU_OPTEE_OPTEE_TRUSTD := $(QEMU_OPTEE_BUILD_DIR)/optee/tear-trustd-optee
 
+define build-qemu-optee-prepare
+	./scripts/optee-qemu.sh prepare
+	mkdir -p $(QEMU_OPTEE_BUILD_DIR)
+endef
+
 define build-qemu-optee-runtime
 	$(call runtime-build-platform,QEMU_OPTEE)
 endef
@@ -73,4 +78,25 @@ define build-qemu-optee-secure-backend
 		-L$(QEMU_OPTEE_CLIENT_LIB) \
 		-Wl,-rpath-link,$(QEMU_OPTEE_CLIENT_LIB) \
 		-lteec
+endef
+
+define install-qemu-optee
+	TEAR_PLATFORM_ID="$(QEMU_OPTEE_ID)" \
+	TEAR_PLATFORM_BUILD_DIR="$(QEMU_OPTEE_BUILD_DIR)" \
+	TEAR_SUPERVISOR_BIN="$(QEMU_OPTEE_SUPERVISOR)" \
+	TEAR_TRUSTD_BIN="$(QEMU_OPTEE_TRUSTD)" \
+	TEARICTL_BIN="$(QEMU_OPTEE_TEARICTL)" \
+	TEAR_OPTD_BIN="$(QEMU_OPTEE_OPTD)" \
+	TEAR_RUNTIME_MANAGER_BIN="$(QEMU_OPTEE_RUNTIME_MANAGER)" \
+	TEAR_DEMO_MODEL_BIN="$(WORKLOAD_BUILD)/$(QEMU_OPTEE_ID)/$(DEMO_MODEL_ID)-$(QEMU_OPTEE_ID)" \
+	TEAR_MNIST_MODEL_BIN="$(WORKLOAD_BUILD)/$(QEMU_OPTEE_ID)/$(MNIST_MODEL_ID)-$(QEMU_OPTEE_ID)" \
+	TEAR_TA="$(QEMU_OPTEE_OPTEE_TA_BUILD)/7c9d7b3a-2f4e-4c8f-9a11-6b4454454152.ta" \
+	TEAR_CA="$(QEMU_OPTEE_OPTEE_CA)" \
+	TEAR_OPTEE_TRUSTD="$(QEMU_OPTEE_OPTEE_TRUSTD)" \
+	./scripts/install-optee-qemu-files.sh $(QEMU_OPTEE_DIR)
+endef
+
+define build-qemu-optee-finalize
+	$(call install-qemu-optee)
+	./scripts/optee-qemu.sh build
 endef
