@@ -13,10 +13,11 @@
 #include <unistd.h>
 
 #ifdef TEAR_HOST_BUILD
-#define DEFAULT_EVENT_PATH "build/host/tear-optd-events.log"
+#define TEAR_PLATFORM_DIR "build/platforms/host-mock"
 #else
-#define DEFAULT_EVENT_PATH "/tmp/tear-optd-events.log"
+#define TEAR_PLATFORM_DIR "/tmp"
 #endif
+#define DEFAULT_EVENT_PATH TEAR_PLATFORM_DIR "/tear-optd-events.log"
 
 #define TEAR_COMPONENT "optd"
 

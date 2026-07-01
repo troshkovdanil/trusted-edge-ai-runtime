@@ -21,10 +21,11 @@
 #define TEAR_TRUSTED_DECISIONS "/tmp/tear-trusted-decisions"
 
 #ifdef TEAR_HOST_BUILD
-#define DEFAULT_EVENT_PATH "build/host/tear-trustd-events.log"
+#define TEAR_PLATFORM_DIR "build/platforms/host-mock"
 #else
-#define DEFAULT_EVENT_PATH "/tmp/tear-trustd-events.log"
+#define TEAR_PLATFORM_DIR "/tmp"
 #endif
+#define DEFAULT_EVENT_PATH TEAR_PLATFORM_DIR "/tear-trustd-events.log"
 
 enum tear_trust_backend {
     TEAR_TRUST_BACKEND_FILE,

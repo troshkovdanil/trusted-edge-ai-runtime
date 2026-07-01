@@ -20,8 +20,8 @@ PLATFORM_ADAPTER_SRCS := runtime/platform_adapter.c
 RUNTIME_MANAGER_SRCS := runtime/runtime_manager_main.c runtime/runtime_manager.c
 TEARICTL_SRCS := runtime/tearictl.c
 
-.PHONY: build test full-verify clean clean-all mnist-assets \
-	host-mock-build host-mock-test host-test \
+.PHONY: build test clean clean-all mnist-assets \
+	host-mock-build host-mock-run host-mock-test \
 	qemu-optee-build qemu-optee-run qemu-optee-test
 
 define build-platform-runtime
@@ -150,6 +150,9 @@ host-mock-build: mnist-assets
 	$(call build-platform-workloads,HOST_MOCK)
 	$(call build-secure-backend,HOST_MOCK)
 
+host-mock-run:
+	$(HOST_MOCK_SUPERVISOR)
+
 host-mock-test: host-mock-build
 	./scripts/run-host-mock.sh "$(HOST_MOCK_PLAN)"
 
@@ -173,14 +176,9 @@ build: host-mock-build qemu-optee-build
 test: host-mock-test qemu-optee-test
 
 clean:
-	rm -rf $(BUILD)/rootfs
-	rm -f $(BUILD)/optee-normal-world.log $(BUILD)/optee-secure-world.log
-	rm -rf $(BUILD)/optee
-	rm -rf $(BUILD)/host
-	rm -rf $(BUILD)/platforms
-	rm -rf $(BUILD)/workloads
+	rm -rf $(BUILD)
 
-clean-all:
+clean-all: clean
 	rm -rf $(BUILD)
 	rm -rf $(QEMU_OPTEE_DIR)
 	rm -rf external/onnxruntime

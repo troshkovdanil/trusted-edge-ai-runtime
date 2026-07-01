@@ -18,10 +18,11 @@
 #define TEAR_EVENT_PATH_MAX 256
 
 #ifdef TEAR_HOST_BUILD
-#define DEFAULT_EVENT_PATH "build/host/tear-mnist-model-events.log"
+#define TEAR_PLATFORM_DIR "build/platforms/host-mock"
 #else
-#define DEFAULT_EVENT_PATH "/tmp/tear-mnist-model-events.log"
+#define TEAR_PLATFORM_DIR "/tmp"
 #endif
+#define DEFAULT_EVENT_PATH TEAR_PLATFORM_DIR "/tear-mnist-model-events.log"
 
 static const char *MODEL_PATH = "models/mnist/mnist.onnx";
 

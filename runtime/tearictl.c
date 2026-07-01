@@ -16,10 +16,11 @@
 #define TEAR_COMPONENT "tearictl"
 
 #ifdef TEAR_HOST_BUILD
-#define DEFAULT_EVENT_PATH "build/host/tearictl-events.log"
+#define TEAR_PLATFORM_DIR "build/platforms/host-mock"
 #else
-#define DEFAULT_EVENT_PATH "/tmp/tearictl-events.log"
+#define TEAR_PLATFORM_DIR "/tmp"
 #endif
+#define DEFAULT_EVENT_PATH TEAR_PLATFORM_DIR "/tearictl-events.log"
 
 static void tearictl_event(const char *event)
 {

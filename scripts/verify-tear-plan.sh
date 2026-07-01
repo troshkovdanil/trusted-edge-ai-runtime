@@ -8,7 +8,7 @@ MARKER="TEAR_PLAN_EVENT_METRIC_VERIFY_OK"
 
 case "$PLATFORM" in
 host-mock)
-    LOG="$ROOT_DIR/build/host/host-mock-verify.log"
+    LOG="$ROOT_DIR/build/platforms/host-mock/host-mock-verify.log"
     ;;
 
 qemu-optee)

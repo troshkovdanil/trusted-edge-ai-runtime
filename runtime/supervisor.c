@@ -15,23 +15,35 @@
 #include <unistd.h>
 
 #ifdef TEAR_HOST_BUILD
-#define TRUSTD_PATH "build/host/tear-trustd-host"
-#define OPTD_PATH "build/host/tear-optd-host"
-#define TEARICTL_PATH "build/host/tearictl-host"
-#define RUNTIME_MANAGER_PATH "build/host/tear-runtime-manager-host"
-#define DEFAULT_EVENT_PATH "build/host/tear-supervisor-events.log"
-#define TRUSTD_EVENT_PATH "build/host/tear-trustd-events.log"
-#define OPTD_EVENT_PATH "build/host/tear-optd-events.log"
-#define RUNTIME_MANAGER_EVENT_PATH "build/host/tear-runtime-manager-events.log"
+
+#define TEAR_BIN_DIR "build/platforms/host-mock"
+#define TEAR_LOG_DIR "build/platforms/host-mock"
+
+#define TRUSTD_PATH TEAR_BIN_DIR "/tear-trustd-host"
+#define OPTD_PATH TEAR_BIN_DIR "/tear-optd-host"
+#define TEARICTL_PATH TEAR_BIN_DIR "/tearictl-host"
+#define RUNTIME_MANAGER_PATH TEAR_BIN_DIR "/tear-runtime-manager-host"
+
+#define DEFAULT_EVENT_PATH TEAR_LOG_DIR "/tear-supervisor-events.log"
+#define TRUSTD_EVENT_PATH TEAR_LOG_DIR "/tear-trustd-events.log"
+#define OPTD_EVENT_PATH TEAR_LOG_DIR "/tear-optd-events.log"
+#define RUNTIME_MANAGER_EVENT_PATH TEAR_LOG_DIR "/tear-runtime-manager-events.log"
+
 #else
-#define TRUSTD_PATH "/bin/tear-trustd"
-#define OPTD_PATH "/bin/tear-optd"
-#define TEARICTL_PATH "/bin/tearictl"
-#define RUNTIME_MANAGER_PATH "/bin/tear-runtime-manager"
-#define DEFAULT_EVENT_PATH "/tmp/tear-supervisor-events.log"
-#define TRUSTD_EVENT_PATH "/tmp/tear-trustd-events.log"
-#define OPTD_EVENT_PATH "/tmp/tear-optd-events.log"
-#define RUNTIME_MANAGER_EVENT_PATH "/tmp/tear-runtime-manager-events.log"
+
+#define TEAR_BIN_DIR "/bin"
+#define TEAR_LOG_DIR "/tmp"
+
+#define TRUSTD_PATH TEAR_BIN_DIR "/tear-trustd"
+#define OPTD_PATH TEAR_BIN_DIR "/tear-optd"
+#define TEARICTL_PATH TEAR_BIN_DIR "/tearictl"
+#define RUNTIME_MANAGER_PATH TEAR_BIN_DIR "/tear-runtime-manager"
+
+#define DEFAULT_EVENT_PATH TEAR_LOG_DIR "/tear-supervisor-events.log"
+#define TRUSTD_EVENT_PATH TEAR_LOG_DIR "/tear-trustd-events.log"
+#define OPTD_EVENT_PATH TEAR_LOG_DIR "/tear-optd-events.log"
+#define RUNTIME_MANAGER_EVENT_PATH TEAR_LOG_DIR "/tear-runtime-manager-events.log"
+
 #endif
 
 #define TEAR_COMPONENT "supervisor"

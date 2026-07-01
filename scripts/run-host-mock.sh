@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PLAN="${1:-plans/host-mock.plan}"
 
-HOST_BUILD="$ROOT_DIR/build/host"
+HOST_BUILD="$ROOT_DIR/build/platforms/host-mock"
 SUPERVISOR="$HOST_BUILD/tear-supervisor-host"
 TEARICTL="$HOST_BUILD/tearictl-host"
 

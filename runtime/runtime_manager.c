@@ -23,10 +23,11 @@
 #define TEAR_COMPONENT "runtime_manager"
 
 #ifdef TEAR_HOST_BUILD
-#define DEFAULT_EVENT_PATH "build/host/tear-runtime-manager-events.log"
+#define TEAR_PLATFORM_DIR "build/platforms/host-mock"
 #else
-#define DEFAULT_EVENT_PATH "/tmp/tear-runtime-manager-events.log"
+#define TEAR_PLATFORM_DIR "/tmp"
 #endif
+#define DEFAULT_EVENT_PATH TEAR_PLATFORM_DIR "/tear-runtime-manager-events.log"
 
 struct tear_run_config {
     const char *workload;
