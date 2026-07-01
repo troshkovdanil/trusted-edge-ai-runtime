@@ -20,3 +20,8 @@ HOST_MOCK_RUNTIME_MANAGER := $(HOST_MOCK_BUILD_DIR)/tear-runtime-manager-host
 HOST_MOCK_TRUSTD := $(HOST_MOCK_BUILD_DIR)/tear-trustd-host
 HOST_MOCK_TEARICTL := $(HOST_MOCK_BUILD_DIR)/tearictl-host
 HOST_MOCK_OPTD := $(HOST_MOCK_BUILD_DIR)/tear-optd-host
+
+define build-host-mock-workloads
+	$(call workload-build-demo-model,HOST_MOCK)
+	$(call workload-build-mnist-model,HOST_MOCK)
+endef

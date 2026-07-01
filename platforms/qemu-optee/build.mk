@@ -31,3 +31,8 @@ QEMU_OPTEE_OPTD := $(QEMU_OPTEE_BUILD_DIR)/tear-optd
 QEMU_OPTEE_OPTEE_TA_BUILD := $(QEMU_OPTEE_BUILD_DIR)/optee/tear_ta
 QEMU_OPTEE_OPTEE_CA := $(QEMU_OPTEE_BUILD_DIR)/optee/tear-optee-ca
 QEMU_OPTEE_OPTEE_TRUSTD := $(QEMU_OPTEE_BUILD_DIR)/optee/tear-trustd-optee
+
+define build-qemu-optee-workloads
+	$(call workload-build-demo-model,QEMU_OPTEE)
+	$(call workload-build-mnist-model,QEMU_OPTEE)
+endef

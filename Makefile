@@ -58,29 +58,6 @@ define build-platform-runtime
 		$(OBSERVABILITY_SRCS)
 endef
 
-define build-platform-demo-model
-	mkdir -p $(WORKLOAD_BUILD)/$($(1)_ID)
-	$($(1)_CC) -static -O2 -Wall -Wextra $($(1)_CFLAGS) \
-		-o $(WORKLOAD_BUILD)/$($(1)_ID)/$(DEMO_MODEL_ID)-$($(1)_ID) \
-		$(DEMO_MODEL_SRCS) $(PROFILE_SRCS) $(OBSERVABILITY_SRCS)
-endef
-
-define build-platform-mnist-model
-	mkdir -p $(WORKLOAD_BUILD)/$($(1)_ID)
-	$($(1)_CC) -O2 -Wall -Wextra $($(1)_CFLAGS) \
-		-I$($(1)_ORT_INCLUDE) \
-		-o $(WORKLOAD_BUILD)/$($(1)_ID)/$(MNIST_MODEL_ID)-$($(1)_ID) \
-		$(MNIST_MODEL_SRCS) $(PROFILE_SRCS) $(OBSERVABILITY_SRCS) \
-		-L$($(1)_ORT_LIB) \
-		-lonnxruntime \
-		-Wl,-rpath,$($(1)_ORT_RPATH)
-endef
-
-define build-platform-workloads
-	$(call build-platform-demo-model,$(1))
-	$(if $(filter 1,$($(1)_ENABLE_ONNXRUNTIME)),$(call build-platform-mnist-model,$(1)),)
-endef
-
 define build-secure-backend-mock
 	@true
 endef
@@ -151,7 +128,7 @@ workload-assets:
 host-mock-build: workload-assets
 	mkdir -p $(HOST_MOCK_BUILD_DIR)
 	$(call build-platform-runtime,HOST_MOCK)
-	$(call build-platform-workloads,HOST_MOCK)
+	$(call build-host-mock-workloads)
 	$(call build-secure-backend,HOST_MOCK)
 
 host-mock-run:
@@ -164,7 +141,7 @@ qemu-optee-build: workload-assets
 	./scripts/optee-qemu.sh prepare
 	mkdir -p $(QEMU_OPTEE_BUILD_DIR)
 	$(call build-platform-runtime,QEMU_OPTEE)
-	$(call build-platform-workloads,QEMU_OPTEE)
+	$(call build-qemu-optee-workloads)
 	$(call build-secure-backend,QEMU_OPTEE)
 	$(call install-qemu-optee)
 	./scripts/optee-qemu.sh build
