@@ -20,7 +20,7 @@ PLATFORM_ADAPTER_SRCS := runtime/platform_adapter.c
 RUNTIME_MANAGER_SRCS := runtime/runtime_manager_main.c runtime/runtime_manager.c
 TEARICTL_SRCS := runtime/tearictl.c
 
-.PHONY: build test clean clean-all mnist-assets \
+.PHONY: build test clean clean-all workload-assets \
 	host-mock-build host-mock-run host-mock-test \
 	qemu-optee-build qemu-optee-run qemu-optee-test
 
@@ -139,10 +139,23 @@ define install-qemu-optee
 	./scripts/install-optee-qemu-files.sh $(QEMU_OPTEE_DIR)
 endef
 
-mnist-assets:
-	./scripts/fetch-mnist-onnx.sh
+define fetch-workload-assets-demo-model
+	@true
+endef
 
-host-mock-build: mnist-assets
+define fetch-workload-assets-mnist-model
+	./scripts/fetch-mnist-onnx.sh
+endef
+
+define fetch-workload-assets
+	$(call fetch-workload-assets-demo-model)
+	$(call fetch-workload-assets-mnist-model)
+endef
+
+workload-assets:
+	$(call fetch-workload-assets)
+
+host-mock-build: workload-assets
 	mkdir -p $(HOST_MOCK_BUILD_DIR)
 	$(call build-platform-runtime,HOST_MOCK)
 	$(call build-platform-workloads,HOST_MOCK)
@@ -154,7 +167,7 @@ host-mock-run:
 host-mock-test: host-mock-build
 	./scripts/run-host-mock.sh "$(HOST_MOCK_PLAN)"
 
-qemu-optee-build: mnist-assets
+qemu-optee-build: workload-assets
 	./scripts/optee-qemu.sh prepare
 	mkdir -p $(QEMU_OPTEE_BUILD_DIR)
 	$(call build-platform-runtime,QEMU_OPTEE)
