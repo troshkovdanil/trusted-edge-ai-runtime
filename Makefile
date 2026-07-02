@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 BUILD := build
-WORKLOAD_BUILD := $(BUILD)/workloads
 
 include runtime/build.mk
 include workloads/demo-model/build.mk
@@ -9,20 +8,12 @@ include workloads/mnist-model/build.mk
 include platforms/host-mock/build.mk
 include platforms/qemu-optee/build.mk
 
-.PHONY: workload-assets \
+.PHONY: \
 	host-mock-build host-mock-run host-mock-test \
 	qemu-optee-build qemu-optee-run qemu-optee-test \
 	build test clean clean-all
 
-define fetch-workload-assets
-	$(call fetch-workload-assets-demo-model)
-	$(call fetch-workload-assets-mnist-model)
-endef
-
-workload-assets:
-	$(call fetch-workload-assets)
-
-host-mock-build: workload-assets
+host-mock-build:
 	$(call build-host-mock-prepare)
 	$(call build-host-mock-runtime)
 	$(call build-host-mock-workloads)
@@ -35,7 +26,7 @@ host-mock-run:
 host-mock-test: host-mock-build
 	$(call test-host-mock)
 
-qemu-optee-build: workload-assets
+qemu-optee-build:
 	$(call build-qemu-optee-prepare)
 	$(call build-qemu-optee-runtime)
 	$(call build-qemu-optee-workloads)

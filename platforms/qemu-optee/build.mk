@@ -4,6 +4,7 @@ QEMU_OPTEE_ID := qemu-optee
 QEMU_OPTEE_ARCH := aarch64
 QEMU_OPTEE_PLAN := /etc/tear/qemu-optee.plan
 QEMU_OPTEE_BUILD_DIR := $(BUILD)/platforms/$(QEMU_OPTEE_ID)
+QEMU_OPTEE_WORKLOAD_BUILD := $(BUILD)/workloads/$(QEMU_OPTEE_ID)
 
 QEMU_OPTEE_CC := aarch64-linux-gnu-gcc
 QEMU_OPTEE_CFLAGS :=
@@ -32,8 +33,11 @@ QEMU_OPTEE_OPTEE_CA := $(QEMU_OPTEE_BUILD_DIR)/optee/tear-optee-ca
 QEMU_OPTEE_OPTEE_TRUSTD := $(QEMU_OPTEE_BUILD_DIR)/optee/tear-trustd-optee
 
 define build-qemu-optee-prepare
+	$(call fetch-workload-assets-demo-model)
+	$(call fetch-workload-assets-mnist-model)
 	./scripts/optee-qemu.sh prepare
 	mkdir -p $(QEMU_OPTEE_BUILD_DIR)
+	mkdir -p $(QEMU_OPTEE_WORKLOAD_BUILD)
 endef
 
 define build-qemu-optee-runtime
@@ -88,8 +92,8 @@ define install-qemu-optee
 	TEARICTL_BIN="$(QEMU_OPTEE_TEARICTL)" \
 	TEAR_OPTD_BIN="$(QEMU_OPTEE_OPTD)" \
 	TEAR_RUNTIME_MANAGER_BIN="$(QEMU_OPTEE_RUNTIME_MANAGER)" \
-	TEAR_DEMO_MODEL_BIN="$(WORKLOAD_BUILD)/$(QEMU_OPTEE_ID)/$(DEMO_MODEL_ID)-$(QEMU_OPTEE_ID)" \
-	TEAR_MNIST_MODEL_BIN="$(WORKLOAD_BUILD)/$(QEMU_OPTEE_ID)/$(MNIST_MODEL_ID)-$(QEMU_OPTEE_ID)" \
+	TEAR_DEMO_MODEL_BIN="$(QEMU_OPTEE_WORKLOAD_BUILD)/$(DEMO_MODEL_ID)-$(QEMU_OPTEE_ID)" \
+	TEAR_MNIST_MODEL_BIN="$(QEMU_OPTEE_WORKLOAD_BUILD)/$(MNIST_MODEL_ID)-$(QEMU_OPTEE_ID)" \
 	TEAR_TA="$(QEMU_OPTEE_OPTEE_TA_BUILD)/7c9d7b3a-2f4e-4c8f-9a11-6b4454454152.ta" \
 	TEAR_CA="$(QEMU_OPTEE_OPTEE_CA)" \
 	TEAR_OPTEE_TRUSTD="$(QEMU_OPTEE_OPTEE_TRUSTD)" \

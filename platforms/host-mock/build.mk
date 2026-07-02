@@ -4,6 +4,7 @@ HOST_MOCK_ID := host-mock
 HOST_MOCK_ARCH := x86_64
 HOST_MOCK_PLAN := plans/host-mock.plan
 HOST_MOCK_BUILD_DIR := $(BUILD)/platforms/$(HOST_MOCK_ID)
+HOST_MOCK_WORKLOAD_BUILD := $(BUILD)/workloads/$(HOST_MOCK_ID)
 
 HOST_MOCK_CC := gcc
 HOST_MOCK_CFLAGS := -DTEAR_HOST_BUILD
@@ -22,7 +23,10 @@ HOST_MOCK_TEARICTL := $(HOST_MOCK_BUILD_DIR)/tearictl-host
 HOST_MOCK_OPTD := $(HOST_MOCK_BUILD_DIR)/tear-optd-host
 
 define build-host-mock-prepare
+	$(call fetch-workload-assets-demo-model)
+	$(call fetch-workload-assets-mnist-model)
 	mkdir -p $(HOST_MOCK_BUILD_DIR)
+	mkdir -p $(HOST_MOCK_WORKLOAD_BUILD)
 endef
 
 define build-host-mock-runtime
