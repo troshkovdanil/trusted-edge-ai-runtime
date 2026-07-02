@@ -1,5 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 
+# Workload naming convention:
+#   <workload-name>-<workload-type>
+#
+# This workload is:
+#   mnist-model
+
 MNIST_MODEL_ID := mnist-model
 MNIST_MODEL_SRCS := runtime/mnist_model.c
 

@@ -2,12 +2,25 @@
 
 BUILD := build
 
+# Common runtime build rules.
 include runtime/build.mk
+
+# Workload build rules.
 include workloads/demo-model/build.mk
 include workloads/mnist-model/build.mk
+
+# Platform build rules.
 include platforms/host-mock/build.mk
 include platforms/qemu-optee/build.mk
 
+# Generic platform lifecycle.
+#
+# A platform named "<platform>-<secure-backend>" must provide:
+#   build-<platform>-<secure-backend>-prepare
+#   build-<platform>-<secure-backend>-runtime
+#   build-<platform>-<secure-backend>-workloads
+#   build-<platform>-<secure-backend>-secure-backend
+#   build-<platform>-<secure-backend>-finalize
 define build-platform
 	$(call build-$(1)-prepare)
 	$(call build-$(1)-runtime)
@@ -16,10 +29,14 @@ define build-platform
 	$(call build-$(1)-finalize)
 endef
 
+# Generic platform run hook:
+#   run-<platform>-<secure-backend>
 define run-platform
 	$(call run-$(1))
 endef
 
+# Generic platform test hook:
+#   test-<platform>-<secure-backend>
 define test-platform
 	$(call test-$(1))
 endef

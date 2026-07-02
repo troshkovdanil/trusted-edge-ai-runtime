@@ -1,5 +1,20 @@
 # SPDX-License-Identifier: Apache-2.0
 
+# Platform-neutral TEAR runtime build rules.
+#
+# This file should not know which platforms exist. It only knows how to build
+# common TEAR runtime binaries for a platform prefix passed by the caller.
+#
+# Expected platform variables for prefix $(1):
+#   $($(1)_CC)
+#   $($(1)_CFLAGS)
+#   $($(1)_BUILD_DIR)
+#   $($(1)_SUPERVISOR)
+#   $($(1)_RUNTIME_MANAGER)
+#   $($(1)_TRUSTD)
+#   $($(1)_TEARICTL)
+#   $($(1)_OPTD)
+
 RUNTIME_PATHS_SRCS := runtime/runtime_paths.c
 OBSERVABILITY_SRCS := runtime/observability.c
 PROFILE_SRCS := runtime/profile.c

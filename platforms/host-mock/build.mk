@@ -1,5 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 
+# Platform naming convention:
+#   <platform>-<secure-backend>
+#
+# This platform is:
+#   host-mock
+#
+# Meaning:
+#   host platform with mock secure backend.
+
 HOST_MOCK_ID := host-mock
 HOST_MOCK_ARCH := x86_64
 HOST_MOCK_PLAN := plans/host-mock.plan

@@ -1,5 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 
+# Platform naming convention:
+#   <platform>-<secure-backend>
+#
+# This platform is:
+#   qemu-optee
+#
+# Meaning:
+#   QEMU platform with OP-TEE secure backend.
+
 QEMU_OPTEE_ID := qemu-optee
 QEMU_OPTEE_ARCH := aarch64
 QEMU_OPTEE_PLAN := /etc/tear/qemu-optee.plan

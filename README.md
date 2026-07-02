@@ -100,39 +100,41 @@ Install required build dependencies:
 ./scripts/install-deps-ubuntu.sh
 ```
 
-Build ARM64 and host-native components:
+Build all configured platforms:
 
 ```bash
 make build
-make host-build
 ```
 
-Run ARM64 validation:
+Run all configured platform tests:
 
 ```bash
 make test
-make qemu-system
-make verify
 ```
 
-Run all validation suites:
+Build and test the host mock platform:
 
 ```bash
-make full-verify
+make host-mock-build
+make host-mock-test
 ```
 
-Run OP-TEE validation:
+Build and test the OP-TEE QEMU platform:
 
 ```bash
-make optee-qemu-test
+make qemu-optee-build
+make qemu-optee-test
 ```
 
-This boots an OP-TEE-enabled ARM64 QEMU environment and validates trusted
-state operations through the TEAR Trusted Application.
+Run an already-built OP-TEE QEMU image:
 
-### Host-Native Development
+```bash
+make qemu-optee-run
+```
 
-For faster iteration on workloads and runtime components, TEAR provides a host-native x86 execution path.
+### Host Mock Development
+
+For faster iteration on workloads and runtime components, TEAR provides a host-native x86 execution path using the mock secure backend.
 
 This enables rapid development of:
 
@@ -141,37 +143,18 @@ This enables rapid development of:
 - adaptive optimization logic
 - workload integration
 
-while QEMU ARM64 remains the canonical embedded validation target.
+while OP-TEE QEMU remains the canonical trusted execution validation target.
 
-Build host-native binaries:
+Build host mock binaries:
 
 ```bash
-make host-build
+make host-mock-build
 ```
 
-Run basic host validation:
+Run host mock validation:
 
 ```bash
-make host-test
-make host-supervisor-test
-```
-
-Run ONNX Runtime MNIST workload validation:
-
-```bash
-make host-mnist-test
-```
-
-Run adaptive optimization integration tests:
-
-```bash
-make host-adaptive-supervisor-test
-```
-
-Run the complete validation suite:
-
-```bash
-make full-verify
+make host-mock-test
 ```
 
 ### Adaptive Optimization Demonstration
@@ -198,6 +181,231 @@ weak7
 noise
   -> reject_input
 ```
+
+## Build Model: Platforms and Workloads
+
+TEAR uses a small modular build model:
+
+```text
+runtime/build.mk
+  -> common TEAR runtime binaries
+
+workloads/<workload-name>-<workload-type>/build.mk
+  -> workload source files, workload assets, and workload build rule
+
+platforms/<platform>-<secure-backend>/build.mk
+  -> platform toolchain, output paths, workload selection, secure backend,
+     run/test integration
+```
+
+### Naming model
+
+Platforms use:
+
+```text
+<platform>-<secure-backend>
+```
+
+Current examples:
+
+```text
+host-mock
+qemu-optee
+```
+
+Meaning:
+
+- `host-mock` = host platform with mock secure backend
+- `qemu-optee` = QEMU platform with OP-TEE secure backend
+
+Workloads use:
+
+```text
+<workload-name>-<workload-type>
+```
+
+Current examples:
+
+```text
+demo-model
+mnist-model
+```
+
+Future examples could be:
+
+```text
+camera-app
+detector-model
+sensor-fusion-app
+```
+
+This keeps build outputs readable:
+
+```text
+build/platforms/<platform>-<secure-backend>/
+build/workloads/<platform>-<secure-backend>/<workload-name>-<workload-type>-<platform>-<secure-backend>
+```
+
+For example:
+
+```text
+build/platforms/host-mock/tear-supervisor-host
+build/workloads/host-mock/mnist-model-host-mock
+build/platforms/qemu-optee/tear-supervisor
+build/workloads/qemu-optee/mnist-model-qemu-optee
+```
+
+### Platform lifecycle hooks
+
+The top-level `Makefile` treats each platform as a target with a common lifecycle.
+
+A platform must provide these hooks:
+
+```text
+build-<platform>-prepare
+build-<platform>-runtime
+build-<platform>-workloads
+build-<platform>-secure-backend
+build-<platform>-finalize
+run-<platform>
+test-<platform>
+```
+
+The top-level `Makefile` calls them through generic helpers:
+
+```text
+build-platform
+run-platform
+test-platform
+```
+
+This means adding a new platform mostly means implementing the same hook set in:
+
+```text
+platforms/<platform>-<secure-backend>/build.mk
+```
+
+### Adding a new platform
+
+To add a new platform:
+
+1. Create a new directory:
+
+```text
+platforms/<platform>-<secure-backend>/
+```
+
+2. Add:
+
+```text
+platforms/<platform>-<secure-backend>/build.mk
+```
+
+3. Define platform variables:
+
+```text
+<PLATFORM>_ID
+<PLATFORM>_ARCH
+<PLATFORM>_PLAN
+<PLATFORM>_BUILD_DIR
+<PLATFORM>_WORKLOAD_BUILD
+<PLATFORM>_CC
+<PLATFORM>_CFLAGS
+<PLATFORM>_SUPERVISOR
+<PLATFORM>_RUNTIME_MANAGER
+<PLATFORM>_TRUSTD
+<PLATFORM>_TEARICTL
+<PLATFORM>_OPTD
+```
+
+4. Implement lifecycle hooks:
+
+```text
+build-<platform>-prepare
+build-<platform>-runtime
+build-<platform>-workloads
+build-<platform>-secure-backend
+build-<platform>-finalize
+run-<platform>
+test-<platform>
+```
+
+5. Include the platform file from the top-level `Makefile`:
+
+```makefile
+include platforms/<platform>-<secure-backend>/build.mk
+```
+
+6. Add top-level convenience targets:
+
+```makefile
+<platform>-<secure-backend>-build:
+	$(call build-platform,<platform>-<secure-backend>)
+
+<platform>-<secure-backend>-run:
+	$(call run-platform,<platform>-<secure-backend>)
+
+<platform>-<secure-backend>-test: <platform>-<secure-backend>-build
+	$(call test-platform,<platform>-<secure-backend>)
+```
+
+### Adding a new workload
+
+To add a new workload:
+
+1. Create a new directory:
+
+```text
+workloads/<workload-name>-<workload-type>/
+```
+
+2. Add:
+
+```text
+workloads/<workload-name>-<workload-type>/build.mk
+```
+
+3. Define workload variables:
+
+```text
+<WORKLOAD>_ID
+<WORKLOAD>_SRCS
+```
+
+4. Define an asset fetch hook:
+
+```makefile
+define fetch-workload-assets-<workload-name>-<workload-type>
+	@true
+endef
+```
+
+If the workload has external assets, fetch them there.
+
+5. Define a platform-aware workload build hook:
+
+```makefile
+define workload-build-<workload-name>-<workload-type>
+	mkdir -p $($(1)_WORKLOAD_BUILD)
+	$($(1)_CC) ...
+endef
+```
+
+6. Include the workload file from the top-level `Makefile`:
+
+```makefile
+include workloads/<workload-name>-<workload-type>/build.mk
+```
+
+7. Opt into the workload from each platform that supports it:
+
+```makefile
+define build-<platform>-workloads
+	$(call workload-build-<workload-name>-<workload-type>,<PLATFORM_PREFIX>)
+endef
+```
+
+This keeps workloads independent from platforms while allowing each platform to decide which workloads it supports.
 
 ## MVP-1: qemu-system-aarch64
 
@@ -338,7 +546,7 @@ This flow validates:
 Run:
 
 ```bash
-make optee-qemu-mnist-adaptive-test
+make qemu-optee-test
 ```
 
 The test boots OP-TEE QEMU, runs the MNIST workload, records the optimization decision through the OP-TEE TA, reports it back, and verifies the event sequence.
