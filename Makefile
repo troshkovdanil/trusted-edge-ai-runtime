@@ -8,17 +8,16 @@ include workloads/mnist-model/build.mk
 include platforms/host-mock/build.mk
 include platforms/qemu-optee/build.mk
 
-.PHONY: \
-	host-mock-build host-mock-run host-mock-test \
-	qemu-optee-build qemu-optee-run qemu-optee-test \
-	build test clean clean-all
+define build-platform
+	$(call build-$(1)-prepare)
+	$(call build-$(1)-runtime)
+	$(call build-$(1)-workloads)
+	$(call build-$(1)-secure-backend)
+	$(call build-$(1)-finalize)
+endef
 
 host-mock-build:
-	$(call build-host-mock-prepare)
-	$(call build-host-mock-runtime)
-	$(call build-host-mock-workloads)
-	$(call build-host-mock-secure-backend)
-	$(call build-host-mock-finalize)
+	$(call build-platform,host-mock)
 
 host-mock-run:
 	$(call run-host-mock)
@@ -27,11 +26,7 @@ host-mock-test: host-mock-build
 	$(call test-host-mock)
 
 qemu-optee-build:
-	$(call build-qemu-optee-prepare)
-	$(call build-qemu-optee-runtime)
-	$(call build-qemu-optee-workloads)
-	$(call build-qemu-optee-secure-backend)
-	$(call build-qemu-optee-finalize)
+	$(call build-platform,qemu-optee)
 
 qemu-optee-run:
 	$(call run-qemu-optee)
@@ -50,3 +45,8 @@ clean-all: clean
 	rm -rf $(QEMU_OPTEE_DIR)
 	rm -rf external/onnxruntime
 	rm -rf external/onnxruntime-aarch64
+
+.PHONY: \
+	host-mock-build host-mock-run host-mock-test \
+	qemu-optee-build qemu-optee-run qemu-optee-test \
+	build test clean clean-all
