@@ -100,3 +100,11 @@ define build-qemu-optee-finalize
 	$(call install-qemu-optee)
 	./scripts/optee-qemu.sh build
 endef
+
+define run-qemu-optee
+	$(MAKE) -C $(QEMU_OPTEE_DIR)/build run-only
+endef
+
+define test-qemu-optee
+	./scripts/run-qemu-optee.sh "$(QEMU_OPTEE_PLAN)"
+endef

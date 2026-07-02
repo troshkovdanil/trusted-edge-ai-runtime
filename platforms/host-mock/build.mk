@@ -41,3 +41,11 @@ endef
 define build-host-mock-finalize
 	@true
 endef
+
+define run-host-mock
+	./scripts/run-host-mock.sh "$(HOST_MOCK_PLAN)"
+endef
+
+define test-host-mock
+	$(call run-host-mock)
+endef

@@ -30,10 +30,10 @@ host-mock-build: workload-assets
 	$(call build-host-mock-finalize)
 
 host-mock-run:
-	./scripts/run-host-mock.sh "$(HOST_MOCK_PLAN)"
+	$(call run-host-mock)
 
 host-mock-test: host-mock-build
-	./scripts/run-host-mock.sh "$(HOST_MOCK_PLAN)"
+	$(call test-host-mock)
 
 qemu-optee-build: workload-assets
 	$(call build-qemu-optee-prepare)
@@ -43,10 +43,10 @@ qemu-optee-build: workload-assets
 	$(call build-qemu-optee-finalize)
 
 qemu-optee-run:
-	$(MAKE) -C $(QEMU_OPTEE_DIR)/build run-only
+	$(call run-qemu-optee)
 
 qemu-optee-test: qemu-optee-build
-	./scripts/run-qemu-optee.sh "$(QEMU_OPTEE_PLAN)"
+	$(call test-qemu-optee)
 
 build: host-mock-build qemu-optee-build
 
