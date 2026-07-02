@@ -16,23 +16,31 @@ define build-platform
 	$(call build-$(1)-finalize)
 endef
 
+define run-platform
+	$(call run-$(1))
+endef
+
+define test-platform
+	$(call test-$(1))
+endef
+
 host-mock-build:
 	$(call build-platform,host-mock)
 
 host-mock-run:
-	$(call run-host-mock)
+	$(call run-platform,host-mock)
 
 host-mock-test: host-mock-build
-	$(call test-host-mock)
+	$(call test-platform,host-mock)
 
 qemu-optee-build:
 	$(call build-platform,qemu-optee)
 
 qemu-optee-run:
-	$(call run-qemu-optee)
+	$(call run-platform,qemu-optee)
 
 qemu-optee-test: qemu-optee-build
-	$(call test-qemu-optee)
+	$(call test-platform,qemu-optee)
 
 build: host-mock-build qemu-optee-build
 
