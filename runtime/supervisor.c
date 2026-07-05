@@ -2,6 +2,7 @@
 
 #include "runtime_paths.h"
 #include "observability.h"
+#include "platform.h"
 
 #include <errno.h>
 #include <signal.h>
@@ -11,7 +12,6 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/un.h>
-#include <sys/wait.h>
 #include <unistd.h>
 
 #ifdef TEAR_HOST_BUILD
@@ -339,102 +339,86 @@ static int run_plan_file(const char *path)
     return 0;
 }
 
-static pid_t start_trustd(void)
+static tear_platform_process_t start_trustd(void)
 {
     const char *trustd_path = getenv("TEAR_TRUSTD_PATH");
     const char *trustd_backend = getenv("TEAR_TRUSTD_BACKEND");
-    pid_t pid = fork();
+    tear_platform_process_t process = TEAR_PLATFORM_INVALID_PROCESS;
 
     if (!trustd_path)
         trustd_path = TRUSTD_PATH;
 
-    if (pid < 0) {
-        supervisor_perror("fork trustd");
-        return -1;
+    if (trustd_backend) {
+        char *const argv[] = {
+            (char *)trustd_path,
+            "--backend",
+            (char *)trustd_backend,
+            "--event-log",
+            TRUSTD_EVENT_PATH,
+            NULL,
+        };
+
+        if (tear_platform_start_process(trustd_path, argv, &process) < 0)
+            return TEAR_PLATFORM_INVALID_PROCESS;
+    } else {
+        char *const argv[] = {
+            (char *)trustd_path,
+            "--event-log",
+            TRUSTD_EVENT_PATH,
+            NULL,
+        };
+
+        if (tear_platform_start_process(trustd_path, argv, &process) < 0)
+            return TEAR_PLATFORM_INVALID_PROCESS;
     }
 
-    if (pid == 0) {
-        if (trustd_backend) {
-            execl(trustd_path,
-                  trustd_path,
-                  "--backend",
-                  trustd_backend,
-                  "--event-log",
-                  TRUSTD_EVENT_PATH,
-                  NULL);
-        } else {
-            execl(trustd_path,
-                  trustd_path,
-                  "--event-log",
-                  TRUSTD_EVENT_PATH,
-                  NULL);
-        }
-
-        supervisor_perror("execl trustd");
-        _exit(127);
-    }
-
-    sleep(1);
-    return pid;
+    tear_platform_sleep_ms(1000);
+    return process;
 }
 
-static pid_t start_optd(void)
+static tear_platform_process_t start_optd(void)
 {
-    pid_t pid = fork();
+    tear_platform_process_t process = TEAR_PLATFORM_INVALID_PROCESS;
+    char *const argv[] = {
+        OPTD_PATH,
+        "--event-log",
+        OPTD_EVENT_PATH,
+        NULL,
+    };
 
-    if (pid < 0) {
-        supervisor_perror("fork optd");
-        return -1;
-    }
+    if (tear_platform_start_process(OPTD_PATH, argv, &process) < 0)
+        return TEAR_PLATFORM_INVALID_PROCESS;
 
-    if (pid == 0) {
-        execl(OPTD_PATH,
-              OPTD_PATH,
-              "--event-log",
-              OPTD_EVENT_PATH,
-              NULL);
-
-        supervisor_perror("execl optd");
-        _exit(127);
-    }
-
-    sleep(1);
-    return pid;
-}
-
-static void stop_child(pid_t pid)
-{
-    if (pid <= 0)
-        return;
-
-    kill(pid, SIGTERM);
-    waitpid(pid, NULL, 0);
+    tear_platform_sleep_ms(1000);
+    return process;
 }
 
 static int run_tearictl(const char *command, const char *arg)
 {
-    pid_t pid = fork();
-    int status = 0;
+    int exit_code = 1;
 
-    if (pid < 0) {
-        supervisor_perror("fork tearictl");
-        return -1;
+    if (arg) {
+        char *const argv[] = {
+            TEARICTL_PATH,
+            (char *)command,
+            (char *)arg,
+            NULL,
+        };
+
+        if (tear_platform_run_process(TEARICTL_PATH, argv, &exit_code) < 0)
+            return -1;
+    } else {
+        char *const argv[] = {
+            TEARICTL_PATH,
+            (char *)command,
+            NULL,
+        };
+
+        if (tear_platform_run_process(TEARICTL_PATH, argv, &exit_code) < 0)
+            return -1;
     }
 
-    if (pid == 0) {
-        if (arg)
-            execl(TEARICTL_PATH, TEARICTL_PATH, command, arg, NULL);
-        else
-            execl(TEARICTL_PATH, TEARICTL_PATH, command, NULL);
-
-        supervisor_perror("execl tearictl");
-        _exit(127);
-    }
-
-    if (waitpid(pid, &status, 0) < 0)
-        return -1;
-
-    return WIFEXITED(status) && WEXITSTATUS(status) == 0 ? 0 : -1;
+    return exit_code == 0 ? 0 : -1;
 }
 
 static int provision_manifest_path(const char *manifest)
@@ -721,73 +705,43 @@ static int validate_config(const struct supervisor_config *cfg)
     return 0;
 }
 
-static void run_runtime_manager(const struct tear_run_config *cfg)
-{
-    execl(RUNTIME_MANAGER_PATH,
-          RUNTIME_MANAGER_PATH,
-          "--workload",
-          cfg->workload,
-          "--manifest",
-          cfg->manifest,
-          "--profile",
-          cfg->profile,
-          "--args",
-          cfg->args,
-          "--event-log",
-          RUNTIME_MANAGER_EVENT_PATH,
-          NULL);
-}
-
 static int run_workload_once(const struct tear_run_config *cfg)
 {
-    pid_t pid;
-    int status = 0;
+    int exit_code = 1;
+    char *const argv[] = {
+        RUNTIME_MANAGER_PATH,
+        "--workload",
+        (char *)cfg->workload,
+        "--manifest",
+        (char *)cfg->manifest,
+        "--profile",
+        (char *)cfg->profile,
+        "--args",
+        (char *)cfg->args,
+        "--event-log",
+        RUNTIME_MANAGER_EVENT_PATH,
+        NULL,
+    };
 
     supervisor_event("workload_selected");
 
     supervisor_state = SUPERVISOR_STATE_RUNNING;
     supervisor_event("workload_start");
 
-    pid = fork();
-
-    if (pid < 0) {
-        supervisor_perror("fork");
+    if (tear_platform_run_process(RUNTIME_MANAGER_PATH, argv, &exit_code) < 0) {
         supervisor_event_kv("supervisor_error", "errno", errno);
         supervisor_state = SUPERVISOR_STATE_READY;
         return 1;
     }
 
-    if (pid == 0) {
-        run_runtime_manager(cfg);
-        supervisor_perror("execl runtime manager");
-        _exit(127);
-    }
-
-    if (waitpid(pid, &status, 0) < 0) {
-        supervisor_perror("waitpid");
-        supervisor_event_kv("supervisor_error", "errno", errno);
-        supervisor_state = SUPERVISOR_STATE_READY;
-        return 1;
-    }
-
-    if (WIFEXITED(status)) {
-        supervisor_event_kv("workload_exit",
-                            "status",
-                            WEXITSTATUS(status));
-    } else if (WIFSIGNALED(status)) {
-        supervisor_event_kv("workload_signal",
-                            "signal",
-                            WTERMSIG(status));
-    } else {
-        supervisor_event("workload_unknown_exit");
-    }
-
+    supervisor_event_kv("workload_exit", "status", exit_code);
     supervisor_state = SUPERVISOR_STATE_READY;
 
-    return WIFEXITED(status) && WEXITSTATUS(status) == 0 ? 0 : 1;
+    return exit_code == 0 ? 0 : 1;
 }
 
-static int run_supervisor_daemon(pid_t trustd_pid, pid_t optd_pid)
+static int run_supervisor_daemon(tear_platform_process_t trustd_process,
+                                 tear_platform_process_t optd_process)
 {
     int server = create_supervisor_socket();
 
@@ -823,8 +777,8 @@ static int run_supervisor_daemon(pid_t trustd_pid, pid_t optd_pid)
     close(server);
     unlink(tear_supervisor_socket_path());
 
-    stop_child(optd_pid);
-    stop_child(trustd_pid);
+    tear_platform_stop_process(optd_process);
+    tear_platform_stop_process(trustd_process);
 
     return 0;
 }
@@ -833,8 +787,8 @@ int main(int argc, char **argv)
 {
     int ret;
     struct supervisor_config cfg = parse_args(argc, argv);
-    pid_t trustd_pid;
-    pid_t optd_pid;
+    tear_platform_process_t trustd_process;
+    tear_platform_process_t optd_process;
 
     if (validate_config(&cfg) < 0)
         return 1;
@@ -848,24 +802,24 @@ int main(int argc, char **argv)
 
     supervisor_event("supervisor_start");
 
-    trustd_pid = start_trustd();
+    trustd_process = start_trustd();
 
-    if (trustd_pid < 0) {
+    if (trustd_process == TEAR_PLATFORM_INVALID_PROCESS) {
         supervisor_event("trustd_start_failed");
         tear_event_shutdown();
         return 1;
     }
 
-    optd_pid = start_optd();
+    optd_process = start_optd();
 
-    if (optd_pid < 0) {
+    if (optd_process == TEAR_PLATFORM_INVALID_PROCESS) {
         supervisor_event("optd_start_failed");
-        stop_child(trustd_pid);
+        tear_platform_stop_process(trustd_process);
         tear_event_shutdown();
         return 1;
     }
 
-    ret = run_supervisor_daemon(trustd_pid, optd_pid);
+    ret = run_supervisor_daemon(trustd_process, optd_process);
 
     supervisor_event("supervisor_shutdown");
     tear_event_shutdown();

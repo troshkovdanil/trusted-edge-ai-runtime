@@ -33,7 +33,11 @@ define runtime-build-platform
 	$($(1)_CC) -static -O2 -Wall -Wextra $($(1)_CFLAGS) \
 		-Iruntime \
 		-Iplatforms/common \
-		-o $($(1)_SUPERVISOR) runtime/supervisor.c $(RUNTIME_PATHS_SRCS) $(OBSERVABILITY_SRCS)
+		-o $($(1)_SUPERVISOR) \
+		runtime/supervisor.c \
+		$($(1)_PLATFORM_SRCS) \
+		$(RUNTIME_PATHS_SRCS) \
+		$(OBSERVABILITY_SRCS)
 	$($(1)_CC) -static -O2 -Wall -Wextra $($(1)_CFLAGS) \
 		-Iruntime \
 		-Iplatforms/common \

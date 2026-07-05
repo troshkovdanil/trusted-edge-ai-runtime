@@ -1,11 +1,12 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
-#include "platform.h"
+#include "linux/linux_platform.h"
 
 #include "observability.h"
 #include "workload_contract.h"
 
 #include <errno.h>
+#include <signal.h>
 #include <stdio.h>
 #include <string.h>
 #include <sys/wait.h>
@@ -82,4 +83,92 @@ int tear_linux_platform_run_workload(const struct tear_workload_run *run,
     tear_event(TEAR_COMPONENT, "platform_workload_exit");
 
     return 0;
+}
+
+int tear_linux_platform_start_process(const char *path,
+                                      char *const argv[],
+                                      tear_platform_process_t *process)
+{
+    pid_t pid;
+
+    if (!path || !argv || !process)
+        return -1;
+
+    pid = fork();
+    if (pid < 0) {
+        tear_log(TEAR_COMPONENT, TEAR_LOG_ERROR,
+                 "failed to fork process %s: %s",
+                 path, strerror(errno));
+        tear_event(TEAR_COMPONENT, "platform_process_fork_failed");
+        return -1;
+    }
+
+    if (pid == 0) {
+        execv(path, argv);
+
+        tear_log(TEAR_COMPONENT, TEAR_LOG_ERROR,
+                 "failed to exec process %s: %s",
+                 path, strerror(errno));
+        _exit(127);
+    }
+
+    *process = (tear_platform_process_t)pid;
+    tear_event(TEAR_COMPONENT, "platform_process_started");
+
+    return 0;
+}
+
+int tear_linux_platform_run_process(const char *path,
+                                    char *const argv[],
+                                    int *exit_code)
+{
+    tear_platform_process_t process;
+    int status = 0;
+
+    if (!exit_code)
+        return -1;
+
+    if (tear_linux_platform_start_process(path, argv, &process) < 0)
+        return -1;
+
+    if (waitpid((pid_t)process, &status, 0) < 0) {
+        tear_log(TEAR_COMPONENT, TEAR_LOG_ERROR,
+                 "failed to wait for process %s: %s",
+                 path, strerror(errno));
+        tear_event(TEAR_COMPONENT, "platform_process_wait_failed");
+        return -1;
+    }
+
+    if (WIFEXITED(status)) {
+        *exit_code = WEXITSTATUS(status);
+        tear_event(TEAR_COMPONENT, "platform_process_exit");
+        return 0;
+    }
+
+    if (WIFSIGNALED(status)) {
+        *exit_code = 128 + WTERMSIG(status);
+        tear_event(TEAR_COMPONENT, "platform_process_signal");
+        return 0;
+    }
+
+    *exit_code = 1;
+    tear_event(TEAR_COMPONENT, "platform_process_unknown_exit");
+
+    return 0;
+}
+
+void tear_linux_platform_stop_process(tear_platform_process_t process)
+{
+    pid_t pid = (pid_t)process;
+
+    if (process == TEAR_PLATFORM_INVALID_PROCESS || pid <= 0)
+        return;
+
+    kill(pid, SIGTERM);
+    waitpid(pid, NULL, 0);
+}
+
+void tear_linux_platform_sleep_ms(unsigned int milliseconds)
+{
+    usleep(milliseconds * 1000);
 }
