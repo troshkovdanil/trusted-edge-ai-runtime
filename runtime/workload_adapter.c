@@ -3,11 +3,9 @@
 #include "workload_adapter.h"
 
 #include "observability.h"
-#include "workload_contract.h"
+#include "platform.h"
 
-#include <errno.h>
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -145,45 +143,9 @@ int tear_workload_prepare(const struct tear_model_manifest *manifest,
     return 0;
 }
 
-static void exec_workload(const struct tear_workload_run *run)
-{
-    char command[1024];
-
-    if (run->extra_args && run->extra_args[0] != '\0') {
-        snprintf(command, sizeof(command),
-                 "%s %s %s %s %s %s %s %s",
-                 run->workload,
-                 TEAR_WORKLOAD_ARG_PROFILE,
-                 run->profile_path,
-                 TEAR_WORKLOAD_ARG_RUN_ID,
-                 run->run_id,
-                 TEAR_WORKLOAD_ARG_EVENT_LOG,
-                 run->workload_event_log,
-                 run->extra_args);
-
-        execl("/bin/sh", "sh", "-c", command, NULL);
-    } else {
-        execl(run->workload,
-              run->workload,
-              TEAR_WORKLOAD_ARG_PROFILE,
-              run->profile_path,
-              TEAR_WORKLOAD_ARG_RUN_ID,
-              run->run_id,
-              TEAR_WORKLOAD_ARG_EVENT_LOG,
-              run->workload_event_log,
-              NULL);
-    }
-
-    tear_log(TEAR_COMPONENT, TEAR_LOG_ERROR,
-             "failed to exec workload %s: %s",
-             run->workload, strerror(errno));
-    _exit(127);
-}
-
 int tear_workload_run_checked(const struct tear_workload_run *run,
                               int require_metrics_file)
 {
-    pid_t pid;
     int status = 0;
 
     if (!run || !run->workload || !run->profile_path || !run->run_id[0]) {
@@ -197,27 +159,17 @@ int tear_workload_run_checked(const struct tear_workload_run *run,
 
     tear_event(TEAR_COMPONENT, "workload_contract_launch");
 
-    pid = fork();
-    if (pid < 0) {
+    if (tear_platform_run_workload(run, &status) < 0) {
         tear_log(TEAR_COMPONENT, TEAR_LOG_ERROR,
-                 "failed to fork workload: %s", strerror(errno));
-        tear_event(TEAR_COMPONENT, "workload_contract_fork_failed");
+                 "platform failed to run workload");
+        tear_event(TEAR_COMPONENT, "workload_contract_platform_run_failed");
         return -1;
     }
 
-    if (pid == 0)
-        exec_workload(run);
-
-    if (waitpid(pid, &status, 0) < 0) {
-        tear_log(TEAR_COMPONENT, TEAR_LOG_ERROR,
-                 "failed to wait for workload: %s", strerror(errno));
-        tear_event(TEAR_COMPONENT, "workload_contract_wait_failed");
-        return -1;
-    }
     tear_event_kv("runtime_manager",
                   "runtime_workload_exit",
                   "status",
-                   status);
+                  status);
 
     if (!WIFEXITED(status)) {
         tear_log(TEAR_COMPONENT, TEAR_LOG_ERROR,
@@ -237,6 +189,7 @@ int tear_workload_run_checked(const struct tear_workload_run *run,
     }
 
     tear_event(TEAR_COMPONENT, "workload_contract_exit_ok");
+
     if (require_metrics_file && !path_exists(run->metrics_path)) {
         tear_log(TEAR_COMPONENT, TEAR_LOG_ERROR,
                  "required metrics file was not produced: %s",

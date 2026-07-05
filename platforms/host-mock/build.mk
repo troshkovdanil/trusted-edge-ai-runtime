@@ -21,6 +21,10 @@ HOST_MOCK_CFLAGS := -DTEAR_HOST_BUILD
 HOST_MOCK_SECURE_BACKEND := mock
 HOST_MOCK_ENABLE_ONNXRUNTIME := 1
 
+HOST_MOCK_PLATFORM_SRCS := \
+	platforms/common/linux/platform.c \
+	platforms/host-mock/platform.c
+
 HOST_MOCK_ORT_INCLUDE := external/onnxruntime/include
 HOST_MOCK_ORT_LIB := external/onnxruntime/lib
 HOST_MOCK_ORT_RPATH := '$$ORIGIN/../../../external/onnxruntime/lib'

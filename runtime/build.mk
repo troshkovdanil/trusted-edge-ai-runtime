@@ -14,6 +14,7 @@
 #   $($(1)_TRUSTD)
 #   $($(1)_TEARICTL)
 #   $($(1)_OPTD)
+#   $($(1)_PLATFORM_SRCS)
 
 RUNTIME_PATHS_SRCS := runtime/runtime_paths.c
 OBSERVABILITY_SRCS := runtime/observability.c
@@ -30,23 +31,32 @@ TEARICTL_SRCS := runtime/tearictl.c
 define runtime-build-platform
 	mkdir -p $($(1)_BUILD_DIR)
 	$($(1)_CC) -static -O2 -Wall -Wextra $($(1)_CFLAGS) \
+		-Iruntime \
+		-Iplatforms/common \
 		-o $($(1)_SUPERVISOR) runtime/supervisor.c $(RUNTIME_PATHS_SRCS) $(OBSERVABILITY_SRCS)
 	$($(1)_CC) -static -O2 -Wall -Wextra $($(1)_CFLAGS) \
+		-Iruntime \
+		-Iplatforms/common \
 		-o $($(1)_RUNTIME_MANAGER) \
 		$(RUNTIME_MANAGER_SRCS) \
 		$(WORKLOAD_ADAPTER_SRCS) \
 		$(PLATFORM_ADAPTER_SRCS) \
+		$($(1)_PLATFORM_SRCS) \
 		$(PROFILE_SRCS) \
 		$(MANIFEST_SRCS) \
 		$(TRUST_CLIENT_SRCS) \
 		$(RUNTIME_PATHS_SRCS) \
 		$(OBSERVABILITY_SRCS)
 	$($(1)_CC) -static -O2 -Wall -Wextra $($(1)_CFLAGS) \
+		-Iruntime \
+		-Iplatforms/common \
 		-o $($(1)_TRUSTD) \
 		$(TRUSTD_SRCS) \
 		$(RUNTIME_PATHS_SRCS) \
 		$(OBSERVABILITY_SRCS)
 	$($(1)_CC) -static -O2 -Wall -Wextra $($(1)_CFLAGS) \
+		-Iruntime \
+		-Iplatforms/common \
 		-o $($(1)_TEARICTL) \
 		$(TEARICTL_SRCS) \
 		$(MANIFEST_SRCS) \
@@ -54,6 +64,8 @@ define runtime-build-platform
 		$(RUNTIME_PATHS_SRCS) \
 		$(OBSERVABILITY_SRCS)
 	$($(1)_CC) -static -O2 -Wall -Wextra $($(1)_CFLAGS) \
+		-Iruntime \
+		-Iplatforms/common \
 		-o $($(1)_OPTD) \
 		$(OPTD_SRCS) \
 		$(RUNTIME_PATHS_SRCS) \

@@ -21,6 +21,10 @@ QEMU_OPTEE_CFLAGS :=
 QEMU_OPTEE_SECURE_BACKEND := optee
 QEMU_OPTEE_ENABLE_ONNXRUNTIME := 1
 
+QEMU_OPTEE_PLATFORM_SRCS := \
+	platforms/common/linux/platform.c \
+	platforms/qemu-optee/platform.c
+
 QEMU_OPTEE_ORT_INCLUDE := external/onnxruntime-aarch64/include
 QEMU_OPTEE_ORT_LIB := external/onnxruntime-aarch64/lib
 QEMU_OPTEE_ORT_RPATH := /usr/lib
@@ -67,6 +71,7 @@ define build-qemu-optee-secure-backend
 	mkdir -p $(QEMU_OPTEE_BUILD_DIR)/optee
 	$(QEMU_OPTEE_CC) -O2 -Wall -Wextra $(QEMU_OPTEE_CFLAGS) \
 		-Iruntime \
+		-Iplatforms/common \
 		-I$(QEMU_OPTEE_CLIENT_INCLUDE) \
 		-Ioptee/ta/tear_ta/include \
 		-Ioptee/ca \
@@ -80,6 +85,7 @@ define build-qemu-optee-secure-backend
 	$(QEMU_OPTEE_CC) -O2 -Wall -Wextra $(QEMU_OPTEE_CFLAGS) \
 		-DTEAR_ENABLE_OPTEE \
 		-Iruntime \
+		-Iplatforms/common \
 		-Ioptee/ca \
 		-Ioptee/ta/tear_ta/include \
 		-I$(QEMU_OPTEE_CLIENT_INCLUDE) \
