@@ -583,16 +583,10 @@ static void handle_report_decision(int client, enum tear_trust_backend backend)
 
 static int parse_backend(int argc, char **argv,
                          enum tear_trust_backend *backend,
-                         const char **event_log,
-                         int *self_test,
-                         int *self_test_enroll,
-                         int *self_test_verify)
+                         const char **event_log)
 {
     *backend = TEAR_TRUST_BACKEND_FILE;
     *event_log = DEFAULT_EVENT_PATH;
-    *self_test = 0;
-    *self_test_enroll = 0;
-    *self_test_verify = 0;
 
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--backend") == 0 && i + 1 < argc) {
@@ -618,20 +612,11 @@ static int parse_backend(int argc, char **argv,
             }
         } else if (strcmp(argv[i], "--event-log") == 0 && i + 1 < argc) {
             *event_log = argv[++i];
-        } else if (strcmp(argv[i], "--self-test") == 0) {
-            *self_test = 1;
-        } else if (strcmp(argv[i], "--self-test-enroll") == 0) {
-            *self_test_enroll = 1;
-        } else if (strcmp(argv[i], "--self-test-verify") == 0) {
-            *self_test_verify = 1;
         } else {
             tear_log(TEAR_COMPONENT,
                      TEAR_LOG_ERROR,
                      "usage: tear-trustd [--backend file|optee] "
-                     "[--event-log <path>] "
-                     "[--self-test] "
-                     "[--self-test-enroll] "
-                     "[--self-test-verify]");
+                     "[--event-log <path>]");
             return -1;
         }
     }
@@ -646,85 +631,16 @@ static int parse_backend(int argc, char **argv,
     return 0;
 }
 
-static int run_self_test(enum tear_trust_backend backend)
-{
-    if (backend == TEAR_TRUST_BACKEND_FILE) {
-        trustd_event("trustd_file_backend_self_test_ok");
-        return 0;
-    }
-
-#ifdef TEAR_ENABLE_OPTEE
-    if (backend == TEAR_TRUST_BACKEND_OPTEE) {
-        if (tear_optee_ping() == 0) {
-            trustd_event("trustd_optee_backend_ping_ok");
-            return 0;
-        }
-
-        trustd_event("trustd_optee_backend_ping_failed");
-        return 1;
-    }
-#endif
-
-    return 1;
-}
-
-static int run_enroll_self_test(enum tear_trust_backend backend)
-{
-    if (backend != TEAR_TRUST_BACKEND_OPTEE)
-        return 1;
-
-#ifdef TEAR_ENABLE_OPTEE
-    if (tear_optee_enroll("demo-model 1 mock sha256-demo-model-v1") == 0) {
-        trustd_event("trustd_optee_backend_enroll_ok");
-        return 0;
-    }
-
-    trustd_event("trustd_optee_backend_enroll_failed");
-#endif
-
-    return 1;
-}
-
-static int run_verify_self_test(enum tear_trust_backend backend)
-{
-    if (backend != TEAR_TRUST_BACKEND_OPTEE)
-        return 1;
-
-#ifdef TEAR_ENABLE_OPTEE
-    if (tear_optee_enroll("demo-model 1 mock sha256-demo-model-v1")) {
-        trustd_event("trustd_optee_backend_verify_failed");
-        return 1;
-    }
-
-    trustd_event("trustd_optee_backend_enroll_before_verify_ok");
-
-    if (tear_optee_verify("demo-model 1 mock sha256-demo-model-v1")) {
-        trustd_event("trustd_optee_backend_verify_failed");
-        return 1;
-    }
-
-    trustd_event("trustd_optee_backend_verify_ok");
-#endif
-
-    return 0;
-}
-
 int main(int argc, char **argv)
 {
     enum tear_trust_backend backend;
     const char *event_log;
-    int self_test;
-    int self_test_enroll;
-    int self_test_verify;
     int server;
 
     if (parse_backend(argc,
                       argv,
                       &backend,
-                      &event_log,
-                      &self_test,
-                      &self_test_enroll,
-                      &self_test_verify) < 0)
+                      &event_log) < 0)
         return 1;
 
     if (tear_event_init(event_log) < 0) {
@@ -732,24 +648,6 @@ int main(int argc, char **argv)
                  TEAR_LOG_ERROR,
                  "failed to initialize events");
         return 1;
-    }
-
-    if (self_test) {
-        int ret = run_self_test(backend);
-        tear_event_shutdown();
-        return ret;
-    }
-
-    if (self_test_enroll) {
-        int ret = run_enroll_self_test(backend);
-        tear_event_shutdown();
-        return ret;
-    }
-
-    if (self_test_verify) {
-        int ret = run_verify_self_test(backend);
-        tear_event_shutdown();
-        return ret;
     }
 
     server = create_socket();

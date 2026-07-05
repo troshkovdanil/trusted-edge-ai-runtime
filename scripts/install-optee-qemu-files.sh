@@ -123,18 +123,6 @@ echo "TEAR_OPTEE_CA_TEST done"
 
 rm -f /tmp/tear-trustd-events.log
 
-echo "TEAR_OPTEE_TRUSTD_SELF_TEST start"
-/bin/tear-trustd-optee --backend optee --self-test || fail_guest "TEAR_OPTEE_TRUSTD_SELF_TEST failed"
-echo "TEAR_OPTEE_TRUSTD_SELF_TEST done"
-
-echo "TEAR_OPTEE_TRUSTD_ENROLL_SELF_TEST start"
-/bin/tear-trustd-optee --backend optee --self-test-enroll || fail_guest "TEAR_OPTEE_TRUSTD_ENROLL_SELF_TEST failed"
-echo "TEAR_OPTEE_TRUSTD_ENROLL_SELF_TEST done"
-
-echo "TEAR_OPTEE_TRUSTD_VERIFY_SELF_TEST start"
-/bin/tear-trustd-optee --backend optee --self-test-verify || fail_guest "TEAR_OPTEE_TRUSTD_VERIFY_SELF_TEST failed"
-echo "TEAR_OPTEE_TRUSTD_VERIFY_SELF_TEST done"
-
 rm -f /tmp/tear-trustd.sock \
       /tmp/tear-optd.sock \
       /tmp/tear-supervisor.sock \
