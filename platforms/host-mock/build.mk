@@ -25,11 +25,11 @@ HOST_MOCK_ORT_INCLUDE := external/onnxruntime/include
 HOST_MOCK_ORT_LIB := external/onnxruntime/lib
 HOST_MOCK_ORT_RPATH := '$$ORIGIN/../../../external/onnxruntime/lib'
 
-HOST_MOCK_SUPERVISOR := $(HOST_MOCK_BUILD_DIR)/tear-supervisor-host
-HOST_MOCK_RUNTIME_MANAGER := $(HOST_MOCK_BUILD_DIR)/tear-runtime-manager-host
-HOST_MOCK_TRUSTD := $(HOST_MOCK_BUILD_DIR)/tear-trustd-host
-HOST_MOCK_TEARICTL := $(HOST_MOCK_BUILD_DIR)/tearictl-host
-HOST_MOCK_OPTD := $(HOST_MOCK_BUILD_DIR)/tear-optd-host
+HOST_MOCK_SUPERVISOR := $(HOST_MOCK_BUILD_DIR)/tear-supervisor
+HOST_MOCK_RUNTIME_MANAGER := $(HOST_MOCK_BUILD_DIR)/tear-runtime-manager
+HOST_MOCK_TRUSTD := $(HOST_MOCK_BUILD_DIR)/tear-trustd
+HOST_MOCK_TEARICTL := $(HOST_MOCK_BUILD_DIR)/tearictl
+HOST_MOCK_OPTD := $(HOST_MOCK_BUILD_DIR)/tear-optd
 
 define build-host-mock-prepare
 	$(call fetch-workload-assets-demo-model)

@@ -15,24 +15,12 @@
 #include <unistd.h>
 
 #ifdef TEAR_HOST_BUILD
-
 #define TEAR_BIN_DIR "build/platforms/host-mock"
 #define TEAR_LOG_DIR "build/platforms/host-mock"
-
-#define TRUSTD_PATH TEAR_BIN_DIR "/tear-trustd-host"
-#define OPTD_PATH TEAR_BIN_DIR "/tear-optd-host"
-#define TEARICTL_PATH TEAR_BIN_DIR "/tearictl-host"
-#define RUNTIME_MANAGER_PATH TEAR_BIN_DIR "/tear-runtime-manager-host"
-
-#define DEFAULT_EVENT_PATH TEAR_LOG_DIR "/tear-supervisor-events.log"
-#define TRUSTD_EVENT_PATH TEAR_LOG_DIR "/tear-trustd-events.log"
-#define OPTD_EVENT_PATH TEAR_LOG_DIR "/tear-optd-events.log"
-#define RUNTIME_MANAGER_EVENT_PATH TEAR_LOG_DIR "/tear-runtime-manager-events.log"
-
 #else
-
 #define TEAR_BIN_DIR "/bin"
 #define TEAR_LOG_DIR "/tmp"
+#endif
 
 #define TRUSTD_PATH TEAR_BIN_DIR "/tear-trustd"
 #define OPTD_PATH TEAR_BIN_DIR "/tear-optd"
@@ -43,8 +31,6 @@
 #define TRUSTD_EVENT_PATH TEAR_LOG_DIR "/tear-trustd-events.log"
 #define OPTD_EVENT_PATH TEAR_LOG_DIR "/tear-optd-events.log"
 #define RUNTIME_MANAGER_EVENT_PATH TEAR_LOG_DIR "/tear-runtime-manager-events.log"
-
-#endif
 
 #define TEAR_COMPONENT "supervisor"
 

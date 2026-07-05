@@ -5,8 +5,8 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PLAN="${1:-runtime/plans/host-mock.plan}"
 
 HOST_BUILD="$ROOT_DIR/build/platforms/host-mock"
-SUPERVISOR="$HOST_BUILD/tear-supervisor-host"
-TEARICTL="$HOST_BUILD/tearictl-host"
+SUPERVISOR="$HOST_BUILD/tear-supervisor"
+TEARICTL="$HOST_BUILD/tearictl"
 
 SUPERVISOR_LOG="$HOST_BUILD/host-mock-supervisor.log"
 CLIENT_LOG="$HOST_BUILD/host-mock-client.log"

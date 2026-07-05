@@ -249,7 +249,7 @@ build/workloads/<platform>-<secure-backend>/<workload-name>-<workload-type>-<pla
 For example:
 
 ```text
-build/platforms/host-mock/tear-supervisor-host
+build/platforms/host-mock/tear-supervisor
 build/workloads/host-mock/mnist-model-host-mock
 build/platforms/qemu-optee/tear-supervisor
 build/workloads/qemu-optee/mnist-model-qemu-optee
