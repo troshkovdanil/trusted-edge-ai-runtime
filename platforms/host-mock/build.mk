@@ -11,7 +11,7 @@
 
 HOST_MOCK_ID := host-mock
 HOST_MOCK_ARCH := x86_64
-HOST_MOCK_PLAN := plans/host-mock.plan
+HOST_MOCK_PLAN := runtime/plans/host-mock.plan
 HOST_MOCK_BUILD_DIR := $(BUILD)/platforms/$(HOST_MOCK_ID)
 HOST_MOCK_WORKLOAD_BUILD := $(BUILD)/workloads/$(HOST_MOCK_ID)
 

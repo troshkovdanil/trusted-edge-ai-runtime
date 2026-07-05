@@ -49,7 +49,7 @@ cp -v examples/model-v2.json "$TARGET/etc/tear/"
 cp -v profiles/demo.profile "$TARGET/etc/tear/"
 cp -v profiles/mnist.profile "$TARGET/etc/tear/"
 
-cp -v plans/qemu-optee.plan "$TARGET/etc/tear/"
+cp -v runtime/plans/qemu-optee.plan "$TARGET/etc/tear/"
 cp -v scripts/verify-tear-plan-event-metric.sh \
       "$TARGET/bin/verify-tear-plan-event-metric.sh"
 chmod +x "$TARGET/bin/verify-tear-plan-event-metric.sh"
