@@ -10,8 +10,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <sys/un.h>
 #include <unistd.h>
 
 #ifdef TEAR_HOST_BUILD
@@ -145,34 +143,6 @@ static const char *state_name(enum supervisor_state state)
     default:
         return "UNKNOWN";
     }
-}
-
-static int create_supervisor_socket(void)
-{
-    const char *socket_path = tear_supervisor_socket_path();
-    int fd = socket(AF_UNIX, SOCK_STREAM, 0);
-
-    if (fd < 0)
-        return -1;
-
-    struct sockaddr_un addr = {
-        .sun_family = AF_UNIX,
-    };
-
-    strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
-    unlink(socket_path);
-
-    if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        close(fd);
-        return -1;
-    }
-
-    if (listen(fd, 4) < 0) {
-        close(fd);
-        return -1;
-    }
-
-    return fd;
 }
 
 static char *trim_newline(char *s)
@@ -537,7 +507,7 @@ static int report_trusted_decision(void)
 static void handle_supervisor_client(int client)
 {
     char buf[512];
-    ssize_t n = read(client, buf, sizeof(buf) - 1);
+    ssize_t n = tear_platform_socket_read(client, buf, sizeof(buf) - 1);
 
     if (n <= 0)
         return;
@@ -743,9 +713,11 @@ static int run_workload_once(const struct tear_run_config *cfg)
 static int run_supervisor_daemon(tear_platform_process_t trustd_process,
                                  tear_platform_process_t optd_process)
 {
-    int server = create_supervisor_socket();
+    tear_platform_socket_t server;
+    int ret;
 
-    if (server < 0) {
+    if (tear_platform_socket_listen(tear_supervisor_socket_path(),
+                                    &server) < 0) {
         supervisor_perror("supervisor socket");
         supervisor_event("supervisor_socket_failed");
         return 1;
@@ -757,9 +729,10 @@ static int run_supervisor_daemon(tear_platform_process_t trustd_process,
     supervisor_event("supervisor_daemon_ready");
 
     while (supervisor_running) {
-        int client = accept(server, NULL, NULL);
+        tear_platform_socket_t client;
 
-        if (client < 0) {
+        ret = tear_platform_socket_accept(server, &client);
+        if (ret < 0) {
             if (errno == EINTR)
                 break;
 
@@ -768,14 +741,14 @@ static int run_supervisor_daemon(tear_platform_process_t trustd_process,
         }
 
         handle_supervisor_client(client);
-        close(client);
+        tear_platform_socket_close(client);
     }
 
     supervisor_state = SUPERVISOR_STATE_SHUTTING_DOWN;
     supervisor_event("supervisor_daemon_shutdown");
 
-    close(server);
-    unlink(tear_supervisor_socket_path());
+    tear_platform_socket_close(server);
+    tear_platform_socket_unlink(tear_supervisor_socket_path());
 
     tear_platform_stop_process(optd_process);
     tear_platform_stop_process(trustd_process);

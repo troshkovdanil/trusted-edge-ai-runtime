@@ -9,6 +9,8 @@
 #include <signal.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/socket.h>
+#include <sys/un.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -171,4 +173,80 @@ void tear_linux_platform_stop_process(tear_platform_process_t process)
 void tear_linux_platform_sleep_ms(unsigned int milliseconds)
 {
     usleep(milliseconds * 1000);
+}
+
+int tear_linux_platform_socket_listen(const char *path,
+                                      tear_platform_socket_t *socket_out)
+{
+    int fd;
+    struct sockaddr_un addr = {
+        .sun_family = AF_UNIX,
+    };
+
+    if (!path || !socket_out || path[0] == '\0')
+        return -1;
+
+    fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (fd < 0)
+        return -1;
+
+    strncpy(addr.sun_path, path, sizeof(addr.sun_path) - 1);
+    unlink(path);
+
+    if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+        close(fd);
+        return -1;
+    }
+
+    if (listen(fd, 4) < 0) {
+        close(fd);
+        return -1;
+    }
+
+    *socket_out = fd;
+
+    return 0;
+}
+
+int tear_linux_platform_socket_accept(tear_platform_socket_t server,
+                                      tear_platform_socket_t *client_out)
+{
+    int client;
+
+    if (server == TEAR_PLATFORM_INVALID_SOCKET || !client_out)
+        return -1;
+
+    client = accept(server, NULL, NULL);
+    if (client < 0)
+        return -1;
+
+    *client_out = client;
+
+    return 0;
+}
+
+ssize_t tear_linux_platform_socket_read(tear_platform_socket_t socket_fd,
+                                        void *buf,
+                                        size_t len)
+{
+    if (socket_fd == TEAR_PLATFORM_INVALID_SOCKET || !buf)
+        return -1;
+
+    return read(socket_fd, buf, len);
+}
+
+void tear_linux_platform_socket_close(tear_platform_socket_t socket_fd)
+{
+    if (socket_fd == TEAR_PLATFORM_INVALID_SOCKET)
+        return;
+
+    close(socket_fd);
+}
+
+void tear_linux_platform_socket_unlink(const char *path)
+{
+    if (!path || path[0] == '\0')
+        return;
+
+    unlink(path);
 }

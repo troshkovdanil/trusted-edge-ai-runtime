@@ -31,3 +31,32 @@ void tear_platform_sleep_ms(unsigned int milliseconds)
 {
     tear_linux_platform_sleep_ms(milliseconds);
 }
+
+int tear_platform_socket_listen(const char *path,
+                                tear_platform_socket_t *socket_out)
+{
+    return tear_linux_platform_socket_listen(path, socket_out);
+}
+
+int tear_platform_socket_accept(tear_platform_socket_t server,
+                                tear_platform_socket_t *client_out)
+{
+    return tear_linux_platform_socket_accept(server, client_out);
+}
+
+ssize_t tear_platform_socket_read(tear_platform_socket_t socket_fd,
+                                  void *buf,
+                                  size_t len)
+{
+    return tear_linux_platform_socket_read(socket_fd, buf, len);
+}
+
+void tear_platform_socket_close(tear_platform_socket_t socket_fd)
+{
+    tear_linux_platform_socket_close(socket_fd);
+}
+
+void tear_platform_socket_unlink(const char *path)
+{
+    tear_linux_platform_socket_unlink(path);
+}
