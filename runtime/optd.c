@@ -2,14 +2,13 @@
 
 #include "optimizer_policy.h"
 #include "observability.h"
+#include "platform.h"
 #include "runtime_paths.h"
 
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <sys/un.h>
 #include <unistd.h>
 
 #ifdef TEAR_HOST_BUILD
@@ -46,32 +45,9 @@ static void client_reply_proposal(int client,
     client_reply(client, "PROPOSAL %s %s\n", p->action, p->reason);
 }
 
-static int create_socket(void)
+static int create_socket(tear_platform_socket_t *server)
 {
-    const char *socket_path = tear_optd_socket_path();
-    int fd = socket(AF_UNIX, SOCK_STREAM, 0);
-
-    if (fd < 0)
-        return -1;
-
-    struct sockaddr_un addr = {
-        .sun_family = AF_UNIX,
-    };
-
-    strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
-    unlink(socket_path);
-
-    if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        close(fd);
-        return -1;
-    }
-
-    if (listen(fd, 4) < 0) {
-        close(fd);
-        return -1;
-    }
-
-    return fd;
+    return tear_platform_socket_listen(tear_optd_socket_path(), server);
 }
 
 static const char *parse_event_log(int argc, char **argv)
@@ -186,7 +162,7 @@ static void handle_propose(int client, const char *buf)
 int main(int argc, char **argv)
 {
     const char *event_log = parse_event_log(argc, argv);
-    int server;
+    tear_platform_socket_t server;
 
     if (!event_log)
         return 1;
@@ -198,9 +174,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    server = create_socket();
-
-    if (server < 0) {
+    if (create_socket(&server) < 0) {
         tear_log(TEAR_COMPONENT,
                  TEAR_LOG_ERROR,
                  "optd socket failed: %s",
@@ -212,17 +186,17 @@ int main(int argc, char **argv)
     optd_event("optd_start");
 
     while (1) {
-        int client = accept(server, NULL, NULL);
+        tear_platform_socket_t client;
         char buf[512];
         ssize_t n;
 
-        if (client < 0)
+        if (tear_platform_socket_accept(server, &client) < 0)
             continue;
 
-        n = read(client, buf, sizeof(buf) - 1);
+        n = tear_platform_socket_read(client, buf, sizeof(buf) - 1);
 
         if (n <= 0) {
-            close(client);
+            tear_platform_socket_close(client);
             continue;
         }
 
@@ -233,7 +207,7 @@ int main(int argc, char **argv)
         else
             client_reply_no_proposal(client);
 
-        close(client);
+        tear_platform_socket_close(client);
     }
 
     return 0;
