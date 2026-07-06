@@ -7,22 +7,10 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <sys/stat.h>
-#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 
 #define TEAR_COMPONENT "workload_adapter"
-
-static int path_exists(const char *path)
-{
-    struct stat st;
-
-    if (!path || path[0] == '\0')
-        return 0;
-
-    return stat(path, &st) == 0;
-}
 
 static void build_run_id(char *run_id, size_t run_id_size)
 {
@@ -171,26 +159,29 @@ int tear_workload_run_checked(const struct tear_workload_run *run,
                   "status",
                   status);
 
-    if (!WIFEXITED(status)) {
+    if (!tear_platform_process_exited(status)) {
         tear_log(TEAR_COMPONENT, TEAR_LOG_ERROR,
                  "workload did not exit normally");
         tear_event(TEAR_COMPONENT, "workload_contract_abnormal_exit");
         return -1;
     }
 
-    if (WEXITSTATUS(status) != 0) {
+    if (tear_platform_process_exit_code(status) != 0) {
+        int exit_code = tear_platform_process_exit_code(status);
+
         tear_log(TEAR_COMPONENT, TEAR_LOG_ERROR,
-                 "workload exited with status %d", WEXITSTATUS(status));
+                 "workload exited with status %d", exit_code);
         tear_event_kv(TEAR_COMPONENT,
                       "workload_contract_exit_failed",
                       "status",
-                      WEXITSTATUS(status));
+                      exit_code);
         return -1;
     }
 
     tear_event(TEAR_COMPONENT, "workload_contract_exit_ok");
 
-    if (require_metrics_file && !path_exists(run->metrics_path)) {
+    if (require_metrics_file &&
+        !tear_platform_path_exists(run->metrics_path)) {
         tear_log(TEAR_COMPONENT, TEAR_LOG_ERROR,
                  "required metrics file was not produced: %s",
                  run->metrics_path);
@@ -201,7 +192,7 @@ int tear_workload_run_checked(const struct tear_workload_run *run,
     if (require_metrics_file)
         tear_event(TEAR_COMPONENT, "workload_contract_metrics_ok");
 
-    if (path_exists(run->workload_event_log))
+    if (tear_platform_path_exists(run->workload_event_log))
         tear_event(TEAR_COMPONENT, "workload_contract_event_log_seen");
 
     return 0;

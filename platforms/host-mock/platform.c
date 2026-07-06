@@ -32,6 +32,21 @@ void tear_platform_sleep_ms(unsigned int milliseconds)
     tear_linux_platform_sleep_ms(milliseconds);
 }
 
+int tear_platform_path_exists(const char *path)
+{
+    return tear_linux_platform_path_exists(path);
+}
+
+int tear_platform_process_exited(int status)
+{
+    return tear_linux_platform_process_exited(status);
+}
+
+int tear_platform_process_exit_code(int status)
+{
+    return tear_linux_platform_process_exit_code(status);
+}
+
 int tear_platform_socket_listen(const char *path,
                                 tear_platform_socket_t *socket_out)
 {

@@ -29,6 +29,12 @@ void tear_platform_stop_process(tear_platform_process_t process);
 
 void tear_platform_sleep_ms(unsigned int milliseconds);
 
+int tear_platform_path_exists(const char *path);
+
+int tear_platform_process_exited(int status);
+
+int tear_platform_process_exit_code(int status);
+
 int tear_platform_socket_listen(const char *path,
                                 tear_platform_socket_t *socket_out);
 

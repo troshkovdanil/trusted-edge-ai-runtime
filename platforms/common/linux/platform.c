@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/un.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -173,6 +174,26 @@ void tear_linux_platform_stop_process(tear_platform_process_t process)
 void tear_linux_platform_sleep_ms(unsigned int milliseconds)
 {
     usleep(milliseconds * 1000);
+}
+
+int tear_linux_platform_path_exists(const char *path)
+{
+    struct stat st;
+
+    if (!path || path[0] == '\0')
+        return 0;
+
+    return stat(path, &st) == 0;
+}
+
+int tear_linux_platform_process_exited(int status)
+{
+    return WIFEXITED(status);
+}
+
+int tear_linux_platform_process_exit_code(int status)
+{
+    return WEXITSTATUS(status);
 }
 
 int tear_linux_platform_socket_listen(const char *path,
