@@ -4,20 +4,17 @@
 
 #include "model_manifest.h"
 #include "observability.h"
+#include "platform.h"
 #include "platform_adapter.h"
 #include "profile.h"
 #include "runtime_paths.h"
 #include "trust_client.h"
 #include "workload_adapter.h"
 
-#include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <sys/un.h>
-#include <time.h>
 #include <unistd.h>
 
 #define TEAR_COMPONENT "runtime_manager"
@@ -127,30 +124,18 @@ static int validate_config(const struct tear_run_config *cfg)
 static int ask_optd(const char *metrics_path,
                     struct opt_proposal *proposal)
 {
-    int fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    tear_platform_socket_t fd;
+    char buf[256];
+    ssize_t n;
 
-    if (fd < 0)
+    if (tear_platform_socket_connect(tear_optd_socket_path(), &fd) < 0)
         return -1;
-
-    struct sockaddr_un addr = {
-        .sun_family = AF_UNIX,
-    };
-
-    strncpy(addr.sun_path,
-            tear_optd_socket_path(),
-            sizeof(addr.sun_path) - 1);
-
-    if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        close(fd);
-        return -1;
-    }
 
     optd_send(fd, "PROPOSE %s\n", metrics_path);
 
-    char buf[256];
-    ssize_t n = read(fd, buf, sizeof(buf) - 1);
+    n = tear_platform_socket_read(fd, buf, sizeof(buf) - 1);
 
-    close(fd);
+    tear_platform_socket_close(fd);
 
     if (n <= 0)
         return -1;
