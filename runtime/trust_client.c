@@ -3,48 +3,31 @@
 #include "trust_client.h"
 
 #include "observability.h"
+#include "platform.h"
 #include "runtime_paths.h"
 
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <sys/un.h>
 #include <unistd.h>
 
 #define TEAR_COMPONENT "trust_client"
 
-static int connect_socket(void)
+static int connect_socket(tear_platform_socket_t *fd)
 {
     const char *socket_path = tear_trustd_socket_path();
-    int fd = socket(AF_UNIX, SOCK_STREAM, 0);
 
-    if (fd < 0) {
-        tear_log(TEAR_COMPONENT,
-                 TEAR_LOG_ERROR,
-                 "failed to create trustd socket: %s",
-                 strerror(errno));
-        return -1;
-    }
-
-    struct sockaddr_un addr = {
-        .sun_family = AF_UNIX,
-    };
-
-    strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
-
-    if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+    if (tear_platform_socket_connect(socket_path, fd) < 0) {
         tear_log(TEAR_COMPONENT,
                  TEAR_LOG_ERROR,
                  "failed to connect trustd socket %s: %s",
                  socket_path,
                  strerror(errno));
-        close(fd);
         return -1;
     }
 
-    return fd;
+    return 0;
 }
 
 static void trust_client_send(int fd, const char *fmt, ...)
@@ -56,10 +39,10 @@ static void trust_client_send(int fd, const char *fmt, ...)
     va_end(ap);
 }
 
-static int trust_client_expect_ok(int fd)
+static int trust_client_expect_ok(tear_platform_socket_t fd)
 {
     char buf[64];
-    ssize_t n = read(fd, buf, sizeof(buf) - 1);
+    ssize_t n = tear_platform_socket_read(fd, buf, sizeof(buf) - 1);
 
     if (n <= 0) {
         tear_log(TEAR_COMPONENT,
@@ -81,14 +64,16 @@ static int trust_client_expect_ok(int fd)
     return 0;
 }
 
-static int trust_client_read(int fd, char *buf, size_t buf_size)
+static int trust_client_read(tear_platform_socket_t fd,
+                             char *buf,
+                             size_t buf_size)
 {
     ssize_t n;
 
     if (!buf || buf_size == 0)
         return -1;
 
-    n = read(fd, buf, buf_size - 1);
+    n = tear_platform_socket_read(fd, buf, buf_size - 1);
 
     if (n <= 0) {
         tear_log(TEAR_COMPONENT,
@@ -104,10 +89,10 @@ static int trust_client_read(int fd, char *buf, size_t buf_size)
 
 int tear_trust_enroll(const struct tear_model_manifest *manifest)
 {
-    int fd = connect_socket();
+    tear_platform_socket_t fd;
     int ret;
 
-    if (fd < 0)
+    if (connect_socket(&fd) < 0)
         return -1;
 
     trust_client_send(fd,
@@ -119,17 +104,17 @@ int tear_trust_enroll(const struct tear_model_manifest *manifest)
 
     ret = trust_client_expect_ok(fd);
 
-    close(fd);
+    tear_platform_socket_close(fd);
 
     return ret;
 }
 
 int tear_trust_update_model(const struct tear_model_manifest *manifest)
 {
-    int fd = connect_socket();
+    tear_platform_socket_t fd;
     int ret;
 
-    if (fd < 0)
+    if (connect_socket(&fd) < 0)
         return -1;
 
     trust_client_send(fd,
@@ -141,17 +126,17 @@ int tear_trust_update_model(const struct tear_model_manifest *manifest)
 
     ret = trust_client_expect_ok(fd);
 
-    close(fd);
+    tear_platform_socket_close(fd);
 
     return ret;
 }
 
 int tear_trust_verify(const struct tear_model_manifest *manifest)
 {
-    int fd = connect_socket();
+    tear_platform_socket_t fd;
     int ret;
 
-    if (fd < 0)
+    if (connect_socket(&fd) < 0)
         return -1;
 
     trust_client_send(fd,
@@ -163,29 +148,29 @@ int tear_trust_verify(const struct tear_model_manifest *manifest)
 
     ret = trust_client_expect_ok(fd);
 
-    close(fd);
+    tear_platform_socket_close(fd);
 
     return ret;
 }
 
 int tear_trust_report(void)
 {
-    int fd = connect_socket();
+    tear_platform_socket_t fd;
     char buf[256];
 
-    if (fd < 0)
+    if (connect_socket(&fd) < 0)
         return -1;
 
     trust_client_send(fd, "REPORT\n");
 
     if (trust_client_read(fd, buf, sizeof(buf)) < 0) {
-        close(fd);
+        tear_platform_socket_close(fd);
         return -1;
     }
 
     tear_log(TEAR_COMPONENT, TEAR_LOG_INFO, "%s", buf);
 
-    close(fd);
+    tear_platform_socket_close(fd);
 
     return 0;
 }
@@ -197,10 +182,10 @@ int tear_trust_record_decision(const char *run_id,
                                const char *reason,
                                long value)
 {
-    int fd = connect_socket();
+    tear_platform_socket_t fd;
     int ret;
 
-    if (fd < 0)
+    if (connect_socket(&fd) < 0)
         return -1;
 
     trust_client_send(fd,
@@ -214,31 +199,31 @@ int tear_trust_record_decision(const char *run_id,
 
     ret = trust_client_expect_ok(fd);
 
-    close(fd);
+    tear_platform_socket_close(fd);
 
     return ret;
 }
 
 int tear_trust_report_decision(char *decision, size_t decision_size)
 {
-    int fd = connect_socket();
+    tear_platform_socket_t fd;
     char buf[512];
     char reported[512];
 
     if (!decision || decision_size == 0)
         return -1;
 
-    if (fd < 0)
+    if (connect_socket(&fd) < 0)
         return -1;
 
     trust_client_send(fd, "REPORT_DECISION\n");
 
     if (trust_client_read(fd, buf, sizeof(buf)) < 0) {
-        close(fd);
+        tear_platform_socket_close(fd);
         return -1;
     }
 
-    close(fd);
+    tear_platform_socket_close(fd);
 
     if (sscanf(buf, "DECISION %511[^\n]", reported) != 1) {
         tear_log(TEAR_COMPONENT,
