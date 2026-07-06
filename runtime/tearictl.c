@@ -2,6 +2,7 @@
 
 #include "model_manifest.h"
 #include "observability.h"
+#include "platform.h"
 #include "runtime_paths.h"
 #include "trust_client.h"
 
@@ -9,8 +10,6 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <sys/un.h>
 #include <unistd.h>
 
 #define TEAR_COMPONENT "tearictl"
@@ -61,45 +60,29 @@ static void usage(const char *prog)
 
 static int supervisor_command(const char *fmt, ...)
 {
-    const char *socket_path = tear_supervisor_socket_path();
-    struct sockaddr_un addr;
     char command[512];
     char reply[512];
     va_list ap;
     ssize_t n;
-    int fd;
+    tear_platform_socket_t fd;
 
     va_start(ap, fmt);
     vsnprintf(command, sizeof(command), fmt, ap);
     va_end(ap);
 
-    fd = socket(AF_UNIX, SOCK_STREAM, 0);
-    if (fd < 0) {
-        tear_log(TEAR_COMPONENT,
-                 TEAR_LOG_ERROR,
-                 "failed to create supervisor socket: %s",
-                 strerror(errno));
-        return 1;
-    }
-
-    memset(&addr, 0, sizeof(addr));
-    addr.sun_family = AF_UNIX;
-    strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
-
-    if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+    if (tear_platform_socket_connect(tear_supervisor_socket_path(), &fd) < 0) {
         tear_log(TEAR_COMPONENT,
                  TEAR_LOG_ERROR,
                  "failed to connect supervisor socket %s: %s",
-                 socket_path,
+                 tear_supervisor_socket_path(),
                  strerror(errno));
-        close(fd);
         return 1;
     }
 
     dprintf(fd, "%s\n", command);
 
-    n = read(fd, reply, sizeof(reply) - 1);
-    close(fd);
+    n = tear_platform_socket_read(fd, reply, sizeof(reply) - 1);
+    tear_platform_socket_close(fd);
 
     if (n <= 0) {
         tear_log(TEAR_COMPONENT,
