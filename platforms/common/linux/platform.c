@@ -208,6 +208,33 @@ int tear_linux_platform_socket_listen(const char *path,
     return 0;
 }
 
+int tear_linux_platform_socket_connect(const char *path,
+                                       tear_platform_socket_t *socket_out)
+{
+    int fd;
+    struct sockaddr_un addr = {
+        .sun_family = AF_UNIX,
+    };
+
+    if (!path || !socket_out || path[0] == '\0')
+        return -1;
+
+    fd = socket(AF_UNIX, SOCK_STREAM, 0);
+    if (fd < 0)
+        return -1;
+
+    strncpy(addr.sun_path, path, sizeof(addr.sun_path) - 1);
+
+    if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
+        close(fd);
+        return -1;
+    }
+
+    *socket_out = fd;
+
+    return 0;
+}
+
 int tear_linux_platform_socket_accept(tear_platform_socket_t server,
                                       tear_platform_socket_t *client_out)
 {

@@ -2,6 +2,7 @@
 
 #include "model_manifest.h"
 #include "observability.h"
+#include "platform.h"
 #include "trusted_state.h"
 #ifdef TEAR_ENABLE_OPTEE
 #include "tear_optee_client.h"
@@ -12,8 +13,6 @@
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <sys/un.h>
 #include <unistd.h>
 
 #define TEAR_COMPONENT "trustd"
@@ -81,32 +80,9 @@ static void client_reply_decision(int client, const char *decision)
     client_reply(client, "DECISION %s", decision);
 }
 
-static int create_socket(void)
+static int create_socket(tear_platform_socket_t *server)
 {
-    const char *socket_path = tear_trustd_socket_path();
-    int fd = socket(AF_UNIX, SOCK_STREAM, 0);
-
-    if (fd < 0)
-        return -1;
-
-    struct sockaddr_un addr = {
-        .sun_family = AF_UNIX,
-    };
-
-    strncpy(addr.sun_path, socket_path, sizeof(addr.sun_path) - 1);
-    unlink(socket_path);
-
-    if (bind(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        close(fd);
-        return -1;
-    }
-
-    if (listen(fd, 4) < 0) {
-        close(fd);
-        return -1;
-    }
-
-    return fd;
+    return tear_platform_socket_listen(tear_trustd_socket_path(), server);
 }
 
 static int same_manifest(const struct tear_model_manifest *a,
@@ -635,7 +611,7 @@ int main(int argc, char **argv)
 {
     enum tear_trust_backend backend;
     const char *event_log;
-    int server;
+    tear_platform_socket_t server;
 
     if (parse_backend(argc,
                       argv,
@@ -650,9 +626,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    server = create_socket();
-
-    if (server < 0) {
+    if (create_socket(&server) < 0) {
         trustd_perror("trustd socket");
         tear_event_shutdown();
         return 1;
@@ -661,17 +635,17 @@ int main(int argc, char **argv)
     trustd_event("trustd_start");
 
     while (1) {
-        int client = accept(server, NULL, NULL);
+        tear_platform_socket_t client;
         char buf[512];
         ssize_t n;
 
-        if (client < 0)
+        if (tear_platform_socket_accept(server, &client) < 0)
             continue;
 
-        n = read(client, buf, sizeof(buf) - 1);
+        n = tear_platform_socket_read(client, buf, sizeof(buf) - 1);
 
         if (n <= 0) {
-            close(client);
+            tear_platform_socket_close(client);
             continue;
         }
 
@@ -693,7 +667,7 @@ int main(int argc, char **argv)
             client_reply_err(client);
         }
 
-        close(client);
+        tear_platform_socket_close(client);
     }
 
     return 0;

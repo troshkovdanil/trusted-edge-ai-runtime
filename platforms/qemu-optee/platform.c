@@ -38,6 +38,12 @@ int tear_platform_socket_listen(const char *path,
     return tear_linux_platform_socket_listen(path, socket_out);
 }
 
+int tear_platform_socket_connect(const char *path,
+                                 tear_platform_socket_t *socket_out)
+{
+    return tear_linux_platform_socket_connect(path, socket_out);
+}
+
 int tear_platform_socket_accept(tear_platform_socket_t server,
                                 tear_platform_socket_t *client_out)
 {

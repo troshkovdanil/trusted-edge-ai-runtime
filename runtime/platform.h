@@ -32,6 +32,9 @@ void tear_platform_sleep_ms(unsigned int milliseconds);
 int tear_platform_socket_listen(const char *path,
                                 tear_platform_socket_t *socket_out);
 
+int tear_platform_socket_connect(const char *path,
+                                 tear_platform_socket_t *socket_out);
+
 int tear_platform_socket_accept(tear_platform_socket_t server,
                                 tear_platform_socket_t *client_out);
 

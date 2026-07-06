@@ -1,20 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Platform-neutral TEAR runtime build rules.
-#
-# This file should not know which platforms exist. It only knows how to build
-# common TEAR runtime binaries for a platform prefix passed by the caller.
-#
-# Expected platform variables for prefix $(1):
-#   $($(1)_CC)
-#   $($(1)_CFLAGS)
-#   $($(1)_BUILD_DIR)
-#   $($(1)_SUPERVISOR)
-#   $($(1)_RUNTIME_MANAGER)
-#   $($(1)_TRUSTD)
-#   $($(1)_TEARICTL)
-#   $($(1)_OPTD)
-#   $($(1)_PLATFORM_SRCS)
 
 RUNTIME_PATHS_SRCS := runtime/runtime_paths.c
 OBSERVABILITY_SRCS := runtime/observability.c
@@ -56,6 +42,7 @@ define runtime-build-platform
 		-Iplatforms/common \
 		-o $($(1)_TRUSTD) \
 		$(TRUSTD_SRCS) \
+		$($(1)_PLATFORM_SRCS) \
 		$(RUNTIME_PATHS_SRCS) \
 		$(OBSERVABILITY_SRCS)
 	$($(1)_CC) -static -O2 -Wall -Wextra $($(1)_CFLAGS) \
@@ -65,6 +52,7 @@ define runtime-build-platform
 		$(TEARICTL_SRCS) \
 		$(MANIFEST_SRCS) \
 		$(TRUST_CLIENT_SRCS) \
+		$($(1)_PLATFORM_SRCS) \
 		$(RUNTIME_PATHS_SRCS) \
 		$(OBSERVABILITY_SRCS)
 	$($(1)_CC) -static -O2 -Wall -Wextra $($(1)_CFLAGS) \
@@ -72,6 +60,7 @@ define runtime-build-platform
 		-Iplatforms/common \
 		-o $($(1)_OPTD) \
 		$(OPTD_SRCS) \
+		$($(1)_PLATFORM_SRCS) \
 		$(RUNTIME_PATHS_SRCS) \
 		$(OBSERVABILITY_SRCS)
 endef

@@ -92,6 +92,7 @@ define build-qemu-optee-secure-backend
 		-o $(QEMU_OPTEE_OPTEE_TRUSTD) \
 		$(TRUSTD_SRCS) \
 		$(RUNTIME_PATHS_SRCS) \
+		$(QEMU_OPTEE_PLATFORM_SRCS) \
 		$(OBSERVABILITY_SRCS) \
 		optee/ca/tear_optee_client.c \
 		-L$(QEMU_OPTEE_CLIENT_LIB) \
