@@ -22,8 +22,7 @@ QEMU_OPTEE_SECURE_BACKEND := optee
 QEMU_OPTEE_ENABLE_ONNXRUNTIME := 1
 
 QEMU_OPTEE_PLATFORM_SRCS := \
-	platforms/common/linux/platform.c \
-	platforms/qemu-optee/platform.c
+	platforms/common/linux/platform.c
 
 QEMU_OPTEE_ORT_INCLUDE := external/onnxruntime-aarch64/include
 QEMU_OPTEE_ORT_LIB := external/onnxruntime-aarch64/lib

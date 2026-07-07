@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: Apache-2.0 */
 
-#include "linux/linux_platform.h"
+#include "platform.h"
 
 #include "observability.h"
 #include "workload_contract.h"
@@ -52,8 +52,8 @@ static void exec_workload(const struct tear_workload_run *run)
     _exit(127);
 }
 
-int tear_linux_platform_run_workload(const struct tear_workload_run *run,
-                                     int *raw_status)
+int tear_platform_run_workload(const struct tear_workload_run *run,
+                               int *raw_status)
 {
     pid_t pid;
     int status = 0;
@@ -88,9 +88,9 @@ int tear_linux_platform_run_workload(const struct tear_workload_run *run,
     return 0;
 }
 
-int tear_linux_platform_start_process(const char *path,
-                                      char *const argv[],
-                                      tear_platform_process_t *process)
+int tear_platform_start_process(const char *path,
+                                char *const argv[],
+                                tear_platform_process_t *process)
 {
     pid_t pid;
 
@@ -121,9 +121,9 @@ int tear_linux_platform_start_process(const char *path,
     return 0;
 }
 
-int tear_linux_platform_run_process(const char *path,
-                                    char *const argv[],
-                                    int *exit_code)
+int tear_platform_run_process(const char *path,
+                              char *const argv[],
+                              int *exit_code)
 {
     tear_platform_process_t process;
     int status = 0;
@@ -131,7 +131,7 @@ int tear_linux_platform_run_process(const char *path,
     if (!exit_code)
         return -1;
 
-    if (tear_linux_platform_start_process(path, argv, &process) < 0)
+    if (tear_platform_start_process(path, argv, &process) < 0)
         return -1;
 
     if (waitpid((pid_t)process, &status, 0) < 0) {
@@ -160,7 +160,7 @@ int tear_linux_platform_run_process(const char *path,
     return 0;
 }
 
-void tear_linux_platform_stop_process(tear_platform_process_t process)
+void tear_platform_stop_process(tear_platform_process_t process)
 {
     pid_t pid = (pid_t)process;
 
@@ -171,12 +171,12 @@ void tear_linux_platform_stop_process(tear_platform_process_t process)
     waitpid(pid, NULL, 0);
 }
 
-void tear_linux_platform_sleep_ms(unsigned int milliseconds)
+void tear_platform_sleep_ms(unsigned int milliseconds)
 {
     usleep(milliseconds * 1000);
 }
 
-int tear_linux_platform_path_exists(const char *path)
+int tear_platform_path_exists(const char *path)
 {
     struct stat st;
 
@@ -186,18 +186,18 @@ int tear_linux_platform_path_exists(const char *path)
     return stat(path, &st) == 0;
 }
 
-int tear_linux_platform_process_exited(int status)
+int tear_platform_process_exited(int status)
 {
     return WIFEXITED(status);
 }
 
-int tear_linux_platform_process_exit_code(int status)
+int tear_platform_process_exit_code(int status)
 {
     return WEXITSTATUS(status);
 }
 
-int tear_linux_platform_socket_listen(const char *path,
-                                      tear_platform_socket_t *socket_out)
+int tear_platform_socket_listen(const char *path,
+                                tear_platform_socket_t *socket_out)
 {
     int fd;
     struct sockaddr_un addr = {
@@ -229,8 +229,8 @@ int tear_linux_platform_socket_listen(const char *path,
     return 0;
 }
 
-int tear_linux_platform_socket_connect(const char *path,
-                                       tear_platform_socket_t *socket_out)
+int tear_platform_socket_connect(const char *path,
+                                 tear_platform_socket_t *socket_out)
 {
     int fd;
     struct sockaddr_un addr = {
@@ -256,8 +256,8 @@ int tear_linux_platform_socket_connect(const char *path,
     return 0;
 }
 
-int tear_linux_platform_socket_accept(tear_platform_socket_t server,
-                                      tear_platform_socket_t *client_out)
+int tear_platform_socket_accept(tear_platform_socket_t server,
+                                tear_platform_socket_t *client_out)
 {
     int client;
 
@@ -273,9 +273,9 @@ int tear_linux_platform_socket_accept(tear_platform_socket_t server,
     return 0;
 }
 
-ssize_t tear_linux_platform_socket_read(tear_platform_socket_t socket_fd,
-                                        void *buf,
-                                        size_t len)
+ssize_t tear_platform_socket_read(tear_platform_socket_t socket_fd,
+                                  void *buf,
+                                  size_t len)
 {
     if (socket_fd == TEAR_PLATFORM_INVALID_SOCKET || !buf)
         return -1;
@@ -283,7 +283,7 @@ ssize_t tear_linux_platform_socket_read(tear_platform_socket_t socket_fd,
     return read(socket_fd, buf, len);
 }
 
-void tear_linux_platform_socket_close(tear_platform_socket_t socket_fd)
+void tear_platform_socket_close(tear_platform_socket_t socket_fd)
 {
     if (socket_fd == TEAR_PLATFORM_INVALID_SOCKET)
         return;
@@ -291,7 +291,7 @@ void tear_linux_platform_socket_close(tear_platform_socket_t socket_fd)
     close(socket_fd);
 }
 
-void tear_linux_platform_socket_unlink(const char *path)
+void tear_platform_socket_unlink(const char *path)
 {
     if (!path || path[0] == '\0')
         return;
